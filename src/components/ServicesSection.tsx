@@ -65,7 +65,7 @@ const ServicesSection = () => {
                 delay={index * 100}
                 animation="scale-in"
               >
-                <Card className="group hover:shadow-elegant border-border/50 hover:border-primary/40 transition-all duration-500 cursor-pointer transform hover:scale-105 hover:-translate-y-2 bg-gradient-card dark:bg-gradient-card-dark backdrop-blur-sm h-full overflow-hidden">
+                <Card className="group hover:shadow-elegant border-border/50 hover:border-primary/40 transition-all duration-500 cursor-pointer transform hover:scale-105 hover:-translate-y-2 bg-gradient-card dark:bg-gradient-card-dark backdrop-blur-sm h-full overflow-hidden dark:card-dark-glow">
                   {/* Service Image */}
                   <div className="relative h-64 overflow-hidden">
                     <img 
@@ -75,18 +75,18 @@ const ServicesSection = () => {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent"></div>
                     <div className="absolute top-4 right-4">
-                      <div className="p-2 bg-white/20 backdrop-blur-sm rounded-lg group-hover:shadow-glow group-hover:scale-110 transition-all duration-500">
-                        <IconComponent className="h-5 w-5 text-white" />
+                      <div className="p-2 bg-white/20 dark:bg-black/30 backdrop-blur-sm rounded-lg group-hover:shadow-glow group-hover:scale-110 transition-all duration-500 border border-white/20 dark:border-primary/30">
+                        <IconComponent className="h-5 w-5 text-white dark:text-primary-glow" />
                       </div>
                     </div>
                   </div>
                   
                   <CardContent className="p-5 text-center relative">
-                    {/* Background glow effect */}
-                    <div className="absolute inset-0 bg-gradient-primary opacity-0 group-hover:opacity-5 transition-opacity duration-500 rounded-lg"></div>
+                    {/* Background glow effect - enhanced for dark mode */}
+                    <div className="absolute inset-0 bg-gradient-primary opacity-0 group-hover:opacity-5 dark:group-hover:opacity-10 transition-opacity duration-500 rounded-lg"></div>
                     
                     <div className="relative z-10">
-                      <h3 className="text-lg font-display font-semibold text-foreground mb-2 group-hover:text-primary transition-colors duration-300">
+                      <h3 className="text-lg font-display font-semibold text-foreground mb-2 group-hover:text-primary dark:group-hover:text-primary-glow transition-colors duration-300">
                         {service.name}
                       </h3>
                       <p className="text-sm text-muted-foreground leading-relaxed font-body">

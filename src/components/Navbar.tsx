@@ -108,7 +108,11 @@ const Navbar = () => {
               variant="ghost"
               size="icon"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="hover:scale-110 transform transition-all duration-300"
+              className={`hover:scale-110 transform transition-all duration-300 ${
+                !isScrolled 
+                  ? "text-white hover:bg-white/20 bg-white/10 backdrop-blur-sm" 
+                  : "text-foreground hover:bg-primary/10"
+              }`}
             >
               {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </Button>
@@ -119,7 +123,7 @@ const Navbar = () => {
         <div className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${
           isMobileMenuOpen ? "max-h-64 opacity-100" : "max-h-0 opacity-0"
         }`}>
-          <div className="bg-background/98 backdrop-blur-md border-t border-primary/10">
+          <div className="mobile-menu-bg">
             <div className="px-2 pt-2 pb-3 space-y-1">
               <button 
                 onClick={() => scrollToSection("home")}

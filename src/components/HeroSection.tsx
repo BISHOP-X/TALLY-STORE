@@ -33,14 +33,13 @@ const HeroSection = () => {
             </div>
 
             {/* Main Headline with staggered animation */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-white mb-8 leading-tight animate-fade-in-up">
-              <span className="block mb-2">Premium Social Media</span>
-              <span className="block bg-gradient-to-r from-white via-primary-glow to-white bg-clip-text text-transparent animate-fade-in-up delay-300">
-                Accounts Available Now
-              </span>
-            </h1>
-
-            {/* Subheading with animation */}
+        {/* Main Headline with enhanced dark mode styling */}
+        <h1 className="text-4xl sm:text-5xl lg:text-7xl font-display font-bold text-white mb-8 leading-tight animate-fade-in-up hero-text">
+          <span className="block mb-2 drop-shadow-lg">Transform Your</span>
+          <span className="block bg-gradient-to-r from-white via-primary-glow to-white bg-clip-text text-transparent animate-fade-in-up delay-300 drop-shadow-lg">
+            Social Media Presence
+          </span>
+        </h1>            {/* Subheading with animation */}
             <p className="text-xl sm:text-2xl text-white/90 mb-12 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-body animate-fade-in-up delay-500">
               Start building your online empire today with authentic, verified accounts across all major platforms.
             </p>
