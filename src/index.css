@@ -1,0 +1,208 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tallystore Design System - Modern Social Media Business with Dark/Light Mode */
+
+@layer base {
+  :root {
+    /* Light Mode Colors */
+    --background: 240 10% 98%;
+    --foreground: 240 10% 4%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 4%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 4%;
+
+    --primary: 262 73% 57%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 278 73% 70%;
+    --primary-dark: 262 73% 45%;
+
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+
+    --accent: 262 73% 57%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 262 73% 57%;
+
+    --radius: 16px;
+
+    /* Enhanced Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(262 73% 57%), hsl(278 73% 70%));
+    --gradient-hero: linear-gradient(135deg, hsl(262 73% 57%) 0%, hsl(245 73% 65%) 50%, hsl(210 73% 70%) 100%);
+    --gradient-hero-dark: linear-gradient(135deg, hsl(262 73% 45%) 0%, hsl(245 73% 55%) 50%, hsl(210 73% 60%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(240 5% 98%));
+    --gradient-card-dark: linear-gradient(145deg, hsl(240 10% 8%), hsl(240 10% 12%));
+    --gradient-section: linear-gradient(180deg, hsl(240 10% 98%) 0%, hsl(240 5% 96%) 100%);
+    --gradient-section-dark: linear-gradient(180deg, hsl(240 10% 4%) 0%, hsl(240 10% 6%) 100%);
+    
+    /* Enhanced Shadows */
+    --shadow-elegant: 0 25px 60px -15px hsl(262 73% 57% / 0.4);
+    --shadow-card: 0 10px 35px -5px hsl(240 6% 50% / 0.12);
+    --shadow-glow: 0 0 50px hsl(262 73% 57% / 0.5);
+    --shadow-inner: inset 0 2px 8px hsl(240 6% 50% / 0.06);
+
+    /* Advanced Animations */
+    --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --transition-spring: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .dark {
+    /* Dark Mode Colors */
+    --background: 240 10% 4%;
+    --foreground: 240 5% 96%;
+
+    --card: 240 10% 8%;
+    --card-foreground: 240 5% 96%;
+
+    --popover: 240 10% 8%;
+    --popover-foreground: 240 5% 96%;
+
+    --primary: 278 73% 70%;
+    --primary-foreground: 240 10% 4%;
+    --primary-glow: 278 73% 80%;
+    --primary-dark: 262 73% 50%;
+
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 240 5% 96%;
+
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 278 73% 70%;
+    --accent-foreground: 240 10% 4%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 278 73% 70%;
+
+    /* Dark Mode Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(278 73% 70%), hsl(262 73% 60%));
+    --gradient-hero: linear-gradient(135deg, hsl(278 73% 60%) 0%, hsl(245 73% 55%) 50%, hsl(210 73% 60%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(240 10% 8%), hsl(240 10% 12%));
+    --gradient-section: linear-gradient(180deg, hsl(240 10% 4%) 0%, hsl(240 10% 6%) 100%);
+    
+    /* Dark Mode Shadows */
+    --shadow-elegant: 0 25px 60px -15px hsl(278 73% 70% / 0.3);
+    --shadow-card: 0 10px 35px -5px hsl(240 10% 0% / 0.5);
+    --shadow-glow: 0 0 50px hsl(278 73% 70% / 0.4);
+    --shadow-inner: inset 0 2px 8px hsl(240 10% 0% / 0.3);
+    
+    /* Light Mode Sidebar Variables */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Dark Mode Colors */
+    --background: 240 10% 4%;
+    --foreground: 240 5% 96%;
+
+    --card: 240 10% 8%;
+    --card-foreground: 240 5% 96%;
+
+    --popover: 240 10% 8%;
+    --popover-foreground: 240 5% 96%;
+
+    --primary: 278 73% 70%;
+    --primary-foreground: 240 10% 4%;
+    --primary-glow: 278 73% 80%;
+    --primary-dark: 262 73% 50%;
+
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 240 5% 96%;
+
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 278 73% 70%;
+    --accent-foreground: 240 10% 4%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 278 73% 70%;
+
+    /* Dark Mode Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(278 73% 70%), hsl(262 73% 60%));
+    --gradient-hero: linear-gradient(135deg, hsl(278 73% 60%) 0%, hsl(245 73% 55%) 50%, hsl(210 73% 60%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(240 10% 8%), hsl(240 10% 12%));
+    --gradient-section: linear-gradient(180deg, hsl(240 10% 4%) 0%, hsl(240 10% 6%) 100%);
+    
+    /* Dark Mode Shadows */
+    --shadow-elegant: 0 25px 60px -15px hsl(278 73% 70% / 0.3);
+    --shadow-card: 0 10px 35px -5px hsl(240 10% 0% / 0.5);
+    --shadow-glow: 0 0 50px hsl(278 73% 70% / 0.4);
+    --shadow-inner: inset 0 2px 8px hsl(240 10% 0% / 0.3);
+
+    /* Dark Mode Sidebar Variables */
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Custom navbar styles for seamless blending */
+  .navbar-transparent {
+    background: transparent;
+    border-bottom: 1px solid transparent;
+  }
+
+  .navbar-blurred {
+    background: hsl(var(--background) / 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid hsl(var(--border) / 0.1);
+    box-shadow: 0 4px 12px hsl(var(--background) / 0.15);
+  }
+
+  .dark .navbar-blurred {
+    background: hsl(var(--background) / 0.9);
+    border-bottom: 1px solid hsl(var(--border) / 0.2);
+    box-shadow: 0 4px 12px hsl(var(--background) / 0.3);
+  }
+
+  /* Smooth navbar transitions */
+  .navbar-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, background-color, backdrop-filter;
+  }
+}
