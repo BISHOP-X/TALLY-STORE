@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Sparkles } from "lucide-react"
+import { Link } from "react-router-dom"
 
 const HeroSection = () => {
   const scrollToServices = () => {
@@ -25,6 +26,13 @@ const HeroSection = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           {/* Text Content */}
           <div className="text-center lg:text-left order-2 lg:order-1">
+            {/* Brand Name with animation */}
+            <div className="flex justify-center lg:justify-start mb-6 animate-fade-in">
+              <span className="text-4xl font-bold bg-gradient-to-r from-white to-primary-glow bg-clip-text text-transparent">
+                TallyStore
+              </span>
+            </div>
+
             {/* Sparkle icon with animation */}
             <div className="flex justify-center lg:justify-start mb-8 animate-bounce-in">
               <div className="p-4 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 animate-glow-pulse">
@@ -45,15 +53,25 @@ const HeroSection = () => {
             </p>
 
             {/* Call-to-Action Button with enhanced hover */}
-            <div className="animate-scale-in delay-700 flex justify-center lg:justify-start">
+            <div className="animate-scale-in delay-700 flex justify-center lg:justify-start gap-4">
+              <Link to="/products">
+                <Button 
+                  variant="hero" 
+                  size="lg" 
+                  className="text-lg px-10 py-7 h-auto group font-semibold backdrop-blur-sm border border-white/20 hover:border-white/40 transform hover:scale-110 transition-all duration-500 animate-glow-pulse"
+                >
+                  Browse Products
+                  <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-2 transition-transform duration-500" />
+                </Button>
+              </Link>
+              
               <Button 
-                variant="hero" 
+                variant="outline" 
                 size="lg" 
                 onClick={scrollToServices}
-                className="text-lg px-10 py-7 h-auto group font-semibold backdrop-blur-sm border border-white/20 hover:border-white/40 transform hover:scale-110 transition-all duration-500 animate-glow-pulse"
+                className="text-lg px-10 py-7 h-auto font-semibold backdrop-blur-sm border border-white/20 hover:border-white/40 bg-white/10 text-white hover:bg-white/20 transition-all duration-500"
               >
-                Explore Our Store
-                <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-2 transition-transform duration-500" />
+                Learn More
               </Button>
             </div>
 

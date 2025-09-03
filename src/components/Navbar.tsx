@@ -1,9 +1,5 @@
-import { useState, useEffect, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Menu, X } from "lucide-react"
-import { ThemeToggle } from "@/components/ThemeToggle"
-
-const Navbar = () => {
+// This file now redirects to NavbarAuth for consistency across all pages
+export { default } from './NavbarAuth'
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [lastScrollY, setLastScrollY] = useState(0)
@@ -77,28 +73,35 @@ const Navbar = () => {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <button 
-              onClick={() => scrollToSection("home")}
-              className="relative text-foreground hover:text-primary transition-all duration-300 font-medium after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-primary after:transition-all after:duration-300 hover:after:w-full"
-            >
+            <Link to="/" className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors">
               Home
-            </button>
+            </Link>
+            <Link to="/products" className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors">
+              Products
+            </Link>
+            <Link to="/web-services" className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors">
+              Services
+            </Link>
+            <Link to="/support" className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors">
+              Support
+            </Link>
             <button 
-              onClick={() => scrollToSection("services")}
-              className="relative text-foreground hover:text-primary transition-all duration-300 font-medium after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-primary after:transition-all after:duration-300 hover:after:w-full"
-            >
-              Our Services
-            </button>
-            <button 
-              onClick={() => scrollToSection("how-it-works")}
-              className="relative text-foreground hover:text-primary transition-all duration-300 font-medium after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-primary after:transition-all after:duration-300 hover:after:w-full"
+              onClick={() => scrollToSection('how-it-works')}
+              className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors"
             >
               How It Works
             </button>
+            
+            <div className="flex items-center space-x-4">
+              <Link to="/login">
+                <Button variant="ghost">Sign In</Button>
+              </Link>
+              <Link to="/register">
+                <Button variant="hero">Get Started</Button>
+              </Link>
+            </div>
+            
             <ThemeToggle />
-            <Button variant="nav" size="sm" className="hover:scale-105 transform transition-all duration-300">
-              Purchase Now
-            </Button>
           </div>
 
           {/* Mobile menu button and theme toggle */}

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const Footer = () => {
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId)
@@ -23,39 +25,63 @@ const Footer = () => {
           </div>
           
           <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Quick Links</h4>
+            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Shop</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <button 
-                  onClick={() => scrollToSection('services')}
-                  className="hover:text-primary transition-colors text-left"
-                >
-                  Services
-                </button>
+                <Link to="/products" className="hover:text-primary transition-colors">
+                  All Products
+                </Link>
               </li>
               <li>
-                <button 
-                  onClick={() => scrollToSection('how-it-works')}
-                  className="hover:text-primary transition-colors text-left"
-                >
-                  How It Works
-                </button>
+                <Link to="/category/instagram" className="hover:text-primary transition-colors">
+                  Instagram Accounts
+                </Link>
               </li>
               <li>
-                <button 
-                  onClick={() => scrollToSection('contact')}
-                  className="hover:text-primary transition-colors text-left"
-                >
-                  Contact
-                </button>
+                <Link to="/category/tiktok" className="hover:text-primary transition-colors">
+                  TikTok Accounts
+                </Link>
               </li>
               <li>
-                <button 
-                  onClick={() => scrollToSection('faq')}
-                  className="hover:text-primary transition-colors text-left"
-                >
-                  FAQ
-                </button>
+                <Link to="/category/youtube" className="hover:text-primary transition-colors">
+                  YouTube Channels
+                </Link>
+              </li>
+              <li>
+                <Link to="/category/twitter" className="hover:text-primary transition-colors">
+                  Twitter Accounts
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Account</h4>
+            <ul className="space-y-2 text-sm">
+              <li>
+                <Link to="/login" className="hover:text-primary transition-colors">
+                  Sign In
+                </Link>
+              </li>
+              <li>
+                <Link to="/register" className="hover:text-primary transition-colors">
+                  Register
+                </Link>
+              </li>
+              <li>
+                <Link to="/profile" className="hover:text-primary transition-colors">
+                  My Profile
+                </Link>
+              </li>
+              <li>
+                <Link to="/orders" className="hover:text-primary transition-colors">
+                  Order History
+                </Link>
+              </li>
+              <li>
+                <Link to="/wallet" className="hover:text-primary transition-colors">
+                  Wallet
+                </Link>
               </li>
             </ul>
           </div>
@@ -63,10 +89,36 @@ const Footer = () => {
           <div>
             <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Support</h4>
             <ul className="space-y-2 text-sm">
-              <li><a href="#help" className="hover:text-primary transition-colors">Help Center</a></li>
-              <li><a href="#terms" className="hover:text-primary transition-colors">Terms of Service</a></li>
-              <li><a href="#privacy" className="hover:text-primary transition-colors">Privacy Policy</a></li>
-              <li><a href="#refund" className="hover:text-primary transition-colors">Refund Policy</a></li>
+              <li>
+                <Link to="/support" className="hover:text-primary transition-colors">
+                  Help Center
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms" className="hover:text-primary transition-colors">
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link to="/privacy" className="hover:text-primary transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/about" className="hover:text-primary transition-colors">
+                  About Us
+                </Link>
+              </li>
+              <li>
+                <Link to="/contact" className="hover:text-primary transition-colors">
+                  Contact
+                </Link>
+              </li>
+              <li>
+                <Link to="/web-services" className="hover:text-primary transition-colors">
+                  Web Services
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
