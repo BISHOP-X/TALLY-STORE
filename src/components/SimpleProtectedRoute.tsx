@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { Navigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/SimpleAuth'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -9,11 +9,10 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, redirectTo = '/login', requireRole }: ProtectedRouteProps) {
-  const { isAuthenticated, user, isLoading, setIntendedRoute } = useAuth()
-  const location = useLocation()
+  const { user, loading, isAdmin } = useAuth()
 
   // Show loading spinner while checking auth
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -22,17 +21,13 @@ export function ProtectedRoute({ children, redirectTo = '/login', requireRole }:
   }
 
   // Not authenticated - redirect to login
-  if (!isAuthenticated) {
-    // Store intended route for redirect after login
-    setIntendedRoute(location.pathname + location.search)
+  if (!user) {
     return <Navigate to={redirectTo} replace />
   }
 
   // Check role requirement
-  if (requireRole && user?.role !== requireRole) {
-    // User doesn't have required role - redirect based on their actual role
-    const userRedirect = user?.role === 'admin' ? '/admin' : '/dashboard'
-    return <Navigate to={userRedirect} replace />
+  if (requireRole === 'admin' && !isAdmin) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return <>{children}</>
@@ -44,10 +39,10 @@ interface PublicRouteProps {
 }
 
 export function PublicRoute({ children, redirectTo }: PublicRouteProps) {
-  const { isAuthenticated, user, isLoading } = useAuth()
+  const { user, loading, isAdmin } = useAuth()
 
   // Show loading spinner while checking auth
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -56,8 +51,8 @@ export function PublicRoute({ children, redirectTo }: PublicRouteProps) {
   }
 
   // Already authenticated - redirect to appropriate dashboard
-  if (isAuthenticated && user) {
-    const defaultRedirect = user.role === 'admin' ? '/admin' : '/dashboard'
+  if (user) {
+    const defaultRedirect = isAdmin ? '/admin' : '/dashboard'
     return <Navigate to={redirectTo || defaultRedirect} replace />
   }
 

@@ -3,18 +3,18 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { Menu, X, User, LogOut, Wallet } from "lucide-react"
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/contexts/SimpleAuth'
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const { isAuthenticated, user, logout } = useAuth()
+  const { user, signOut, isAdmin } = useAuth()
   const navigate = useNavigate()
 
   // Mock data for display - now using actual user data from context
   const mockProfile = {
-    username: user?.username || 'User',
-    wallet_balance: user?.wallet_balance || 0,
+    username: user?.email?.split('@')[0] || 'User',
+    wallet_balance: 0, // Will get from profile later
   }
 
   const handleScroll = useCallback(() => {
@@ -35,7 +35,7 @@ export default function Navbar() {
   }
 
   const handleSignOut = async () => {
-    logout()
+    signOut()
     setIsMobileMenuOpen(false)
   }
 
@@ -78,7 +78,7 @@ export default function Navbar() {
             </button>
             
             {/* Auth Buttons */}
-            {isAuthenticated ? (
+            {user ? (
               <div className="flex items-center space-x-4">
                 {/* User Dropdown Menu */}
                 <div className="relative group">
@@ -93,8 +93,8 @@ export default function Navbar() {
                   {/* Dropdown Menu */}
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div className="py-2">
-                      <Link to={user?.role === 'admin' ? '/admin' : '/dashboard'} className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
-                        {user?.role === 'admin' ? 'Admin Panel' : 'Dashboard'}
+                      <Link to={isAdmin ? '/admin' : '/dashboard'} className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                        {isAdmin ? 'Admin Panel' : 'Dashboard'}
                       </Link>
                       <Link to="/profile" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
                         Profile Settings
@@ -102,7 +102,7 @@ export default function Navbar() {
                       <Link to="/orders" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
                         Order History
                       </Link>
-                      {user?.role !== 'admin' && (
+                      {!isAdmin && (
                         <Link to="/wallet" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
                           Wallet
                         </Link>
@@ -115,7 +115,7 @@ export default function Navbar() {
                   </div>
                 </div>
                 
-                {user?.role !== 'admin' && (
+                {!isAdmin && (
                   <Link to="/wallet" className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary transition-colors">
                     <Wallet className="h-4 w-4" />
                     ₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}
@@ -194,16 +194,16 @@ export default function Navbar() {
               </button>
               
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                {isAuthenticated ? (
+                {user ? (
                   <div className="space-y-4">
-                    <Link to={user?.role === 'admin' ? '/admin' : '/dashboard'} onClick={() => setIsMobileMenuOpen(false)}>
+                    <Link to={isAdmin ? '/admin' : '/dashboard'} onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="ghost" className="w-full justify-start gap-2">
                         <User className="h-4 w-4" />
-                        {user?.role === 'admin' ? 'Admin Panel' : 'Dashboard'}
+                        {isAdmin ? 'Admin Panel' : 'Dashboard'}
                       </Button>
                     </Link>
                     
-                    {user?.role !== 'admin' && (
+                    {!isAdmin && (
                       <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 px-4">
                         <Wallet className="h-4 w-4" />
                         Balance: ₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}

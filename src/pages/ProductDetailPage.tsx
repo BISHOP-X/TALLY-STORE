@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ArrowLeft, ShoppingCart, Shield, Clock, Star, Check, AlertTriangle } from 'lucide-react'
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import { BackButton, BackToProducts } from '@/components/ui/back-button'
 
 // Mock product data - will be replaced with real data later
 const mockProducts = [
@@ -122,12 +123,7 @@ export default function ProductDetailPage() {
           <div className="text-center">
             <h1 className="text-2xl font-bold mb-4">Product Not Found</h1>
             <p className="text-muted-foreground mb-6">The product you're looking for doesn't exist.</p>
-            <Link to="/products">
-              <Button>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Products
-              </Button>
-            </Link>
+            <BackToProducts />
           </div>
         </div>
         <Footer />
@@ -339,10 +335,7 @@ export default function ProductDetailPage() {
 
         {/* Back Button */}
         <div className="mt-12">
-          <Button variant="outline" onClick={() => navigate(-1)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
+          <BackButton text="Back to Products" fallback="/products" />
         </div>
       </div>
 

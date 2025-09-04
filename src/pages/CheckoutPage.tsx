@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CheckCircle, CreditCard, Wallet, ArrowLeft, Shield, Clock } from 'lucide-react'
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import { BackButton, BackToProducts } from '@/components/ui/back-button'
 
 // Mock product data
 const mockProducts = [
@@ -73,12 +74,7 @@ export default function CheckoutPage() {
           <div className="text-center">
             <h1 className="text-2xl font-bold mb-4">Product Not Found</h1>
             <p className="text-muted-foreground mb-6">The product you're trying to purchase doesn't exist.</p>
-            <Link to="/products">
-              <Button>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Products
-              </Button>
-            </Link>
+            <BackToProducts />
           </div>
         </div>
         <Footer />
@@ -96,10 +92,9 @@ export default function CheckoutPage() {
       
       <div className="container mx-auto px-6 pt-24 pb-12 max-w-4xl">
         <div className="mb-6">
-          <Link to={`/product/${productId}`} className="text-muted-foreground hover:text-primary flex items-center gap-2 mb-4">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Product
-          </Link>
+          <div className="mb-4">
+            <BackButton text="Back to Product" to={`/product/${productId}`} />
+          </div>
           <h1 className="text-3xl font-bold">Checkout</h1>
           <p className="text-muted-foreground">Complete your purchase</p>
         </div>

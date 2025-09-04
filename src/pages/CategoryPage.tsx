@@ -5,123 +5,31 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Filter, Star, Users, Eye, Calendar, ShoppingCart, ArrowLeft } from 'lucide-react'
+import { Search, Filter, Star, Users, Eye, Calendar, ShoppingCart, ArrowLeft, Loader2 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
-
-// Mock Categories
-const mockCategories = {
-  1: { name: 'Instagram Accounts', description: 'High-quality Instagram accounts with real followers' },
-  2: { name: 'Twitter Accounts', description: 'Verified and aged Twitter accounts' },
-  3: { name: 'YouTube Channels', description: 'Monetized YouTube channels with subscribers' },
-  4: { name: 'TikTok Accounts', description: 'Trending TikTok accounts with high engagement' },
-  5: { name: 'Facebook Pages', description: 'Business Facebook pages with likes and engagement' },
-  6: { name: 'LinkedIn Profiles', description: 'Professional LinkedIn profiles with connections' }
-}
-
-// Mock Products Data
-const mockProducts = [
-  {
-    id: 1,
-    categoryId: 1,
-    title: '@lifestyle_influencer',
-    followers: '125K',
-    engagement: '4.2%',
-    age: '2 years',
-    price: 15000,
-    isVerified: true,
-    description: 'Lifestyle influencer account with high engagement rate and authentic followers.',
-    stats: {
-      posts: 1250,
-      following: 890,
-      avgLikes: 5200
-    }
-  },
-  {
-    id: 2,
-    categoryId: 1,
-    title: '@fitness_motivation',
-    followers: '89K',
-    engagement: '3.8%',
-    age: '1.5 years',
-    price: 12000,
-    isVerified: false,
-    description: 'Fitness and motivation account with engaged community.',
-    stats: {
-      posts: 980,
-      following: 450,
-      avgLikes: 3400
-    }
-  },
-  {
-    id: 3,
-    categoryId: 1,
-    title: '@food_adventures',
-    followers: '200K',
-    engagement: '5.1%',
-    age: '3 years',
-    price: 25000,
-    isVerified: true,
-    description: 'Food and travel account with premium engagement.',
-    stats: {
-      posts: 1800,
-      following: 1200,
-      avgLikes: 10200
-    }
-  },
-  {
-    id: 4,
-    categoryId: 1,
-    title: '@fashion_daily',
-    followers: '67K',
-    engagement: '3.2%',
-    age: '1 year',
-    price: 8500,
-    isVerified: false,
-    description: 'Fashion-focused account with young, engaged audience.',
-    stats: {
-      posts: 650,
-      following: 320,
-      avgLikes: 2100
-    }
-  },
-  {
-    id: 5,
-    categoryId: 1,
-    title: '@tech_reviews',
-    followers: '156K',
-    engagement: '4.7%',
-    age: '2.5 years',
-    price: 18500,
-    isVerified: true,
-    description: 'Technology review account with tech-savvy audience.',
-    stats: {
-      posts: 1100,
-      following: 680,
-      avgLikes: 7300
-    }
-  },
-  {
-    id: 6,
-    categoryId: 1,
-    title: '@nature_photography',
-    followers: '93K',
-    engagement: '4.0%',
-    age: '2 years',
-    price: 11000,
-    isVerified: false,
-    description: 'Nature and landscape photography account.',
-    stats: {
-      posts: 890,
-      following: 420,
-      avgLikes: 3700
-    }
-  }
-]
+import { BackToCategories } from '@/components/ui/back-button'
+import { 
+  getCategories, 
+  getProductGroupsByCategory, 
+  getIndividualAccountsByProductGroup,
+  type Category, 
+  type ProductGroup, 
+  type IndividualAccount 
+} from '@/lib/supabase'
 
 export default function CategoryPage() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
+  
+  // State for real Supabase data
+  const [category, setCategory] = useState<Category | null>(null)
+  const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
+  const [individualAccounts, setIndividualAccounts] = useState<IndividualAccount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // UI state
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('price-low')
   const [priceRange, setPriceRange] = useState('all')
@@ -129,7 +37,59 @@ export default function CategoryPage() {
   // Check if user is logged in
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
 
-  const handleAddToCart = (productId: number) => {
+  // Load real data from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      if (!categoryId) return
+      
+      try {
+        setLoading(true)
+        console.log('🔄 Loading category data for:', categoryId)
+        
+        // Load all categories first to find the right one
+        const categories = await getCategories()
+        const foundCategory = categories.find(cat => 
+          cat.id === categoryId || 
+          cat.name.toLowerCase() === categoryId.toLowerCase() ||
+          cat.display_name.toLowerCase() === categoryId.toLowerCase()
+        )
+        
+        if (!foundCategory) {
+          throw new Error('Category not found')
+        }
+        
+        setCategory(foundCategory)
+        
+        // Load product groups for this category
+        const productGroupsData = await getProductGroupsByCategory(foundCategory.id)
+        setProductGroups(productGroupsData)
+        
+        // Load individual accounts for each product group
+        const allAccounts: IndividualAccount[] = []
+        for (const group of productGroupsData) {
+          const accounts = await getIndividualAccountsByProductGroup(group.id)
+          allAccounts.push(...accounts)
+        }
+        setIndividualAccounts(allAccounts)
+        
+        console.log('✅ Category data loaded:', { 
+          category: foundCategory.display_name,
+          productGroups: productGroupsData.length,
+          accounts: allAccounts.length
+        })
+        
+      } catch (err) {
+        console.error('❌ Error loading category data:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load category data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [categoryId])
+
+  const handleAddToCart = (accountId: string) => {
     if (!isLoggedIn) {
       // Redirect to login with return URL
       navigate(`/login?redirect=/category/${categoryId}`)
@@ -137,56 +97,84 @@ export default function CategoryPage() {
     }
     
     // For now, redirect to product detail page
-    navigate(`/product/${productId}`)
+    navigate(`/product/${accountId}`)
   }
 
-  const category = mockCategories[Number(categoryId) as keyof typeof mockCategories]
-  const categoryProducts = mockProducts.filter(product => product.categoryId === Number(categoryId))
-
-  // Filter and sort products
-  let filteredProducts = categoryProducts.filter(product =>
-    product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.description.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  // Price filtering
-  if (priceRange !== 'all') {
-    const [min, max] = priceRange.split('-').map(Number)
-    filteredProducts = filteredProducts.filter(product => 
-      product.price >= min && product.price <= max
-    )
-  }
-
-  // Sorting
-  filteredProducts.sort((a, b) => {
-    switch (sortBy) {
-      case 'price-low':
-        return a.price - b.price
-      case 'price-high':
-        return b.price - a.price
-      case 'followers-high':
-        return parseInt(b.followers.replace('K', '000')) - parseInt(a.followers.replace('K', '000'))
-      case 'engagement-high':
-        return parseFloat(b.engagement) - parseFloat(a.engagement)
-      default:
-        return 0
-    }
-  })
-
-  if (!category) {
+  // Show loading state
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
         <Navbar />
-        <div className="container mx-auto px-6 py-16 text-center">
-          <h1 className="text-2xl font-bold mb-4">Category Not Found</h1>
-          <Link to="/products">
-            <Button>Back to Categories</Button>
-          </Link>
+        <div className="container mx-auto px-6 py-32">
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin mr-3" />
+            <span className="text-lg">Loading category...</span>
+          </div>
         </div>
         <Footer />
       </div>
     )
   }
+
+  // Show error state
+  if (error || !category) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+        <Navbar />
+        <div className="container mx-auto px-6 py-16 text-center">
+          <h1 className="text-2xl font-bold mb-4">Category Not Found</h1>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <BackToCategories />
+        </div>
+        <Footer />
+      </div>
+    )
+  }
+
+  // Filter accounts based on search
+  let filteredAccounts = individualAccounts.filter(account => {
+    // Get the product group for this account to access platform info
+    const productGroup = productGroups.find(pg => pg.id === account.product_group_id)
+    
+    return account.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           (productGroup && productGroup.platform.toLowerCase().includes(searchTerm.toLowerCase()))
+  })
+
+  // Price filtering
+  if (priceRange !== 'all') {
+    const [min, max] = priceRange.split('-').map(Number)
+    filteredAccounts = filteredAccounts.filter(account => {
+      const productGroup = productGroups.find(pg => pg.id === account.product_group_id)
+      if (!productGroup) return false
+      const price = productGroup.price_per_unit
+      if (max) {
+        return price >= min && price <= max
+      } else {
+        return price >= min
+      }
+    })
+  }
+
+  // Sorting
+  filteredAccounts.sort((a, b) => {
+    const aGroup = productGroups.find(pg => pg.id === a.product_group_id)
+    const bGroup = productGroups.find(pg => pg.id === b.product_group_id)
+    
+    if (!aGroup || !bGroup) return 0
+    
+    switch (sortBy) {
+      case 'price-low':
+        return aGroup.price_per_unit - bGroup.price_per_unit
+      case 'price-high':
+        return bGroup.price_per_unit - aGroup.price_per_unit
+      case 'newest':
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      case 'oldest':
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      default:
+        return 0
+    }
+  })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
@@ -195,17 +183,19 @@ export default function CategoryPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-primary to-primary/80 text-white">
         <div className="container mx-auto px-6 py-12">
-          <Link to="/products" className="inline-flex items-center text-white/80 hover:text-white mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Categories
-          </Link>
+          <div className="mb-4">
+            <BackToCategories />
+          </div>
           
-          <h1 className="text-3xl font-bold mb-2">{category.name}</h1>
+          <h1 className="text-3xl font-bold mb-2">{category.display_name}</h1>
           <p className="text-white/90 mb-6">{category.description}</p>
           
           <div className="flex items-center gap-4 text-sm">
             <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-              {filteredProducts.length} accounts available
+              {filteredAccounts.length} accounts available
+            </Badge>
+            <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+              {productGroups.length} product types
             </Badge>
           </div>
         </div>
@@ -232,8 +222,8 @@ export default function CategoryPage() {
               <SelectContent>
                 <SelectItem value="price-low">Price: Low to High</SelectItem>
                 <SelectItem value="price-high">Price: High to Low</SelectItem>
-                <SelectItem value="followers-high">Most Followers</SelectItem>
-                <SelectItem value="engagement-high">Best Engagement</SelectItem>
+                <SelectItem value="newest">Newest First</SelectItem>
+                <SelectItem value="oldest">Oldest First</SelectItem>
               </SelectContent>
             </Select>
 
@@ -251,79 +241,88 @@ export default function CategoryPage() {
           </div>
         </div>
 
-        {/* Products Grid */}
+        {/* Individual Accounts Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((product) => (
-            <Card key={product.id} className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
-              <CardHeader className="pb-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      {product.title}
-                      {product.isVerified && (
-                        <Badge variant="default" className="text-xs">
-                          Verified
+          {filteredAccounts.map((account) => {
+            const productGroup = productGroups.find(pg => pg.id === account.product_group_id)
+            if (!productGroup) return null
+            
+            return (
+              <Card key={account.id} className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
+                <CardHeader className="pb-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        @{account.username}
+                        <Badge variant="secondary" className="text-xs">
+                          {productGroup.platform}
                         </Badge>
-                      )}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {product.description}
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                {/* Stats */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span>{product.followers} followers</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                    <span>{product.engagement} engagement</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Star className="h-4 w-4 text-muted-foreground" />
-                    <span>{product.stats.avgLikes.toLocaleString()} avg likes</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{product.age} old</span>
-                  </div>
-                </div>
-
-                {/* Price and Buttons */}
-                <div className="pt-4 border-t">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-2xl font-bold text-primary">
-                      ₦{product.price.toLocaleString()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Link to={`/product/${product.id}`} className="flex-1">
-                      <Button variant="outline" className="w-full">
-                        View Details
-                      </Button>
-                    </Link>
-                    <Button 
-                      className="flex-1 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
-                      onClick={() => handleAddToCart(product.id)}
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {productGroup.country || 'Global'} • {productGroup.age_range || 'Aged Account'}
+                      </p>
+                    </div>
+                    <Badge 
+                      variant="default"
+                      className="ml-2"
                     >
-                      <ShoppingCart className="h-4 w-4 mr-2" />
-                      {isLoggedIn ? 'Add to Cart' : 'Sign In to Buy'}
-                    </Button>
+                      Available
+                    </Badge>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  {/* Account Details */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span>{productGroup.platform}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                      <span>{account.status}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span>{productGroup.age_range || 'Aged'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                      <span>In Stock</span>
+                    </div>
+                  </div>
+
+                  {/* Price and Buttons */}
+                  <div className="pt-4 border-t">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-lg font-bold text-primary">
+                        ₦{productGroup.price_per_unit.toLocaleString()}
+                      </span>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Link to={`/product/${account.id}`} className="flex-1">
+                        <Button variant="outline" className="w-full">
+                          View Details
+                        </Button>
+                      </Link>
+                      <Button 
+                        className="flex-1 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                        onClick={() => handleAddToCart(account.id)}
+                      >
+                        <ShoppingCart className="h-4 w-4 mr-2" />
+                        {isLoggedIn ? 'Purchase' : 'Sign In to Buy'}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
 
         {/* No Results */}
-        {filteredProducts.length === 0 && (
+        {filteredAccounts.length === 0 && (
           <div className="text-center py-12">
             <h3 className="text-lg font-semibold mb-2">No accounts found</h3>
             <p className="text-muted-foreground mb-4">

@@ -4,13 +4,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { AuthProvider } from '@/contexts/AuthContext'
-import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute'
+import { AuthProvider } from '@/contexts/SimpleAuth'
+import { ProtectedRoute, PublicRoute } from '@/components/SimpleProtectedRoute'
 
 // Pages
 import Index from "./pages/Index";
-import Login from '@/pages/Login'
-import Register from '@/pages/Register'
+import SimpleLogin from '@/pages/SimpleLogin'
+import SimpleRegister from '@/pages/SimpleRegister'
 import Dashboard from '@/pages/Dashboard'
 import ProductsPage from '@/pages/ProductsPage'
 import CategoryPage from '@/pages/CategoryPage'
@@ -18,6 +18,7 @@ import ProductDetailPage from '@/pages/ProductDetailPage'
 import CheckoutPage from '@/pages/CheckoutPage'
 import ProfilePage from '@/pages/ProfilePage'
 import OrderHistoryPage from '@/pages/OrderHistoryPage'
+import PaymentCallbackPage from '@/pages/PaymentCallbackPage'
 import WalletPage from '@/pages/WalletPage'
 import SupportPage from '@/pages/SupportPage'
 import TermsPage from '@/pages/TermsPage'
@@ -61,7 +62,7 @@ const App = () => (
                 path="/login" 
                 element={
                   <PublicRoute>
-                    <Login />
+                    <SimpleLogin />
                   </PublicRoute>
                 } 
               />
@@ -69,10 +70,12 @@ const App = () => (
                 path="/register" 
                 element={
                   <PublicRoute>
-                    <Register />
+                    <SimpleRegister />
                   </PublicRoute>
                 } 
               />
+              
+              {/* Auth callback for OAuth - not needed for email/password auth */}
 
               {/* Protected Routes - require authentication */}
               <Route 
@@ -112,6 +115,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireRole="user">
                     <WalletPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/payment-callback" 
+                element={
+                  <ProtectedRoute requireRole="user">
+                    <PaymentCallbackPage />
                   </ProtectedRoute>
                 } 
               />

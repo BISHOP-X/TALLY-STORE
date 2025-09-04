@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useState } from 'react'
+import { BackToHome } from '@/components/ui/back-button'
 
 const ContactPage = () => {
   const [formData, setFormData] = useState({
@@ -54,13 +55,8 @@ const ContactPage = () => {
         </div>
 
         {/* Navigation */}
-        <div className="mb-8 text-center">
-          <Link 
-            to="/"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-          >
-            ← Back to Home
-          </Link>
+        <div className="mb-8">
+          <BackToHome />
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">

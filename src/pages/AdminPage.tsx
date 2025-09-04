@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -16,10 +16,27 @@ import {
   Edit, 
   Trash2,
   Eye,
-  DollarSign
+  DollarSign,
+  Loader2
 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import { 
+  getCategories, 
+  getAllProductGroups, 
+  getIndividualAccounts,
+  createCategory, 
+  updateCategory, 
+  deleteCategory,
+  createProductGroup,
+  updateProductGroup,
+  deleteProductGroup,
+  bulkCreateIndividualAccounts,
+  parseCSV,
+  type Category, 
+  type ProductGroup,
+  type IndividualAccount
+} from '@/lib/supabase'
 
 // Mock admin stats
 const mockStats = {
@@ -70,6 +87,15 @@ const mockCategories = [
 ]
 
 export default function AdminPage() {
+  // Real data state
+  const [categories, setCategories] = useState<Category[]>([])
+  const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
+  const [individualAccounts, setIndividualAccounts] = useState<IndividualAccount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // UI state
+  const [csvFile, setCsvFile] = useState<File | null>(null)
   const [newProduct, setNewProduct] = useState({
     title: '',
     category: '',
@@ -79,8 +105,240 @@ export default function AdminPage() {
     email: '',
     description: ''
   })
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    displayName: '',
+    description: ''
+  })
 
-  const [csvFile, setCsvFile] = useState<File | null>(null)
+  // Load real data
+  useEffect(() => {
+    loadAllData()
+  }, [])
+
+  const loadAllData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const [categoriesData, productGroupsData, accountsData] = await Promise.all([
+        getCategories(),
+        getAllProductGroups(),
+        getIndividualAccounts()
+      ])
+
+      setCategories(categoriesData)
+      setProductGroups(productGroupsData)
+      setIndividualAccounts(accountsData)
+
+      console.log('✅ Admin data loaded:', {
+        categories: categoriesData.length,
+        productGroups: productGroupsData.length,
+        accounts: accountsData.length
+      })
+
+    } catch (err) {
+      console.error('❌ Error loading admin data:', err)
+      setError('Failed to load admin data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Add new category
+  const handleAddCategory = async () => {
+    if (!newCategory.name || !newCategory.displayName) {
+      alert('Please fill in category name and display name')
+      return
+    }
+
+    try {
+      const category = await createCategory(
+        newCategory.name,
+        newCategory.displayName,
+        newCategory.description
+      )
+
+      if (category) {
+        setCategories(prev => [...prev, category])
+        setNewCategory({ name: '', displayName: '', description: '' })
+        alert('Category created successfully!')
+      }
+    } catch (error) {
+      console.error('Error creating category:', error)
+      alert(`Failed to create category: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  // Delete category
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return
+
+    try {
+      const success = await deleteCategory(categoryId)
+      if (success) {
+        setCategories(prev => prev.filter(cat => cat.id !== categoryId))
+        alert('Category deleted successfully!')
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error)
+      alert('Failed to delete category')
+    }
+  }
+
+  // Handle CSV upload
+  const handleCsvUpload = async () => {
+    if (!csvFile) {
+      alert('Please select a CSV file')
+      return
+    }
+
+    try {
+      const text = await csvFile.text()
+      const csvData = parseCSV(text)
+
+      if (csvData.length === 0) {
+        alert('CSV file is empty or invalid')
+        return
+      }
+
+      // Validate required fields
+      const requiredFields = ['username', 'password', 'category', 'price']
+      const firstRow = csvData[0]
+      const missingFields = requiredFields.filter(field => !(field in firstRow))
+
+      if (missingFields.length > 0) {
+        alert(`Missing required fields: ${missingFields.join(', ')}`)
+        return
+      }
+
+      // Process each row
+      const accountsToCreate: Omit<IndividualAccount, 'id' | 'created_at'>[] = []
+
+      for (const row of csvData) {
+        // Find or create category
+        let category = categories.find(cat => 
+          cat.name.toLowerCase() === row.category.toLowerCase()
+        )
+
+        if (!category) {
+          category = await createCategory(
+            row.category.toLowerCase(),
+            row.category,
+            `${row.category} accounts`
+          )
+          if (category) {
+            setCategories(prev => [...prev, category])
+          }
+        }
+
+        if (!category) continue
+
+        // Find or create product group
+        let productGroup = productGroups.find(pg => 
+          pg.category_id === category!.id && 
+          pg.name.toLowerCase().includes(row.category.toLowerCase())
+        )
+
+        if (!productGroup) {
+          const groupName = `${row.category} ${row.age_range || 'General'}, ${row.country || 'Global'}`
+          productGroup = await createProductGroup({
+            category_id: category.id,
+            name: groupName,
+            platform: row.category.toLowerCase(),
+            age_range: row.age_range || null,
+            country: row.country || null,
+            price_per_unit: parseFloat(row.price) || 0,
+            available_stock: 0,
+            is_active: true
+          })
+          if (productGroup) {
+            setProductGroups(prev => [...prev, productGroup])
+          }
+        }
+
+        if (!productGroup) continue
+
+        // Add account to creation list
+        accountsToCreate.push({
+          product_group_id: productGroup.id,
+          username: row.username,
+          email: row.email || '',
+          password: row.password,
+          followers_count: parseInt(row.followers) || 0,
+          status: 'available'
+        })
+      }
+
+      // Bulk create accounts
+      if (accountsToCreate.length > 0) {
+        const createdAccounts = await bulkCreateIndividualAccounts(accountsToCreate)
+        setIndividualAccounts(prev => [...prev, ...createdAccounts])
+        
+        // Reload product groups to get updated stock counts
+        const updatedProductGroups = await getAllProductGroups()
+        setProductGroups(updatedProductGroups)
+
+        alert(`Successfully uploaded ${createdAccounts.length} accounts!`)
+        setCsvFile(null)
+      }
+
+    } catch (error) {
+      console.error('Error processing CSV:', error)
+      alert('Failed to process CSV file')
+    }
+  }
+
+  // Calculate stats from real data
+  const stats = {
+    totalUsers: 0, // You can add user count later
+    totalProducts: individualAccounts.length,
+    totalSales: individualAccounts.filter(acc => acc.status === 'sold').length,
+    revenue: individualAccounts
+      .filter(acc => acc.status === 'sold')
+      .reduce((sum, acc) => {
+        const productGroup = productGroups.find(pg => pg.id === acc.product_group_id)
+        return sum + (productGroup?.price_per_unit || 0)
+      }, 0),
+    pendingOrders: 0, // Add order tracking later
+    lowStock: productGroups.filter(pg => pg.available_stock < 5).length
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+        <Navbar />
+        <div className="container mx-auto px-6 py-32">
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin mr-3" />
+            <span className="text-lg">Loading admin dashboard...</span>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+        <Navbar />
+        <div className="container mx-auto px-6 py-32">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-red-600 mb-4">Error Loading Admin Data</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={loadAllData}>Retry</Button>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    )
+  }
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    setCsvFile(file || null)
+  }
 
   const handleAddProduct = () => {
     // Mock product addition
@@ -95,17 +353,6 @@ export default function AdminPage() {
       email: '',
       description: ''
     })
-  }
-
-  const handleCsvUpload = () => {
-    if (!csvFile) {
-      alert('Please select a CSV file')
-      return
-    }
-    
-    // Mock CSV processing
-    alert(`Processing ${csvFile.name}... This would upload products in bulk.`)
-    setCsvFile(null)
   }
 
   return (
@@ -129,7 +376,7 @@ export default function AdminPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Users</p>
-                    <p className="text-2xl font-bold">{mockStats.totalUsers.toLocaleString()}</p>
+                    <p className="text-2xl font-bold">{stats.totalUsers.toLocaleString()}</p>
                   </div>
                   <Users className="h-8 w-8 text-blue-500" />
                 </div>
@@ -141,7 +388,7 @@ export default function AdminPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Products</p>
-                    <p className="text-2xl font-bold">{mockStats.totalProducts}</p>
+                    <p className="text-2xl font-bold">{stats.totalProducts}</p>
                   </div>
                   <ShoppingBag className="h-8 w-8 text-green-500" />
                 </div>
@@ -153,7 +400,7 @@ export default function AdminPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Sales</p>
-                    <p className="text-2xl font-bold">{mockStats.totalSales}</p>
+                    <p className="text-2xl font-bold">{stats.totalSales}</p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-purple-500" />
                 </div>
@@ -165,7 +412,7 @@ export default function AdminPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Revenue</p>
-                    <p className="text-2xl font-bold">₦{mockStats.revenue.toLocaleString()}</p>
+                    <p className="text-2xl font-bold">₦{stats.revenue.toLocaleString()}</p>
                   </div>
                   <DollarSign className="h-8 w-8 text-orange-500" />
                 </div>
@@ -357,7 +604,7 @@ export default function AdminPage() {
                     <input
                       type="file"
                       accept=".csv"
-                      onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                      onChange={handleCsvFileChange}
                       className="mb-4"
                     />
                     
@@ -410,15 +657,15 @@ export default function AdminPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {mockCategories.map((category) => (
+                    {categories.map((category) => (
                       <div
                         key={category.id}
                         className="flex items-center justify-between p-4 border rounded-lg"
                       >
                         <div>
-                          <h3 className="font-medium">{category.name}</h3>
+                          <h3 className="font-medium">{category.display_name}</h3>
                           <p className="text-sm text-muted-foreground">
-                            {category.productCount} products
+                            {category.description} • {productGroups.filter(pg => pg.category_id === category.id).length} product groups
                           </p>
                         </div>
                         
@@ -426,12 +673,51 @@ export default function AdminPage() {
                           <Button variant="outline" size="sm">
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDeleteCategory(category.id)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
                     ))}
+                    
+                    {/* Add new category form */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 mt-4">
+                      <h3 className="font-medium mb-4">Add New Category</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Category Name</label>
+                          <Input
+                            placeholder="e.g., instagram"
+                            value={newCategory.name}
+                            onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Display Name</label>
+                          <Input
+                            placeholder="e.g., Instagram Accounts"
+                            value={newCategory.displayName}
+                            onChange={(e) => setNewCategory({...newCategory, displayName: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Description</label>
+                          <Input
+                            placeholder="e.g., High-quality Instagram accounts"
+                            value={newCategory.description}
+                            onChange={(e) => setNewCategory({...newCategory, description: e.target.value})}
+                          />
+                        </div>
+                        <Button onClick={handleAddCategory} className="w-full">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Category
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                   
                   <div className="mt-6 pt-6 border-t">

@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
+import { BackToHome } from '@/components/ui/back-button'
 
 const AboutPage = () => {
   return (
@@ -22,13 +23,8 @@ const AboutPage = () => {
         </div>
 
         {/* Navigation */}
-        <div className="mb-8 text-center">
-          <Link 
-            to="/"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-          >
-            ← Back to Home
-          </Link>
+        <div className="mb-8">
+          <BackToHome />
         </div>
 
         {/* About Content */}

@@ -14,10 +14,14 @@ import {
   Calendar,
   CheckCircle,
   Clock,
-  XCircle
+  XCircle,
+  Loader2
 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import { ercasPayService, isErcasPayConfigured } from '@/lib/ercasPay'
+import { useAuth } from '@/contexts/SimpleAuth'
+import { useToast } from '@/hooks/use-toast'
 
 // Mock wallet data
 const mockWalletData = {
@@ -79,17 +83,78 @@ const mockTransactions = [
 export default function WalletPage() {
   const [topupAmount, setTopupAmount] = useState('')
   const [selectedMethod, setSelectedMethod] = useState('ercas')
+  const [isProcessing, setIsProcessing] = useState(false)
+  const { user } = useAuth()
+  const { toast } = useToast()
 
-  const handleTopup = () => {
+  const handleTopup = async () => {
     const amount = parseFloat(topupAmount)
     if (amount < 1000) {
-      alert('Minimum top-up amount is ₦1,000')
+      toast({
+        title: "Invalid Amount",
+        description: "Minimum top-up amount is ₦1,000",
+        variant: "destructive"
+      })
       return
     }
-    
-    // Mock payment processing
-    alert(`Processing ₦${amount.toLocaleString()} top-up via Ercas Pay...`)
-    setTopupAmount('')
+
+    if (!user?.email) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to continue",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!isErcasPayConfigured()) {
+      // Fallback for development/demo
+      toast({
+        title: "Demo Mode",
+        description: `Processing ₦${amount.toLocaleString()} top-up... (Demo mode - configure Ercas Pay for live payments)`,
+      })
+      setTopupAmount('')
+      return
+    }
+
+    setIsProcessing(true)
+
+    try {
+      const reference = ercasPayService.generateReference()
+      const paymentData = {
+        amount: amount,
+        currency: 'NGN',
+        customerEmail: user.email,
+        customerName: (user as any)?.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        paymentReference: reference,
+        redirectUrl: `${window.location.origin}/payment-callback`,
+        description: `Wallet top-up - ₦${amount.toLocaleString()}`,
+        paymentMethods: 'card,bank-transfer,ussd,qrcode',
+        feeBearer: 'customer' as const,
+        metadata: {
+          userId: user.id,
+          type: 'wallet_topup'
+        }
+      }
+
+      const response = await ercasPayService.initializePayment(paymentData)
+
+      if (response.success && response.data) {
+        // Redirect to payment page
+        window.location.href = response.data.checkoutUrl
+      } else {
+        throw new Error(response.error || 'Payment initialization failed')
+      }
+    } catch (error) {
+      console.error('Payment error:', error)
+      toast({
+        title: "Payment Error",
+        description: error instanceof Error ? error.message : "Unable to process payment. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -230,11 +295,20 @@ export default function WalletPage() {
                       </div>
                       <Button 
                         onClick={handleTopup}
-                        disabled={!topupAmount || parseFloat(topupAmount) < 1000}
+                        disabled={!topupAmount || parseFloat(topupAmount) < 1000 || isProcessing}
                         className="px-8"
                       >
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Pay Now
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="h-4 w-4 mr-2" />
+                            Pay Now
+                          </>
+                        )}
                       </Button>
                     </div>
                     {topupAmount && parseFloat(topupAmount) < 1000 && (

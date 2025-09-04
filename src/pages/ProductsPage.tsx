@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Search, Filter, Grid, List, Star, Shield, TrendingUp } from 'lucide-react'
+import { Search, Filter, Grid, List, Star, Shield, TrendingUp, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import { getCategories, getAllProductGroups, testConnection, type Category, type ProductGroup } from '@/lib/supabase'
 
 // Mock Categories Data
 const mockCategories = [
@@ -67,13 +68,93 @@ const mockCategories = [
 ]
 
 export default function ProductsPage() {
+  // State for real Supabase data
+  const [categories, setCategories] = useState<Category[]>([])
+  const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Existing UI state
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
 
-  const filteredCategories = mockCategories.filter(category =>
-    category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    category.description.toLowerCase().includes(searchTerm.toLowerCase())
+  // Load real data from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        console.log('🔄 Loading data from Supabase...')
+        
+        // Test connection first
+        const connectionOk = await testConnection()
+        if (!connectionOk) {
+          throw new Error('Failed to connect to database')
+        }
+
+        // Load categories and product groups
+        const [categoriesData, productGroupsData] = await Promise.all([
+          getCategories(),
+          getAllProductGroups()
+        ])
+
+        setCategories(categoriesData)
+        setProductGroups(productGroupsData)
+        setError(null)
+        
+        console.log('✅ Data loaded successfully:', { 
+          categories: categoriesData.length, 
+          productGroups: productGroupsData.length 
+        })
+        
+      } catch (err) {
+        console.error('❌ Error loading data:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [])
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+        <Navbar />
+        <div className="container mx-auto px-6 py-32">
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin mr-3" />
+            <span className="text-lg">Loading products from database...</span>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+        <Navbar />
+        <div className="container mx-auto px-6 py-32">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-red-600 mb-4">Database Connection Error</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Try Again</Button>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    )
+  }
+
+  // Filter categories based on search
+  const filteredCategories = categories.filter(category =>
+    category.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (category.description && category.description.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   return (
@@ -179,16 +260,17 @@ export default function ProductsPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <CardTitle className="group-hover:text-primary transition-colors">
-                          {category.name}
+                          {category.display_name}
                         </CardTitle>
-                        {category.isPopular && (
+                        {/* Show popular badge if category has product groups */}
+                        {productGroups.filter(pg => pg.category_id === category.id).length > 0 && (
                           <Badge variant="secondary" className="text-xs">
-                            Popular
+                            Available
                           </Badge>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground mb-4">
-                        {category.description}
+                        {category.description || 'Premium social media accounts'}
                       </p>
                     </div>
                   </div>
@@ -197,16 +279,21 @@ export default function ProductsPage() {
                 <CardContent className="pt-0">
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">
-                      {category.productCount} accounts
+                      {productGroups.filter(pg => pg.category_id === category.id).length} product types
                     </span>
                     <span className="font-semibold text-primary">
-                      {category.priceRange}
+                      {productGroups
+                        .filter(pg => pg.category_id === category.id)
+                        .map(pg => `₦${pg.price_per_unit}`)
+                        .slice(0, 1)[0] || 'From ₦25'}+
                     </span>
                   </div>
                   
-                  <Button className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                    Browse Accounts
-                  </Button>
+                  <Link to={`/category/${category.name}`}>
+                    <Button className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      Browse Accounts
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             </Link>
