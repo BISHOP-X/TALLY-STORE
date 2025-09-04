@@ -663,7 +663,7 @@ export default function AdminPage() {
                         className="flex items-center justify-between p-4 border rounded-lg"
                       >
                         <div>
-                          <h3 className="font-medium">{category.display_name}</h3>
+                          <h3 className="font-medium">{category.name}</h3>
                           <p className="text-sm text-muted-foreground">
                             {category.description} • {productGroups.filter(pg => pg.category_id === category.id).length} product groups
                           </p>

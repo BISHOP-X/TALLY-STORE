@@ -104,7 +104,9 @@ export default function ProductsPage() {
         
         console.log('✅ Data loaded successfully:', { 
           categories: categoriesData.length, 
-          productGroups: productGroupsData.length 
+          productGroups: productGroupsData.length,
+          categoriesData,
+          productGroupsData
         })
         
       } catch (err) {
@@ -151,11 +153,23 @@ export default function ProductsPage() {
     )
   }
 
-  // Filter categories based on search
-  const filteredCategories = categories.filter(category =>
-    category.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (category.description && category.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  // Filter categories based on search AND available products
+  const filteredCategories = categories.filter(category => {
+    // Check if category matches search
+    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (category.description && category.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    
+    // Check if category has available products
+    const hasAvailableProducts = productGroups.some(pg => 
+      pg.category_id === category.id && 
+      pg.is_active && 
+      pg.stock_count > 0
+    )
+    
+    console.log(`Category ${category.name}:`, { matchesSearch, hasAvailableProducts })
+    
+    return matchesSearch && hasAvailableProducts
+  })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
@@ -260,7 +274,7 @@ export default function ProductsPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <CardTitle className="group-hover:text-primary transition-colors">
-                          {category.display_name}
+                          {category.name}
                         </CardTitle>
                         {/* Show popular badge if category has product groups */}
                         {productGroups.filter(pg => pg.category_id === category.id).length > 0 && (
@@ -284,7 +298,7 @@ export default function ProductsPage() {
                     <span className="font-semibold text-primary">
                       {productGroups
                         .filter(pg => pg.category_id === category.id)
-                        .map(pg => `₦${pg.price_per_unit}`)
+                        .map(pg => `₦${pg.price}`)
                         .slice(0, 1)[0] || 'From ₦25'}+
                     </span>
                   </div>

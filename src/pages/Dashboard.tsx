@@ -1,19 +1,12 @@
-// import { useAuthContext } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Wallet, ShoppingBag, Download, Settings } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '@/contexts/SimpleAuth'
 
 export default function Dashboard() {
-  // Mock data for now - remove auth dependency
-  const mockUser = { email: 'user@example.com' }
-  const mockProfile = { username: 'testuser', wallet_balance: 5000, created_at: '2024-01-01' }
+  const { user, walletBalance, signOut } = useAuth()
   
-  const signOut = () => {
-    console.log('Sign out clicked - mock function')
-    // TODO: Implement real signOut when auth is fixed
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       {/* Navigation */}
@@ -22,7 +15,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-bold text-primary">TallyStore</h1>
             <p className="text-sm text-muted-foreground">
-              Welcome back, {mockProfile?.username}!
+              Welcome back, {user?.email?.split('@')[0] || 'User'}!
             </p>
           </div>
           <Button onClick={signOut} variant="outline">
@@ -43,7 +36,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold mb-2">
-              ₦{mockProfile?.wallet_balance?.toLocaleString() || '0.00'}
+              ₦{walletBalance?.toLocaleString() || '0.00'}
             </div>
             <Link to="/wallet">
               <Button variant="secondary" className="bg-white/20 hover:bg-white/30 text-white">

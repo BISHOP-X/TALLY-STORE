@@ -136,38 +136,44 @@ export default function OrderHistoryPage() {
     }
   }
 
-  const getStats = () => {
-    const completed = orders.filter(o => o.status === 'completed').length
-    const processing = orders.filter(o => o.status === 'processing').length
-    const failed = orders.filter(o => o.status === 'failed').length
-    const totalSpent = orders.filter(o => o.status === 'completed').reduce((sum, o) => sum + (o.amount || 0), 0)
-    
-    return { completed, processing, failed, totalSpent }
+  const getTotalSpent = () => {
+    return orders
+      .filter(order => order.status === 'delivered')
+      .reduce((total, order) => total + order.amount, 0)
   }
 
-  const stats = getStats()
+  const getOrderStats = () => {
+    const total = orders.length
+    const delivered = orders.filter(o => o.status === 'delivered').length
+    const processing = orders.filter(o => o.status === 'processing').length
+    const failed = orders.filter(o => o.status === 'failed').length
+
+    return { total, delivered, processing, failed }
+  }
+
+  const stats = getOrderStats()
 
   return (
     <div className="min-h-screen bg-background">
       <NavbarAuth />
       
-      <div className="container mx-auto px-6 pt-24 pb-12">
-        <div className="text-center mb-8">
+      <div className="container mx-auto px-6 pt-24 pb-12 max-w-6xl">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Order History</h1>
-          <p className="text-muted-foreground">View and download your purchased accounts</p>
+          <p className="text-muted-foreground">
+            Track your purchases and download your account credentials
+          </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        {/* Stats Cards */}
+        <div className="grid md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                </div>
+                <Package className="h-8 w-8 text-blue-500" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold">{stats.completed}</p>
+                  <p className="text-sm text-muted-foreground">Total Orders</p>
+                  <p className="text-2xl font-bold">{stats.total}</p>
                 </div>
               </div>
             </CardContent>
@@ -176,12 +182,10 @@ export default function OrderHistoryPage() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
-                  <XCircle className="h-4 w-4 text-red-600" />
-                </div>
+                <CheckCircle className="h-8 w-8 text-green-500" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Failed</p>
-                  <p className="text-2xl font-bold">{stats.failed}</p>
+                  <p className="text-sm text-muted-foreground">Delivered</p>
+                  <p className="text-2xl font-bold">{stats.delivered}</p>
                 </div>
               </div>
             </CardContent>
@@ -190,9 +194,7 @@ export default function OrderHistoryPage() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                  <RefreshCw className="h-4 w-4 text-yellow-600" />
-                </div>
+                <RefreshCw className="h-8 w-8 text-yellow-500" />
                 <div>
                   <p className="text-sm text-muted-foreground">Processing</p>
                   <p className="text-2xl font-bold">{stats.processing}</p>
@@ -209,7 +211,7 @@ export default function OrderHistoryPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Spent</p>
-                  <p className="text-2xl font-bold">₦{stats.totalSpent.toLocaleString()}</p>
+                  <p className="text-2xl font-bold">₦{getTotalSpent().toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -224,7 +226,7 @@ export default function OrderHistoryPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search orders by product name, username, or order ID..."
+                    placeholder="Search orders by product name or order ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
@@ -255,6 +257,7 @@ export default function OrderHistoryPage() {
                   <SelectItem value="TikTok">TikTok</SelectItem>
                   <SelectItem value="Twitter">Twitter</SelectItem>
                   <SelectItem value="Facebook">Facebook</SelectItem>
+                  <SelectItem value="YouTube">YouTube</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -262,33 +265,32 @@ export default function OrderHistoryPage() {
         </Card>
 
         {/* Orders List */}
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-              <p>Loading your orders...</p>
-            </div>
-          </div>
-        ) : filteredOrders.length === 0 ? (
+        {filteredOrders.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
-              <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-semibold mb-2">No Orders Found</h3>
+              <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No orders found</h3>
               <p className="text-muted-foreground mb-4">
-                {orders.length === 0 
-                  ? "You haven't made any purchases yet." 
-                  : "No orders match your current filters."}
+                {searchTerm || statusFilter !== 'all' || categoryFilter !== 'all'
+                  ? 'Try adjusting your search or filters'
+                  : "You haven't made any purchases yet"
+                }
               </p>
-              <Link to="/products">
-                <Button>Browse Products</Button>
-              </Link>
+              {!searchTerm && statusFilter === 'all' && categoryFilter === 'all' && (
+                <Link to="/products">
+                  <Button>
+                    <Package className="mr-2 h-4 w-4" />
+                    Browse Products
+                  </Button>
+                </Link>
+              )}
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
             {filteredOrders.map((order) => {
               const StatusIcon = statusIcons[order.status as keyof typeof statusIcons]
-              const { date, time } = formatDate(order.created_at)
+              const { date, time } = formatDate(order.purchaseDate)
               
               return (
                 <Card key={order.id}>
@@ -296,19 +298,17 @@ export default function OrderHistoryPage() {
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-lg">
-                            @{order.account_details?.username || 'Account'}
-                          </h3>
+                          <h3 className="font-semibold text-lg">{order.productName}</h3>
                           <Badge variant={statusColors[order.status as keyof typeof statusColors]}>
                             <StatusIcon className="mr-1 h-3 w-3" />
                             {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                           </Badge>
-                          <Badge variant="outline">{order.account_details?.category || 'Social Media'}</Badge>
+                          <Badge variant="outline">{order.category}</Badge>
                         </div>
                         
                         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-muted-foreground">
                           <div>
-                            <span className="font-medium">Order ID:</span> {order.id.slice(0, 8)}...
+                            <span className="font-medium">Order ID:</span> {order.id}
                           </div>
                           <div>
                             <span className="font-medium">Amount:</span> ₦{order.amount.toLocaleString()}
@@ -321,41 +321,42 @@ export default function OrderHistoryPage() {
                           </div>
                         </div>
 
-                        {order.account_details && (
+                        {order.credentials && (
                           <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                             <h4 className="font-medium text-sm mb-2">Account Details:</h4>
                             <div className="grid md:grid-cols-2 gap-2 text-sm">
                               <div>
-                                <span className="text-muted-foreground">Product:</span> {order.account_details.product_name}
+                                <span className="text-muted-foreground">Followers:</span> {order.followers}
                               </div>
                               <div>
-                                <span className="text-muted-foreground">Category:</span> {order.account_details.category}
+                                <span className="text-muted-foreground">Engagement:</span> {order.engagement}
                               </div>
-                              {order.account_details.username && (
-                                <div>
-                                  <span className="text-muted-foreground">Username:</span> @{order.account_details.username}
-                                </div>
-                              )}
-                              {order.account_details.email && (
-                                <div>
-                                  <span className="text-muted-foreground">Email:</span> {order.account_details.email}
-                                </div>
-                              )}
                             </div>
                           </div>
                         )}
                       </div>
                       
                       <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownload(order)}
-                          disabled={order.status !== 'completed'}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
+                        <Link to={`/product/${order.productId}`}>
+                          <Button variant="outline" size="sm">
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Product
+                          </Button>
+                        </Link>
+                        
+                        {order.status === 'delivered' && order.credentials && (
+                          <Button onClick={() => handleDownload(order)} size="sm">
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                          </Button>
+                        )}
+                        
+                        {order.status === 'failed' && (
+                          <Button variant="destructive" size="sm">
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Retry
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -364,6 +365,29 @@ export default function OrderHistoryPage() {
             })}
           </div>
         )}
+
+        {/* Help Section */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle className="text-lg">Need Help?</CardTitle>
+            <CardDescription>
+              Having issues with your orders or downloads?
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Alert className="flex-1">
+                <AlertDescription>
+                  If you're having trouble downloading your credentials or accessing your purchased accounts,
+                  please contact our support team for assistance.
+                </AlertDescription>
+              </Alert>
+              <Button variant="outline">
+                Contact Support
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Footer />

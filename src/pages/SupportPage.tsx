@@ -96,7 +96,7 @@ export default function SupportPage() {
                 Get detailed help via email support
               </p>
               <Button variant="outline" className="w-full">
-                support@tallystore.com
+                wisdomthedev@gmail.com
               </Button>
             </CardContent>
           </Card>
@@ -263,7 +263,7 @@ export default function SupportPage() {
             <Alert>
               <AlertDescription className="text-center">
                 <strong>Urgent Account Issues?</strong> If you're experiencing critical problems with a purchased account, 
-                contact us immediately at <strong>support@tallystore.com</strong> or call <strong>+234 123 456 7890</strong>
+                contact us immediately at <strong>wisdomthedev@gmail.com</strong> or call <strong>+234 123 456 7890</strong>
               </AlertDescription>
             </Alert>
           </CardContent>

@@ -9,6 +9,7 @@ import { Search, Filter, Star, Users, Eye, Calendar, ShoppingCart, ArrowLeft, Lo
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import { BackToCategories } from '@/components/ui/back-button'
+import { useAuth } from '@/contexts/SimpleAuth'
 import { 
   getCategories, 
   getProductGroupsByCategory, 
@@ -21,6 +22,7 @@ import {
 export default function CategoryPage() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   
   // State for real Supabase data
   const [category, setCategory] = useState<Category | null>(null)
@@ -35,7 +37,7 @@ export default function CategoryPage() {
   const [priceRange, setPriceRange] = useState('all')
 
   // Check if user is logged in
-  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+  const isLoggedIn = !!user
 
   // Load real data from Supabase
   useEffect(() => {
@@ -50,8 +52,7 @@ export default function CategoryPage() {
         const categories = await getCategories()
         const foundCategory = categories.find(cat => 
           cat.id === categoryId || 
-          cat.name.toLowerCase() === categoryId.toLowerCase() ||
-          cat.display_name.toLowerCase() === categoryId.toLowerCase()
+          cat.name.toLowerCase() === categoryId.toLowerCase()
         )
         
         if (!foundCategory) {
@@ -73,7 +74,7 @@ export default function CategoryPage() {
         setIndividualAccounts(allAccounts)
         
         console.log('✅ Category data loaded:', { 
-          category: foundCategory.display_name,
+          category: foundCategory.name,
           productGroups: productGroupsData.length,
           accounts: allAccounts.length
         })
@@ -137,7 +138,7 @@ export default function CategoryPage() {
     const productGroup = productGroups.find(pg => pg.id === account.product_group_id)
     
     return account.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           (productGroup && productGroup.platform.toLowerCase().includes(searchTerm.toLowerCase()))
+           (productGroup && productGroup.name.toLowerCase().includes(searchTerm.toLowerCase()))
   })
 
   // Price filtering
@@ -146,7 +147,7 @@ export default function CategoryPage() {
     filteredAccounts = filteredAccounts.filter(account => {
       const productGroup = productGroups.find(pg => pg.id === account.product_group_id)
       if (!productGroup) return false
-      const price = productGroup.price_per_unit
+      const price = productGroup.price
       if (max) {
         return price >= min && price <= max
       } else {
@@ -164,9 +165,9 @@ export default function CategoryPage() {
     
     switch (sortBy) {
       case 'price-low':
-        return aGroup.price_per_unit - bGroup.price_per_unit
+        return aGroup.price - bGroup.price
       case 'price-high':
-        return bGroup.price_per_unit - aGroup.price_per_unit
+        return bGroup.price - aGroup.price
       case 'newest':
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       case 'oldest':
@@ -187,7 +188,7 @@ export default function CategoryPage() {
             <BackToCategories />
           </div>
           
-          <h1 className="text-3xl font-bold mb-2">{category.display_name}</h1>
+          <h1 className="text-3xl font-bold mb-2">{category.name}</h1>
           <p className="text-white/90 mb-6">{category.description}</p>
           
           <div className="flex items-center gap-4 text-sm">
@@ -255,11 +256,11 @@ export default function CategoryPage() {
                       <CardTitle className="flex items-center gap-2 text-lg">
                         @{account.username}
                         <Badge variant="secondary" className="text-xs">
-                          {productGroup.platform}
+                          {productGroup.name}
                         </Badge>
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {productGroup.country || 'Global'} • {productGroup.age_range || 'Aged Account'}
+                        Available • Active Account
                       </p>
                     </div>
                     <Badge 
@@ -276,7 +277,7 @@ export default function CategoryPage() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-muted-foreground" />
-                      <span>{productGroup.platform}</span>
+                      <span>{productGroup.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Eye className="h-4 w-4 text-muted-foreground" />
@@ -284,7 +285,7 @@ export default function CategoryPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>{productGroup.age_range || 'Aged'}</span>
+                      <span>Active</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <ShoppingCart className="h-4 w-4 text-muted-foreground" />
@@ -296,7 +297,7 @@ export default function CategoryPage() {
                   <div className="pt-4 border-t">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-lg font-bold text-primary">
-                        ₦{productGroup.price_per_unit.toLocaleString()}
+                        ₦{productGroup.price.toLocaleString()}
                       </span>
                     </div>
                     

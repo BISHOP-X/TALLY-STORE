@@ -8,13 +8,13 @@ import { useAuth } from '@/contexts/SimpleAuth'
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const { user, signOut, isAdmin } = useAuth()
+  const { user, signOut, isAdmin, walletBalance } = useAuth()
   const navigate = useNavigate()
 
   // Mock data for display - now using actual user data from context
   const mockProfile = {
     username: user?.email?.split('@')[0] || 'User',
-    wallet_balance: 0, // Will get from profile later
+    wallet_balance: walletBalance, // Now using real wallet balance
   }
 
   const handleScroll = useCallback(() => {

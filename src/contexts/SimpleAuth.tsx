@@ -9,6 +9,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   signOut: () => Promise<void>
   isAdmin: boolean
+  walletBalance: number
+  refreshWalletBalance: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -17,6 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [walletBalance, setWalletBalance] = useState(0)
 
   useEffect(() => {
     // Get initial session
@@ -54,16 +57,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('is_admin')
+        .select('is_admin, wallet_balance')
         .eq('id', userId)
         .single()
 
       if (!error && data) {
         setIsAdmin(data.is_admin || false)
+        setWalletBalance(data.wallet_balance || 0)
       }
     } catch (error) {
       console.error('Error checking admin status:', error)
       setIsAdmin(false)
+      setWalletBalance(0)
+    }
+  }
+
+  const refreshWalletBalance = async () => {
+    if (!user) return
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', user.id)
+        .single()
+
+      if (!error && data) {
+        setWalletBalance(data.wallet_balance || 0)
+      }
+    } catch (error) {
+      console.error('Error refreshing wallet balance:', error)
     }
   }
 
@@ -117,7 +140,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signIn,
     signOut,
-    isAdmin
+    isAdmin,
+    walletBalance,
+    refreshWalletBalance
   }
 
   return (

@@ -114,8 +114,7 @@ export interface Profile {
 export interface Category {
   id: string
   name: string
-  display_name: string
-  description: string
+  description?: string
   is_active: boolean
   created_at: string
 }
@@ -124,13 +123,13 @@ export interface ProductGroup {
   id: string
   category_id: string
   name: string
-  platform: string
-  age_range: string | null
-  country: string | null
-  price_per_unit: number
-  available_stock: number
+  description?: string
+  price: number
+  features?: any[]
+  stock_count: number
   is_active: boolean
   created_at: string
+  categories?: { name: string }
 }
 
 export interface Product {
@@ -175,7 +174,7 @@ export async function getCategories(): Promise<Category[]> {
       .from('categories')
       .select('*')
       .eq('is_active', true)
-      .order('display_name')
+      .order('name')
 
     if (error) {
       console.error('Supabase error:', error)
@@ -237,8 +236,7 @@ export async function createCategory(name: string, displayName: string, descript
     const { data, error } = await supabase
       .from('categories')
       .insert([{
-        name: name.toLowerCase(),
-        display_name: displayName,
+        name: displayName,
         description,
         is_active: true
       }])
@@ -369,11 +367,14 @@ export interface IndividualAccount {
   id: string
   product_group_id: string
   username: string
-  email?: string
   password: string
-  followers_count?: number
-  status: 'available' | 'sold'
+  email?: string
+  email_password?: string
+  two_fa_code?: string
+  additional_info?: any
+  status: 'available' | 'sold' | 'reserved'
   created_at: string
+  sold_at?: string
 }
 
 export async function createIndividualAccount(account: Omit<IndividualAccount, 'id' | 'created_at'>): Promise<IndividualAccount | null> {
@@ -572,4 +573,316 @@ export function parseCSV(csvText: string): any[] {
     
     return obj
   })
+}
+
+// ===============================
+// PURCHASE PROCESSING FUNCTIONS
+// ===============================
+
+// Get user's wallet balance
+export async function getUserWalletBalance(userId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('wallet_balance')
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching wallet balance:', error)
+      return 0
+    }
+
+    return data?.wallet_balance || 0
+  } catch (error) {
+    console.error('Error getting wallet balance:', error)
+    return 0
+  }
+}
+
+// Get available account for purchase
+export async function getAvailableAccount(productGroupId: string): Promise<IndividualAccount | null> {
+  try {
+    const { data, error } = await supabase
+      .from('individual_accounts')
+      .select('*')
+      .eq('product_group_id', productGroupId)
+      .eq('status', 'available')
+      .limit(1)
+      .single()
+
+    if (error) {
+      console.error('Error fetching available account:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error getting available account:', error)
+    return null
+  }
+}
+
+// Process complete purchase transaction
+export async function processPurchase(
+  userId: string, 
+  accountId: string
+): Promise<{ success: boolean; error?: string; orderData?: any }> {
+  try {
+    console.log('🛒 Starting purchase process for user:', userId, 'account:', accountId)
+
+    // 1. Get the specific account details
+    const { data: account, error: accountError } = await supabase
+      .from('individual_accounts')
+      .select('*')
+      .eq('id', accountId)
+      .eq('status', 'available')
+      .single()
+
+    if (accountError || !account) {
+      console.error('Account not found or not available:', accountError)
+      return { success: false, error: 'Account not found or no longer available' }
+    }
+
+    // 2. Get product group details for pricing
+    const { data: productGroup, error: productError } = await supabase
+      .from('product_groups')
+      .select('*, categories(name)')
+      .eq('id', account.product_group_id)
+      .single()
+
+    if (productError || !productGroup) {
+      console.error('Product group not found:', productError)
+      return { success: false, error: 'Product details not found' }
+    }
+
+    // 3. Check user wallet balance
+    const walletBalance = await getUserWalletBalance(userId)
+    if (walletBalance < productGroup.price) {
+      return { success: false, error: 'Insufficient wallet balance' }
+    }
+
+    // 4. Reserve the account first (prevent double-selling)
+    const { error: reserveError } = await supabase
+      .from('individual_accounts')
+      .update({ status: 'reserved' })
+      .eq('id', accountId)
+      .eq('status', 'available') // Double-check it's still available
+
+    if (reserveError) {
+      console.error('Failed to reserve account:', reserveError)
+      return { success: false, error: 'Failed to reserve account - may have been purchased by someone else' }
+    }
+
+    // 5. Deduct wallet balance
+    const { error: balanceError } = await supabase
+      .from('profiles')
+      .update({ 
+        wallet_balance: walletBalance - productGroup.price,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+
+    if (balanceError) {
+      // Rollback: unreserve the account
+      await supabase
+        .from('individual_accounts')
+        .update({ status: 'available' })
+        .eq('id', accountId)
+      
+      return { success: false, error: 'Failed to process payment' }
+    }
+
+    // 6. Create order record
+    const orderData = {
+      user_id: userId,
+      account_id: accountId,
+      product_group_id: account.product_group_id,
+      amount: productGroup.price,
+      status: 'completed',
+      account_details: {
+        username: account.username,
+        password: account.password,
+        email: account.email,
+        email_password: account.email_password,
+        two_fa_code: account.two_fa_code,
+        additional_info: account.additional_info,
+        product_name: productGroup.name,
+        category: productGroup.categories?.name
+      }
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .insert([orderData])
+      .select()
+      .single()
+
+    if (orderError) {
+      // Rollback: restore wallet balance and unreserve account
+      await supabase
+        .from('profiles')
+        .update({ wallet_balance: walletBalance })
+        .eq('id', userId)
+      
+      await supabase
+        .from('individual_accounts')
+        .update({ status: 'available' })
+        .eq('id', accountId)
+      
+      return { success: false, error: 'Failed to create order' }
+    }
+
+    // 7. Mark account as sold
+    const { error: soldError } = await supabase
+      .from('individual_accounts')
+      .update({ 
+        status: 'sold',
+        sold_at: new Date().toISOString()
+      })
+      .eq('id', accountId)
+
+    if (soldError) {
+      console.error('Warning: Account not marked as sold, but purchase completed')
+    }
+
+    // 8. Record transaction
+    const newBalance = walletBalance - productGroup.price
+    await supabase
+      .from('transactions')
+      .insert([{
+        user_id: userId,
+        type: 'purchase',
+        amount: -productGroup.price,
+        balance_after: newBalance,
+        description: `Purchase: ${productGroup.name}`,
+        reference: `ORD-${order.id.substring(0, 8).toUpperCase()}`
+      }])
+
+    console.log('✅ Purchase completed successfully!')
+    
+    return { 
+      success: true, 
+      orderData: {
+        ...order,
+        product_name: productGroup.name,
+        category: productGroup.categories?.name
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Purchase processing error:', error)
+    return { success: false, error: 'Purchase failed. Please try again.' }
+  }
+}
+
+// Get user's order history
+export async function getUserOrders(userId: string): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        product_groups(name, categories(name))
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching user orders:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error getting user orders:', error)
+    return []
+  }
+}
+
+// Get user transactions
+export async function getUserTransactions(userId: string): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching user transactions:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error getting user transactions:', error)
+    return []
+  }
+}
+
+// Get individual account by ID
+export async function getIndividualAccountById(accountId: string): Promise<IndividualAccount | null> {
+  try {
+    const { data, error } = await supabase
+      .from('individual_accounts')
+      .select('*')
+      .eq('id', accountId)
+      .eq('status', 'available')
+      .single()
+
+    if (error) {
+      console.error('Error fetching individual account:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error getting individual account:', error)
+    return null
+  }
+}
+
+// Get product group by ID
+export async function getProductGroupById(productGroupId: string): Promise<ProductGroup | null> {
+  try {
+    const { data, error } = await supabase
+      .from('product_groups')
+      .select('*, categories(name)')
+      .eq('id', productGroupId)
+      .eq('is_active', true)
+      .single()
+
+    if (error) {
+      console.error('Error fetching product group:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error getting product group:', error)
+    return null
+  }
+}
+
+// Get category by ID
+export async function getCategoryById(categoryId: string): Promise<Category | null> {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', categoryId)
+      .eq('is_active', true)
+      .single()
+
+    if (error) {
+      console.error('Error fetching category:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error getting category:', error)
+    return null
+  }
 }

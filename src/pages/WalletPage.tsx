@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -84,8 +84,14 @@ export default function WalletPage() {
   const [topupAmount, setTopupAmount] = useState('')
   const [selectedMethod, setSelectedMethod] = useState('ercas')
   const [isProcessing, setIsProcessing] = useState(false)
-  const { user } = useAuth()
+  const { user, walletBalance, refreshWalletBalance } = useAuth()
   const { toast } = useToast()
+
+  useEffect(() => {
+    if (user) {
+      refreshWalletBalance()
+    }
+  }, [user, refreshWalletBalance])
 
   const handleTopup = async () => {
     const amount = parseFloat(topupAmount)
@@ -195,7 +201,7 @@ export default function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold mb-1">
-                  ₦{mockWalletData.balance.toLocaleString()}
+                  ₦{walletBalance.toLocaleString()}
                 </div>
                 <p className="text-white/80 text-sm">
                   Available for purchases
@@ -212,7 +218,7 @@ export default function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold mb-1">
-                  ₦{mockWalletData.totalTopups.toLocaleString()}
+                  ₦{mockWalletData.totalTopups.toLocaleString()} {/* TODO: Load from real transactions */}
                 </div>
                 <p className="text-muted-foreground text-sm">
                   Lifetime deposits
@@ -229,7 +235,7 @@ export default function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold mb-1">
-                  ₦{mockWalletData.totalSpent.toLocaleString()}
+                  ₦{mockWalletData.totalSpent.toLocaleString()} {/* TODO: Load from real transactions */}
                 </div>
                 <p className="text-muted-foreground text-sm">
                   On purchases
