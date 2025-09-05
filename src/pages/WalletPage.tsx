@@ -1,12 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Wallet, 
-  CreditCard, 
   History, 
   Plus, 
   ArrowUpRight, 
@@ -14,154 +11,77 @@ import {
   Calendar,
   CheckCircle,
   Clock,
-  XCircle,
-  Loader2
+  XCircle
 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
-import { ercasPayService, isErcasPayConfigured } from '@/lib/ercasPay'
+import { TopUpWallet } from '@/components/TopUpWallet'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { useToast } from '@/hooks/use-toast'
-
-// Mock wallet data
-const mockWalletData = {
-  balance: 25000,
-  totalSpent: 150000,
-  totalTopups: 175000,
-  lastTopup: '2024-01-15'
-}
-
-// Mock transaction history
-const mockTransactions = [
-  {
-    id: 1,
-    type: 'topup',
-    amount: 10000,
-    status: 'completed',
-    date: '2024-01-15',
-    reference: 'TOP_001234',
-    description: 'Wallet top-up via Ercas Pay'
-  },
-  {
-    id: 2,
-    type: 'purchase',
-    amount: -15000,
-    status: 'completed',
-    date: '2024-01-14',
-    reference: 'PUR_005678',
-    description: 'Instagram account @lifestyle_influencer'
-  },
-  {
-    id: 3,
-    type: 'topup',
-    amount: 25000,
-    status: 'completed',
-    date: '2024-01-10',
-    reference: 'TOP_001235',
-    description: 'Wallet top-up via Ercas Pay'
-  },
-  {
-    id: 4,
-    type: 'purchase',
-    amount: -12000,
-    status: 'completed',
-    date: '2024-01-09',
-    reference: 'PUR_005679',
-    description: 'YouTube channel @tech_reviews'
-  },
-  {
-    id: 5,
-    type: 'topup',
-    amount: 50000,
-    status: 'pending',
-    date: '2024-01-08',
-    reference: 'TOP_001236',
-    description: 'Wallet top-up via Ercas Pay (Processing)'
-  }
-]
+import { usePaymentStatusChecker } from '@/hooks/usePaymentStatusChecker'
+import { getUserTransactions } from '@/lib/supabase'
 
 export default function WalletPage() {
-  const [topupAmount, setTopupAmount] = useState('')
-  const [selectedMethod, setSelectedMethod] = useState('ercas')
-  const [isProcessing, setIsProcessing] = useState(false)
   const { user, walletBalance, refreshWalletBalance } = useAuth()
   const { toast } = useToast()
+  const [transactions, setTransactions] = useState<any[]>([])
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
+  
+  // Auto-check for payment completions
+  usePaymentStatusChecker()
+
+  // Load user transactions
+  const loadTransactions = async () => {
+    if (!user?.id) return
+    
+    setIsLoadingTransactions(true)
+    try {
+      const userTransactions = await getUserTransactions(user.id)
+      console.log('📊 Raw transactions from database:', userTransactions);
+      console.log('📊 Number of transactions:', userTransactions.length);
+      console.log('📊 Transaction types:', userTransactions.map(t => ({ id: t.id, type: t.type, amount: t.amount, status: t.status, created_at: t.created_at })));
+      setTransactions(userTransactions)
+    } catch (error) {
+      console.error('Failed to load transactions:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load transaction history.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingTransactions(false)
+    }
+  }
 
   useEffect(() => {
     if (user) {
       refreshWalletBalance()
+      loadTransactions()
     }
   }, [user, refreshWalletBalance])
 
-  const handleTopup = async () => {
-    const amount = parseFloat(topupAmount)
-    if (amount < 1000) {
-      toast({
-        title: "Invalid Amount",
-        description: "Minimum top-up amount is ₦1,000",
-        variant: "destructive"
-      })
-      return
-    }
+  // Listen for transaction updates
+  useEffect(() => {
+    const handleTransactionUpdate = () => {
+      console.log('🔄 Transaction update detected, reloading...');
+      loadTransactions();
+    };
 
-    if (!user?.email) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to continue",
-        variant: "destructive"
-      })
-      return
-    }
+    window.addEventListener('transactionAdded', handleTransactionUpdate);
+    return () => window.removeEventListener('transactionAdded', handleTransactionUpdate);
+  }, [loadTransactions])
 
-    if (!isErcasPayConfigured()) {
-      // Fallback for development/demo
-      toast({
-        title: "Demo Mode",
-        description: `Processing ₦${amount.toLocaleString()} top-up... (Demo mode - configure Ercas Pay for live payments)`,
-      })
-      setTopupAmount('')
-      return
-    }
+  // Calculate totals from real transactions
+  const totalTopups = transactions
+    .filter(t => t.type === 'topup' && t.status === 'completed')
+    .reduce((sum, t) => sum + t.amount, 0)
+    
+  const totalSpent = Math.abs(transactions
+    .filter(t => t.type === 'purchase' && t.status === 'completed')
+    .reduce((sum, t) => sum + t.amount, 0))
 
-    setIsProcessing(true)
-
-    try {
-      const reference = ercasPayService.generateReference()
-      const paymentData = {
-        amount: amount,
-        currency: 'NGN',
-        customerEmail: user.email,
-        customerName: (user as any)?.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-        paymentReference: reference,
-        redirectUrl: `${window.location.origin}/payment-callback`,
-        description: `Wallet top-up - ₦${amount.toLocaleString()}`,
-        paymentMethods: 'card,bank-transfer,ussd,qrcode',
-        feeBearer: 'customer' as const,
-        metadata: {
-          userId: user.id,
-          type: 'wallet_topup'
-        }
-      }
-
-      const response = await ercasPayService.initializePayment(paymentData)
-
-      if (response.success && response.data) {
-        // Redirect to payment page
-        window.location.href = response.data.checkoutUrl
-      } else {
-        throw new Error(response.error || 'Payment initialization failed')
-      }
-    } catch (error) {
-      console.error('Payment error:', error)
-      toast({
-        title: "Payment Error",
-        description: error instanceof Error ? error.message : "Unable to process payment. Please try again.",
-        variant: "destructive"
-      })
-    } finally {
-      setIsProcessing(false)
-    }
-  }
+  console.log('💰 Calculated totals - Topups:', totalTopups, 'Spent:', totalSpent);
+  console.log('📋 Current transactions:', transactions);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -218,7 +138,7 @@ export default function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold mb-1">
-                  ₦{mockWalletData.totalTopups.toLocaleString()} {/* TODO: Load from real transactions */}
+                  ₦{totalTopups.toLocaleString()}
                 </div>
                 <p className="text-muted-foreground text-sm">
                   Lifetime deposits
@@ -235,7 +155,7 @@ export default function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold mb-1">
-                  ₦{mockWalletData.totalSpent.toLocaleString()} {/* TODO: Load from real transactions */}
+                  ₦{totalSpent.toLocaleString()}
                 </div>
                 <p className="text-muted-foreground text-sm">
                   On purchases
@@ -260,91 +180,23 @@ export default function WalletPage() {
                     Add Money to Wallet
                   </CardTitle>
                   <p className="text-muted-foreground">
-                    Minimum top-up amount is ₦1,000. Payments are processed securely via Ercas Pay.
+                    Minimum top-up amount is ₦100. Payments are processed securely via Ercas Pay.
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Quick Amount Buttons */}
-                  <div>
-                    <label className="text-sm font-medium mb-3 block">
-                      Quick Amounts
-                    </label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {[1000, 5000, 10000, 25000].map((amount) => (
-                        <Button
-                          key={amount}
-                          variant="outline"
-                          onClick={() => setTopupAmount(amount.toString())}
-                          className="h-12"
-                        >
-                          ₦{amount.toLocaleString()}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Custom Amount */}
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      Custom Amount
-                    </label>
-                    <div className="flex gap-3">
-                      <div className="flex-1">
-                        <Input
-                          type="number"
-                          placeholder="Enter amount (min ₦1,000)"
-                          value={topupAmount}
-                          onChange={(e) => setTopupAmount(e.target.value)}
-                          min="1000"
-                          step="100"
-                        />
-                      </div>
-                      <Button 
-                        onClick={handleTopup}
-                        disabled={!topupAmount || parseFloat(topupAmount) < 1000 || isProcessing}
-                        className="px-8"
-                      >
-                        {isProcessing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Pay Now
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                    {topupAmount && parseFloat(topupAmount) < 1000 && (
-                      <p className="text-sm text-red-500 mt-1">
-                        Minimum amount is ₦1,000
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Payment Method */}
-                  <div>
-                    <label className="text-sm font-medium mb-3 block">
-                      Payment Method
-                    </label>
-                    <Card className="border-2 border-primary/20">
-                      <CardContent className="flex items-center gap-3 pt-4">
-                        <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                          <CreditCard className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-medium">Ercas Pay</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Secure payment gateway supporting all major cards and bank transfers
-                          </p>
-                        </div>
-                        <Badge variant="default">
-                          Recommended
-                        </Badge>
-                      </CardContent>
-                    </Card>
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <TopUpWallet onSuccess={() => {
+                      refreshWalletBalance();
+                      loadTransactions(); // Reload transactions after successful payment
+                      toast({
+                        title: "Wallet Updated",
+                        description: "Your wallet balance has been updated successfully!",
+                      });
+                    }} />
+                    <p className="text-sm text-muted-foreground mt-4 text-center">
+                      🔒 Secure payments powered by Ercas Pay<br />
+                      Supports Cards, Bank Transfer, USSD & QR Code
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -363,60 +215,80 @@ export default function WalletPage() {
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {mockTransactions.map((transaction) => (
-                      <div
-                        key={transaction.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                            {transaction.type === 'topup' ? (
-                              <ArrowUpRight className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <ArrowDownRight className="h-5 w-5 text-blue-600" />
-                            )}
+                  {isLoadingTransactions ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="text-muted-foreground">Loading transactions...</div>
+                    </div>
+                  ) : transactions.length === 0 ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="text-center">
+                        <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">No transactions yet</p>
+                        <p className="text-sm text-muted-foreground">Your wallet activity will appear here</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {transactions.map((transaction) => (
+                        <div
+                          key={transaction.id}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              {transaction.type === 'topup' ? (
+                                <ArrowUpRight className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <ArrowDownRight className="h-5 w-5 text-red-600" />
+                              )}
+                            </div>
+                            
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">
+                                  {transaction.type === 'topup' ? 'Wallet Top-up' : 'Purchase'}
+                                </span>
+                                {getStatusIcon(transaction.status)}
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {transaction.type === 'topup' 
+                                  ? 'Wallet top-up via Ercas Pay' 
+                                  : 'Account purchase'
+                                }
+                              </p>
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(transaction.created_at).toLocaleDateString()}
+                                </span>
+                                <span>Ref: {transaction.reference}</span>
+                                {transaction.ercas_reference && (
+                                  <span>Ercas: {transaction.ercas_reference}</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                           
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">
-                                {transaction.type === 'topup' ? 'Wallet Top-up' : 'Purchase'}
-                              </span>
-                              {getStatusIcon(transaction.status)}
+                          <div className="text-right">
+                            <div className={`text-lg font-semibold ${
+                              transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {transaction.amount > 0 ? '+' : ''}₦{Math.abs(transaction.amount).toLocaleString()}
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              {transaction.description}
-                            </p>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {transaction.date}
-                              </span>
-                              <span>Ref: {transaction.reference}</span>
-                            </div>
+                            <Badge 
+                              variant={
+                                transaction.status === 'completed' ? 'default' :
+                                transaction.status === 'pending' ? 'secondary' : 'destructive'
+                              }
+                              className="text-xs"
+                            >
+                              {transaction.status}
+                            </Badge>
                           </div>
                         </div>
-                        
-                        <div className="text-right">
-                          <div className={`text-lg font-semibold ${
-                            transaction.amount > 0 ? 'text-green-600' : 'text-blue-600'
-                          }`}>
-                            {transaction.amount > 0 ? '+' : ''}₦{Math.abs(transaction.amount).toLocaleString()}
-                          </div>
-                          <Badge 
-                            variant={
-                              transaction.status === 'completed' ? 'default' :
-                              transaction.status === 'pending' ? 'secondary' : 'destructive'
-                            }
-                            className="text-xs"
-                          >
-                            {transaction.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

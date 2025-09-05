@@ -600,6 +600,31 @@ export async function getUserWalletBalance(userId: string): Promise<number> {
   }
 }
 
+// Update user's wallet balance (add amount)
+export async function updateUserWalletBalance(userId: string, amountToAdd: number): Promise<boolean> {
+  try {
+    // Get current balance
+    const currentBalance = await getUserWalletBalance(userId)
+    const newBalance = currentBalance + amountToAdd
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ wallet_balance: newBalance })
+      .eq('id', userId)
+
+    if (error) {
+      console.error('❌ Error updating wallet balance:', error)
+      throw error
+    }
+
+    console.log(`✅ Wallet updated: ${userId} +₦${amountToAdd} (New balance: ₦${newBalance})`)
+    return true
+  } catch (error) {
+    console.error('❌ Failed to update wallet balance:', error)
+    return false
+  }
+}
+
 // Get available account for purchase
 export async function getAvailableAccount(productGroupId: string): Promise<IndividualAccount | null> {
   try {
@@ -818,6 +843,56 @@ export async function getUserTransactions(userId: string): Promise<any[]> {
   } catch (error) {
     console.error('Error getting user transactions:', error)
     return []
+  }
+}
+
+// Record a wallet top-up transaction
+export async function recordTopUpTransaction(
+  userId: string, 
+  amount: number, 
+  reference: string, 
+  ercasReference?: string
+): Promise<boolean> {
+  try {
+    // Get current balance to calculate balance_after
+    const currentBalance = await getUserWalletBalance(userId);
+    
+    const transactionData = {
+      user_id: userId,
+      type: 'topup' as const,
+      amount: amount,
+      status: 'completed', // Add status field to match purchase transactions
+      balance_after: currentBalance, // Add this field to match purchase transactions
+      description: `Wallet top-up via Ercas Pay`, // Add description
+      reference: reference,
+      ercas_reference: ercasReference
+    };
+
+    console.log('📝 Attempting to record transaction:', transactionData);
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert([transactionData]) // Use array format like purchase transactions
+      .select() // Get the inserted record back
+
+    if (error) {
+      console.error('❌ Detailed transaction error:', {
+        error,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        data: transactionData
+      });
+      throw error
+    }
+
+    console.log(`✅ Top-up transaction recorded successfully:`, data)
+    console.log(`✅ Summary: User ${userId} +₦${amount} (${reference})`)
+    return true
+  } catch (error) {
+    console.error('❌ Failed to record top-up transaction:', error)
+    return false
   }
 }
 

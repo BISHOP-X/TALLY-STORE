@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/webhook-ercas.ts": {
+      "runtime": "@vercel/node@20"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/webhook/ercas",
+      "destination": "/api/webhook-ercas"
+    }
+  ]
+}

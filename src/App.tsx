@@ -19,6 +19,7 @@ import CheckoutPage from '@/pages/CheckoutPage'
 import ProfilePage from '@/pages/ProfilePage'
 import OrderHistoryPage from '@/pages/OrderHistoryPage'
 import PaymentCallbackPage from '@/pages/PaymentCallbackPage'
+import PaymentSuccessPage from '@/pages/PaymentSuccessPage'
 import WalletPage from '@/pages/WalletPage'
 import SupportPage from '@/pages/SupportPage'
 import TermsPage from '@/pages/TermsPage'
@@ -123,6 +124,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireRole="user">
                     <PaymentCallbackPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/payment-success" 
+                element={
+                  <ProtectedRoute requireRole="user">
+                    <PaymentSuccessPage />
                   </ProtectedRoute>
                 } 
               />
