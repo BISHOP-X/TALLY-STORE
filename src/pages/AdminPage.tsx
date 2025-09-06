@@ -48,44 +48,6 @@ const mockStats = {
   lowStock: 12
 }
 
-// Mock products for admin management
-const mockAdminProducts = [
-  {
-    id: 1,
-    title: '@lifestyle_influencer',
-    category: 'Instagram',
-    price: 15000,
-    status: 'available',
-    dateAdded: '2024-01-10',
-    views: 24
-  },
-  {
-    id: 2,
-    title: '@tech_channel',
-    category: 'YouTube',
-    price: 35000,
-    status: 'sold',
-    dateAdded: '2024-01-08',
-    views: 18
-  },
-  {
-    id: 3,
-    title: '@fashion_daily',
-    category: 'Instagram',
-    price: 8500,
-    status: 'available',
-    dateAdded: '2024-01-05',
-    views: 31
-  }
-]
-
-// Mock categories
-const mockCategories = [
-  { id: 1, name: 'Instagram Accounts', productCount: 45 },
-  { id: 2, name: 'YouTube Channels', productCount: 18 },
-  { id: 3, name: 'TikTok Accounts', productCount: 26 }
-]
-
 export default function AdminPage() {
   // Real data state
   const [categories, setCategories] = useState<Category[]>([])
@@ -435,44 +397,59 @@ export default function AdminPage() {
                 <CardHeader>
                   <CardTitle>Product Management</CardTitle>
                   <p className="text-muted-foreground">
-                    View and manage all products in your inventory
+                    View and manage all products in your inventory ({individualAccounts.length} total accounts)
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {mockAdminProducts.map((product) => (
-                      <div
-                        key={product.id}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-medium">{product.title}</h3>
-                            <Badge variant={product.status === 'available' ? 'default' : 'secondary'}>
-                              {product.status}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground space-x-4">
-                            <span>Category: {product.category}</span>
-                            <span>Price: ₦{product.price.toLocaleString()}</span>
-                            <span>Added: {product.dateAdded}</span>
-                            <span>{product.views} views</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                    {individualAccounts.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <ShoppingBag className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No products found. Add some products using the tabs above.</p>
                       </div>
-                    ))}
+                    ) : (
+                      individualAccounts.map((account) => {
+                        const productGroup = productGroups.find(pg => pg.id === account.product_group_id)
+                        const category = categories.find(cat => cat.id === productGroup?.category_id)
+                        
+                        return (
+                          <div
+                            key={account.id}
+                            className="flex items-center justify-between p-4 border rounded-lg"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <h3 className="font-medium">@{account.username}</h3>
+                                <Badge variant={account.status === 'available' ? 'default' : account.status === 'sold' ? 'secondary' : 'destructive'}>
+                                  {account.status}
+                                </Badge>
+                                {account.followers_count > 0 && (
+                                  <Badge variant="outline">{account.followers_count.toLocaleString()} followers</Badge>
+                                )}
+                              </div>
+                              <div className="text-sm text-muted-foreground space-x-4">
+                                <span>Category: {category?.name || 'Unknown'}</span>
+                                <span>Price: ₦{productGroup?.price_per_unit?.toLocaleString() || '0'}</span>
+                                <span>Added: {new Date(account.created_at).toLocaleDateString()}</span>
+                                {account.email && <span>Email: {account.email}</span>}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button variant="outline" size="sm">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="outline" size="sm">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 </CardContent>
               </Card>

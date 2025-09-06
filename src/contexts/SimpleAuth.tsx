@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
-        checkAdminStatus(session.user.id)
+        checkAdminStatus(session.user.id, session.user.email)
       }
       setLoading(false)
     })
@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         setUser(session?.user ?? null)
         if (session?.user) {
-          checkAdminStatus(session.user.id)
+          checkAdminStatus(session.user.id, session.user.email)
         } else {
           setIsAdmin(false)
         }
@@ -47,10 +47,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const checkAdminStatus = async (userId: string) => {
+  const checkAdminStatus = async (userId: string, userEmail?: string) => {
     try {
-      // Hardcoded admin check
-      if (user?.email === 'admin@tallystore.com') {
+      // Hardcoded admin check - use passed email or current user email
+      const emailToCheck = userEmail || user?.email
+      if (emailToCheck === 'wisdomthedev@gmail.com') {
         setIsAdmin(true)
         return
       }
