@@ -597,6 +597,121 @@ export function parseCSV(csvText: string): any[] {
   })
 }
 
+// === PRODUCT TEMPLATE MANAGEMENT ===
+export interface ProductTemplate {
+  productName: string
+  description: string
+  price: number
+  categoryId: string
+}
+
+// Create a product group for bulk account uploads
+export async function createProductTemplate(template: ProductTemplate): Promise<ProductGroup | null> {
+  try {
+    const productGroupData = {
+      category_id: template.categoryId,
+      name: template.productName,
+      description: template.description,
+      price: template.price,
+      features: [],
+      stock_count: 0,
+      is_active: true
+    }
+
+    const productGroup = await createProductGroup(productGroupData)
+    return productGroup
+  } catch (error) {
+    console.error('Error creating product template:', error)
+    return null
+  }
+}
+
+// Process CSV accounts and link them to a product group
+export async function processBulkAccountUpload(
+  csvData: any[], 
+  productGroupId: string
+): Promise<{ success: boolean; accountsCreated: number; error?: string }> {
+  try {
+    console.log('📤 Processing bulk account upload for product group:', productGroupId)
+
+    if (!csvData || csvData.length === 0) {
+      return { success: false, accountsCreated: 0, error: 'No account data provided' }
+    }
+
+    // Validate required fields in CSV
+    const requiredFields = ['password']
+    const optionalFields = ['email', 'username', 'email_password', 'two_fa', 'two_fa_code']
+    
+    const firstRow = csvData[0]
+    const hasPassword = 'password' in firstRow
+    const hasEmail = 'email' in firstRow
+    const hasUsername = 'username' in firstRow
+
+    if (!hasPassword) {
+      return { success: false, accountsCreated: 0, error: 'CSV must contain password field' }
+    }
+
+    if (!hasEmail && !hasUsername) {
+      return { success: false, accountsCreated: 0, error: 'CSV must contain either email or username field (or both)' }
+    }
+
+    // Create accounts array
+    const accountsToCreate: Omit<IndividualAccount, 'id' | 'created_at'>[] = []
+
+    for (const row of csvData) {
+      // Skip rows without required data
+      if (!row.password || (!row.email && !row.username)) {
+        console.warn('Skipping row with missing required data:', row)
+        continue
+      }
+
+      const accountData: Omit<IndividualAccount, 'id' | 'created_at'> = {
+        product_group_id: productGroupId,
+        username: row.username || row.email || '', // Use email as username if username not provided
+        password: row.password,
+        email: row.email || undefined,
+        email_password: row.email_password || undefined,
+        two_fa_code: row.two_fa || row.two_fa_code || undefined,
+        additional_info: null,
+        status: 'available'
+      }
+
+      accountsToCreate.push(accountData)
+    }
+
+    if (accountsToCreate.length === 0) {
+      return { success: false, accountsCreated: 0, error: 'No valid accounts found in CSV' }
+    }
+
+    // Bulk create accounts
+    const createdAccounts = await bulkCreateIndividualAccounts(accountsToCreate)
+    
+    if (createdAccounts.length === 0) {
+      return { success: false, accountsCreated: 0, error: 'Failed to create accounts' }
+    }
+
+    // Update product group stock count
+    await updateProductGroupStock(productGroupId)
+
+    console.log(`✅ Successfully created ${createdAccounts.length} accounts`)
+    
+    return { 
+      success: true, 
+      accountsCreated: createdAccounts.length,
+      error: createdAccounts.length < accountsToCreate.length ? 
+        `${accountsToCreate.length - createdAccounts.length} accounts failed to create` : undefined
+    }
+
+  } catch (error) {
+    console.error('❌ Error processing bulk account upload:', error)
+    return { 
+      success: false, 
+      accountsCreated: 0, 
+      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+    }
+  }
+}
+
 // ===============================
 // PURCHASE PROCESSING FUNCTIONS
 // ===============================
@@ -667,6 +782,185 @@ export async function getAvailableAccount(productGroupId: string): Promise<Indiv
   } catch (error) {
     console.error('Error getting available account:', error)
     return null
+  }
+}
+
+// Get multiple available accounts for bulk purchase
+export async function getAvailableAccounts(productGroupId: string, quantity: number): Promise<IndividualAccount[]> {
+  try {
+    const { data, error } = await supabase
+      .from('individual_accounts')
+      .select('*')
+      .eq('product_group_id', productGroupId)
+      .eq('status', 'available')
+      .limit(quantity)
+
+    if (error) {
+      console.error('Error fetching available accounts:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error getting available accounts:', error)
+    return []
+  }
+}
+
+// Process bulk purchase transaction (for quantity-based buying)
+export async function processBulkPurchase(
+  userId: string, 
+  productGroupId: string,
+  quantity: number
+): Promise<{ success: boolean; error?: string; orderData?: any; accounts?: IndividualAccount[] }> {
+  try {
+    console.log('🛒 Starting bulk purchase process for user:', userId, 'productGroup:', productGroupId, 'quantity:', quantity)
+
+    // 1. Get product group details for pricing
+    const { data: productGroup, error: productError } = await supabase
+      .from('product_groups')
+      .select('*, categories(name)')
+      .eq('id', productGroupId)
+      .single()
+
+    if (productError || !productGroup) {
+      console.error('Product group not found:', productError)
+      return { success: false, error: 'Product not found' }
+    }
+
+    // 2. Check if enough accounts are available
+    const availableAccounts = await getAvailableAccounts(productGroupId, quantity)
+    if (availableAccounts.length < quantity) {
+      return { 
+        success: false, 
+        error: `Only ${availableAccounts.length} accounts available, but ${quantity} requested` 
+      }
+    }
+
+    // 3. Check user wallet balance
+    const totalPrice = productGroup.price * quantity
+    const walletBalance = await getUserWalletBalance(userId)
+    if (walletBalance < totalPrice) {
+      return { success: false, error: 'Insufficient wallet balance' }
+    }
+
+    // 4. Reserve all selected accounts
+    const accountIds = availableAccounts.map(acc => acc.id)
+    const { error: reserveError } = await supabase
+      .from('individual_accounts')
+      .update({ status: 'reserved' })
+      .in('id', accountIds)
+      .eq('status', 'available')
+
+    if (reserveError) {
+      console.error('Failed to reserve accounts:', reserveError)
+      return { success: false, error: 'Failed to reserve accounts - some may have been sold to others' }
+    }
+
+    // 5. Deduct wallet balance
+    const { error: balanceError } = await supabase
+      .from('profiles')
+      .update({ 
+        wallet_balance: walletBalance - totalPrice,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+
+    if (balanceError) {
+      // Rollback: unreserve the accounts
+      await supabase
+        .from('individual_accounts')
+        .update({ status: 'available' })
+        .in('id', accountIds)
+      
+      return { success: false, error: 'Failed to process payment' }
+    }
+
+    // 6. Create order record
+    const orderData = {
+      user_id: userId,
+      product_group_id: productGroupId,
+      quantity: quantity,
+      total_amount: totalPrice,
+      status: 'completed',
+      account_details: {
+        accounts: availableAccounts.map(acc => ({
+          username: acc.username,
+          password: acc.password,
+          email: acc.email,
+          email_password: acc.email_password,
+          two_fa_code: acc.two_fa_code,
+          additional_info: acc.additional_info
+        })),
+        product_name: productGroup.name,
+        category: productGroup.categories?.name,
+        quantity: quantity,
+        price_per_unit: productGroup.price
+      }
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .insert([orderData])
+      .select()
+      .single()
+
+    if (orderError) {
+      // Rollback: restore wallet balance and unreserve accounts
+      await supabase
+        .from('profiles')
+        .update({ wallet_balance: walletBalance })
+        .eq('id', userId)
+      
+      await supabase
+        .from('individual_accounts')
+        .update({ status: 'available' })
+        .in('id', accountIds)
+      
+      return { success: false, error: 'Failed to create order' }
+    }
+
+    // 7. Mark accounts as sold
+    const { error: soldError } = await supabase
+      .from('individual_accounts')
+      .update({ 
+        status: 'sold',
+        sold_at: new Date().toISOString()
+      })
+      .in('id', accountIds)
+
+    if (soldError) {
+      console.error('Warning: Accounts not marked as sold, but purchase completed')
+    }
+
+    // 8. Record transaction
+    const newBalance = walletBalance - totalPrice
+    await supabase
+      .from('transactions')
+      .insert([{
+        user_id: userId,
+        type: 'purchase',
+        amount: -totalPrice,
+        balance_after: newBalance,
+        description: `Bulk Purchase: ${quantity}x ${productGroup.name}`,
+        reference: `ORD-${order.id.substring(0, 8).toUpperCase()}`
+      }])
+
+    console.log('✅ Bulk purchase completed successfully!')
+    
+    return { 
+      success: true, 
+      orderData: {
+        ...order,
+        product_name: productGroup.name,
+        category: productGroup.categories?.name
+      },
+      accounts: availableAccounts
+    }
+
+  } catch (error) {
+    console.error('❌ Bulk purchase processing error:', error)
+    return { success: false, error: 'Purchase failed. Please try again.' }
   }
 }
 

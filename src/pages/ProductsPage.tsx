@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Search, Filter, Grid, List, Star, Shield, TrendingUp, Loader2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Search, Filter, Grid, List, Star, Shield, TrendingUp, Loader2, Plus, Minus, ShoppingCart, Package } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import ProductTemplateCard from '@/components/ProductTemplateCard'
 import { getCategories, getAllProductGroups, testConnection, type Category, type ProductGroup } from '@/lib/supabase'
 
 // Mock Categories Data
@@ -68,6 +69,8 @@ const mockCategories = [
 ]
 
 export default function ProductsPage() {
+  const navigate = useNavigate()
+  
   // State for real Supabase data
   const [categories, setCategories] = useState<Category[]>([])
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
@@ -78,6 +81,23 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+
+  // Handle adding to cart (navigate to checkout with quantity)
+  const handleAddToCart = (productGroupId: string, quantity: number) => {
+    const productGroup = productGroups.find(pg => pg.id === productGroupId)
+    const category = categories.find(cat => cat.id === productGroup?.category_id)
+    
+    if (productGroup && category) {
+      navigate('/checkout', {
+        state: {
+          productGroup,
+          category,
+          quantity,
+          isBulkPurchase: quantity > 1
+        }
+      })
+    }
+  }
 
   // Load real data from Supabase
   useEffect(() => {
@@ -166,9 +186,19 @@ export default function ProductsPage() {
       pg.stock_count > 0
     )
     
-    console.log(`Category ${category.name}:`, { matchesSearch, hasAvailableProducts })
-    
     return matchesSearch && hasAvailableProducts
+  })
+
+  // Filter product groups for direct product template display
+  const filteredProductGroups = productGroups.filter(productGroup => {
+    const category = categories.find(cat => cat.id === productGroup.category_id)
+    const matchesSearch = productGroup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         productGroup.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         category?.name.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesCategory = selectedCategory === 'all' || productGroup.category_id === selectedCategory
+    
+    return matchesSearch && matchesCategory && productGroup.is_active
   })
 
   return (
@@ -205,26 +235,76 @@ export default function ProductsPage() {
       <div className="container mx-auto px-6 py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-semibold">Browse Categories</h2>
-            <Badge variant="secondary">{filteredCategories.length} categories</Badge>
+            <h2 className="text-2xl font-semibold">Available Products</h2>
+            <Badge variant="secondary">{filteredProductGroups.length} products</Badge>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
+          <div className="flex items-center gap-4">
+            {/* Category Filter */}
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="px-3 py-2 border rounded-md bg-background"
             >
-              <Grid className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
+              <option value="all">All Categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('grid')}
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
+        </div>
+
+        {/* Product Templates Grid */}
+        <div className={`grid gap-6 mb-12 ${
+          viewMode === 'grid' 
+            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' 
+            : 'grid-cols-1 max-w-4xl mx-auto'
+        }`}>
+          {filteredProductGroups.length === 0 ? (
+            <div className="col-span-full text-center py-12">
+              <ShoppingCart className="h-16 w-16 mx-auto text-muted-foreground mb-4 opacity-50" />
+              <h3 className="text-xl font-semibold mb-2">No Products Available</h3>
+              <p className="text-muted-foreground">
+                {searchTerm ? 'Try adjusting your search terms' : 'Check back later for new products'}
+              </p>
+            </div>
+          ) : (
+            filteredProductGroups.map((productGroup) => {
+              const category = categories.find(cat => cat.id === productGroup.category_id)
+              return category ? (
+                <ProductTemplateCard
+                  key={productGroup.id}
+                  productGroup={productGroup}
+                  category={category}
+                  onAddToCart={handleAddToCart}
+                />
+              ) : null
+            })
+          )}
+        </div>
+
+        {/* Categories Overview */}
+        <div className="mb-8">
+          <h3 className="text-xl font-semibold mb-4">Browse by Category</h3>
         </div>
 
         {/* Trust Indicators */}

@@ -37,9 +37,12 @@ import {
   getUserCount,
   bulkCreateIndividualAccounts,
   parseCSV,
+  createProductTemplate,
+  processBulkAccountUpload,
   type Category, 
   type ProductGroup,
-  type IndividualAccount
+  type IndividualAccount,
+  type ProductTemplate
 } from '@/lib/supabase'
 
 // Mock admin stats
@@ -76,6 +79,13 @@ export default function AdminPage() {
     name: '',
     description: ''
   })
+  const [newTemplate, setNewTemplate] = useState({
+    productName: '',
+    description: '',
+    price: '',
+    categoryId: ''
+  })
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [viewingAccount, setViewingAccount] = useState<IndividualAccount | null>(null)
   const [editingAccount, setEditingAccount] = useState<IndividualAccount | null>(null)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
@@ -253,6 +263,11 @@ export default function AdminPage() {
       return
     }
 
+    if (!selectedTemplate) {
+      alert('Please select a product template')
+      return
+    }
+
     try {
       const text = await csvFile.text()
       const csvData = parseCSV(text)
@@ -262,91 +277,63 @@ export default function AdminPage() {
         return
       }
 
-      // Validate required fields
-      const requiredFields = ['username', 'password', 'category', 'price']
-      const firstRow = csvData[0]
-      const missingFields = requiredFields.filter(field => !(field in firstRow))
+      console.log('Processing CSV upload for template:', selectedTemplate)
+      console.log('CSV data sample:', csvData[0])
 
-      if (missingFields.length > 0) {
-        alert(`Missing required fields: ${missingFields.join(', ')}`)
-        return
-      }
+      // Use the new bulk account upload function
+      const result = await processBulkAccountUpload(csvData, selectedTemplate)
 
-      // Process each row
-      const accountsToCreate: Omit<IndividualAccount, 'id' | 'created_at'>[] = []
-
-      for (const row of csvData) {
-        // Find or create category
-        let category = categories.find(cat => 
-          cat.name.toLowerCase() === row.category.toLowerCase()
-        )
-
-        if (!category) {
-          category = await createCategory(
-            row.category.toLowerCase(),
-            row.category,
-            `${row.category} accounts`
-          )
-          if (category) {
-            setCategories(prev => [...prev, category])
-          }
-        }
-
-        if (!category) continue
-
-        // Find or create product group
-        let productGroup = productGroups.find(pg => 
-          pg.category_id === category!.id && 
-          pg.name.toLowerCase().includes(row.category.toLowerCase())
-        )
-
-        if (!productGroup) {
-          const groupName = `${row.category} ${row.age_range || 'General'}, ${row.country || 'Global'}`
-          productGroup = await createProductGroup({
-            category_id: category.id,
-            name: groupName,
-            description: `${row.category} accounts`,
-            price: parseFloat(row.price) || 0,
-            features: [],
-            stock_count: 0,
-            is_active: true
-          })
-          if (productGroup) {
-            setProductGroups(prev => [...prev, productGroup])
-          }
-        }
-
-        if (!productGroup) continue
-
-        // Add account to creation list
-        accountsToCreate.push({
-          product_group_id: productGroup.id,
-          username: row.username,
-          password: row.password,
-          email: row.email || '',
-          email_password: row.email_password || '',
-          two_fa_code: row.two_fa_code || '',
-          additional_info: row.additional_info ? JSON.parse(row.additional_info) : null,
-          status: 'available'
-        })
-      }
-
-      // Bulk create accounts
-      if (accountsToCreate.length > 0) {
-        const createdAccounts = await bulkCreateIndividualAccounts(accountsToCreate)
-        setIndividualAccounts(prev => [...prev, ...createdAccounts])
+      if (result.success) {
+        alert(`Successfully uploaded ${result.accountsCreated} accounts!`)
         
-        // Reload product groups to get updated stock counts
-        const updatedProductGroups = await getAllProductGroups()
-        setProductGroups(updatedProductGroups)
-
-        alert(`Successfully uploaded ${createdAccounts.length} accounts!`)
+        // Reload data to show updated accounts and stock counts
+        await loadAllData()
+        
+        // Reset form
         setCsvFile(null)
+        setSelectedTemplate('')
+      } else {
+        alert(`Upload failed: ${result.error}`)
       }
 
     } catch (error) {
       console.error('Error processing CSV:', error)
       alert('Failed to process CSV file')
+    }
+  }
+
+  // Handle creating a new product template
+  const handleCreateTemplate = async () => {
+    if (!newTemplate.productName || !newTemplate.categoryId || !newTemplate.price) {
+      alert('Please fill in all required fields')
+      return
+    }
+
+    try {
+      const template: ProductTemplate = {
+        productName: newTemplate.productName,
+        description: newTemplate.description,
+        price: parseFloat(newTemplate.price),
+        categoryId: newTemplate.categoryId
+      }
+
+      const productGroup = await createProductTemplate(template)
+      
+      if (productGroup) {
+        setProductGroups(prev => [...prev, productGroup])
+        setNewTemplate({
+          productName: '',
+          description: '',
+          price: '',
+          categoryId: ''
+        })
+        alert('Product template created successfully!')
+      } else {
+        alert('Failed to create product template')
+      }
+    } catch (error) {
+      console.error('Error creating product template:', error)
+      alert('Failed to create product template')
     }
   }
 
@@ -701,13 +688,130 @@ export default function AdminPage() {
           </div>
 
           {/* Main Content */}
-          <Tabs defaultValue="products" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+          <Tabs defaultValue="templates" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="templates">Templates</TabsTrigger>
               <TabsTrigger value="products">Products</TabsTrigger>
               <TabsTrigger value="add-product">Add Product</TabsTrigger>
               <TabsTrigger value="bulk-upload">Bulk Upload</TabsTrigger>
               <TabsTrigger value="categories">Categories</TabsTrigger>
             </TabsList>
+
+            {/* Product Templates Management */}
+            <TabsContent value="templates" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Product Templates</CardTitle>
+                  <p className="text-muted-foreground">
+                    Create and manage product templates for bulk account uploads
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Create New Template */}
+                  <div className="border rounded-lg p-6">
+                    <h3 className="text-lg font-medium mb-4">Create New Product Template</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Product Name</label>
+                        <Input
+                          placeholder="e.g., Instagram Premium Accounts"
+                          value={newTemplate.productName}
+                          onChange={(e) => setNewTemplate({ ...newTemplate, productName: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Category</label>
+                        <Select 
+                          value={newTemplate.categoryId} 
+                          onValueChange={(value) => setNewTemplate({ ...newTemplate, categoryId: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((category) => (
+                              <SelectItem key={category.id} value={category.id}>
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Price (₦)</label>
+                        <Input
+                          type="number"
+                          placeholder="2500"
+                          value={newTemplate.price}
+                          onChange={(e) => setNewTemplate({ ...newTemplate, price: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Description</label>
+                        <Textarea
+                          placeholder="Describe this product template..."
+                          value={newTemplate.description}
+                          onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+
+                    <Button onClick={handleCreateTemplate} className="mt-4">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Template
+                    </Button>
+                  </div>
+
+                  {/* Existing Templates */}
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Existing Product Templates</h3>
+                    <div className="space-y-3">
+                      {productGroups.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <ShoppingBag className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p>No product templates found. Create one above.</p>
+                        </div>
+                      ) : (
+                        productGroups.map((template) => {
+                          const category = categories.find(cat => cat.id === template.category_id)
+                          return (
+                            <div
+                              key={template.id}
+                              className="flex items-center justify-between p-4 border rounded-lg"
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <h4 className="font-medium">{template.name}</h4>
+                                  <Badge variant="outline">{category?.name || 'Unknown'}</Badge>
+                                  <Badge variant={template.stock_count > 0 ? 'default' : 'secondary'}>
+                                    {template.stock_count} in stock
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {template.description} • ₦{template.price.toLocaleString()}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="outline" size="sm">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             {/* Products Management */}
             <TabsContent value="products" className="space-y-6">
@@ -903,18 +1007,47 @@ export default function AdminPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Upload className="h-5 w-5" />
-                    Bulk CSV Upload
+                    Bulk Account Upload
                   </CardTitle>
                   <p className="text-muted-foreground">
-                    Upload multiple products at once using a CSV file
+                    Upload CSV files with account credentials to an existing product template
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  
+                  {/* Template Selection */}
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Select Product Template</label>
+                    <Select 
+                      value={selectedTemplate} 
+                      onValueChange={setSelectedTemplate}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a product template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productGroups.map((template) => {
+                          const category = categories.find(cat => cat.id === template.category_id)
+                          return (
+                            <SelectItem key={template.id} value={template.id}>
+                              {template.name} ({category?.name}) - ₦{template.price.toLocaleString()}
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {selectedTemplate && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Accounts will be added to: {productGroups.find(pg => pg.id === selectedTemplate)?.name}
+                      </p>
+                    )}
+                  </div>
+
                   <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center">
                     <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                     <h3 className="text-lg font-medium mb-2">Upload CSV File</h3>
                     <p className="text-muted-foreground mb-4">
-                      Choose a CSV file with product data to upload in bulk
+                      Choose a CSV file with account credentials
                     </p>
                     
                     <input
@@ -939,24 +1072,35 @@ export default function AdminPage() {
                     <div className="bg-muted p-4 rounded-lg text-sm">
                       <p className="font-medium mb-2">Required columns:</p>
                       <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                        <li>title - Product title</li>
-                        <li>category - Product category</li>
-                        <li>price - Price in Naira</li>
-                        <li>username - Account username</li>
-                        <li>password - Account password</li>
-                        <li>email - Associated email (optional)</li>
-                        <li>description - Product description (optional)</li>
+                        <li><strong>password</strong> - Account password (required)</li>
+                        <li><strong>email</strong> OR <strong>username</strong> - Account identifier (at least one required)</li>
                       </ul>
+                      <p className="font-medium mb-2 mt-4">Optional columns:</p>
+                      <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                        <li><strong>email_password</strong> - Email account password</li>
+                        <li><strong>two_fa</strong> or <strong>two_fa_code</strong> - Two-factor authentication code</li>
+                        <li><strong>username</strong> - Account username (if email is primary identifier)</li>
+                      </ul>
+                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                          💡 Sample CSV format:
+                        </p>
+                        <code className="text-xs text-blue-700 dark:text-blue-300 block mt-1">
+                          username,password,email,email_password,two_fa<br/>
+                          john_doe,pass123,john@email.com,emailpass123,123456<br/>
+                          jane_smith,mypass,jane@email.com,,
+                        </code>
+                      </div>
                     </div>
                   </div>
 
                   <Button 
                     onClick={handleCsvUpload} 
-                    disabled={!csvFile}
+                    disabled={!csvFile || !selectedTemplate}
                     className="w-full"
                   >
                     <Upload className="h-4 w-4 mr-2" />
-                    Upload CSV File
+                    Upload Accounts to Template
                   </Button>
                 </CardContent>
               </Card>

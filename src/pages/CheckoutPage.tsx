@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/SimpleAuth'
 import { 
   processPurchase, 
   getIndividualAccountById,
+  processBulkPurchase,
   type IndividualAccount,
   type ProductGroup,
   type Category 
@@ -25,13 +26,17 @@ export default function CheckoutPage() {
   const { user, walletBalance, refreshWalletBalance } = useAuth()
   const { toast } = useToast()
   
-  // Get data from navigation state
-  const { accountId, productGroup, category } = location.state || {}
+  // Get data from navigation state - supports both single and bulk purchases
+  const { accountId, productGroup, category, quantity = 1, isBulkPurchase = false } = location.state || {}
   
   const [account, setAccount] = useState<IndividualAccount | null>(null)
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('wallet')
+
+  // Calculate total based on quantity
+  const totalAmount = productGroup ? productGroup.price * quantity : 0
+  const isBulk = quantity > 1 || isBulkPurchase
 
   useEffect(() => {
     const loadData = async () => {
@@ -76,41 +81,77 @@ export default function CheckoutPage() {
   }, [accountId, productGroup, navigate, refreshWalletBalance, toast])
 
   const handlePurchase = async () => {
-    if (!account || !productGroup || !user) return
+    if (!productGroup || !user) return
 
     setPurchasing(true)
     
     try {
-      console.log('🔄 Processing purchase for account:', account.id)
+      let result;
       
-      const result = await processPurchase(user.id, account.id)
-      
-      if (result.success) {
-        toast({
-          title: "Purchase Successful! 🎉",
-          description: `You've successfully purchased @${account.username}`,
-        })
+      if (isBulk) {
+        // Use bulk purchase for multiple accounts
+        console.log('🔄 Processing bulk purchase for', quantity, 'accounts from product group:', productGroup.id)
         
-        // Redirect to orders with success message
-        navigate('/orders', { 
-          state: { 
-            purchaseSuccess: true, 
-            accountUsername: account.username 
-          } 
-        })
+        result = await processBulkPurchase(user.id, productGroup.id, quantity)
+        
+        if (result.success) {
+          toast({
+            title: "Bulk Purchase Successful! 🎉",
+            description: `You've successfully purchased ${result.accountsPurchased} accounts from ${productGroup.name}`,
+          })
+          
+          // Redirect to orders with success message
+          navigate('/orders', { 
+            state: { 
+              purchaseSuccess: true, 
+              bulkPurchase: true,
+              accountCount: result.accountsPurchased,
+              productGroupName: productGroup.name
+            } 
+          })
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Purchase Failed",
+            description: result.error || "Failed to complete bulk purchase"
+          })
+        }
       } else {
-        toast({
-          variant: "destructive",
-          title: "Purchase Failed",
-          description: result.error || "Unable to complete purchase"
-        })
+        // Use single account purchase
+        if (!account) return
+        
+        console.log('🔄 Processing single purchase for account:', account.id)
+        
+        result = await processPurchase(user.id, account.id)
+        
+        if (result.success) {
+          toast({
+            title: "Purchase Successful! 🎉",
+            description: `You've successfully purchased @${account.username}`,
+          })
+          
+          // Redirect to orders with success message
+          navigate('/orders', { 
+            state: { 
+              purchaseSuccess: true, 
+              accountUsername: account.username 
+            } 
+          })
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Purchase Failed",
+            description: result.error || "Failed to complete purchase"
+          })
+        }
       }
+      
     } catch (error) {
-      console.error('Purchase error:', error)
+      console.error('❌ Purchase error:', error)
       toast({
         variant: "destructive",
-        title: "Purchase Failed", 
-        description: "An error occurred during purchase"
+        title: "Purchase Failed",
+        description: "An unexpected error occurred during purchase"
       })
     } finally {
       setPurchasing(false)
