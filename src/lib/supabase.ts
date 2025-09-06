@@ -479,6 +479,28 @@ export async function deleteIndividualAccount(id: string): Promise<boolean> {
   }
 }
 
+export async function updateIndividualAccount(id: string, updates: Partial<Omit<IndividualAccount, 'id' | 'created_at'>>): Promise<IndividualAccount | null> {
+  try {
+    const { data, error } = await supabase
+      .from('individual_accounts')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('❌ Error updating individual account:', error)
+      throw error
+    }
+
+    console.log('✅ Individual account updated:', data)
+    return data
+  } catch (error) {
+    console.error('❌ Failed to update individual account:', error)
+    return null
+  }
+}
+
 // === UTILITY FUNCTIONS ===
 export async function updateProductGroupStock(productGroupId: string): Promise<void> {
   try {
@@ -959,5 +981,44 @@ export async function getCategoryById(categoryId: string): Promise<Category | nu
   } catch (error) {
     console.error('Error getting category:', error)
     return null
+  }
+}
+
+// Get all users for admin dashboard
+export async function getAllUsers(): Promise<Profile[]> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching users:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error getting users:', error)
+    return []
+  }
+}
+
+// Get user count for admin dashboard
+export async function getUserCount(): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+
+    if (error) {
+      console.error('Error counting users:', error)
+      return 0
+    }
+
+    return count || 0
+  } catch (error) {
+    console.error('Error getting user count:', error)
+    return 0
   }
 }
