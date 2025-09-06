@@ -39,7 +39,7 @@ export default function SupportPage() {
   const faqItems = [
     {
       question: "How quickly will I receive my account credentials?",
-      answer: "Account credentials are delivered instantly to your email and available in your dashboard immediately after successful payment."
+      answer: "Account credentials are available in your dashboard immediately after successful payment for download. Email delivery is coming soon!"
     },
     {
       question: "What payment methods do you accept?",
@@ -51,7 +51,7 @@ export default function SupportPage() {
     },
     {
       question: "What if I have issues with my purchased account?",
-      answer: "We offer 24/7 support for any account issues. Contact us immediately if you experience any problems and we'll resolve them quickly."
+      answer: "We monitor email support 24/7 for any account issues. Contact us immediately via email if you experience any problems and we'll resolve them quickly."
     },
     {
       question: "Can I get a refund if I'm not satisfied?",
@@ -77,14 +77,21 @@ export default function SupportPage() {
 
         {/* Contact Methods */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
-          <Card className="text-center">
+          <Card className="text-center relative">
             <CardContent className="pt-6">
-              <MessageCircle className="h-12 w-12 text-primary mx-auto mb-4" />
+              <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="font-semibold mb-2">Live Chat</h3>
               <p className="text-sm text-muted-foreground mb-4">
                 Chat with our support team in real-time
               </p>
-              <Button className="w-full">Start Chat</Button>
+              <Button disabled className="w-full" variant="outline">
+                Coming Soon
+              </Button>
+              <div className="absolute top-2 right-2">
+                <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">
+                  Coming Soon
+                </span>
+              </div>
             </CardContent>
           </Card>
 
@@ -95,22 +102,27 @@ export default function SupportPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 Get detailed help via email support
               </p>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={() => window.location.href = 'mailto:wisdomthedev@gmail.com'}>
                 wisdomthedev@gmail.com
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="text-center">
+          <Card className="text-center relative">
             <CardContent className="pt-6">
-              <Phone className="h-12 w-12 text-primary mx-auto mb-4" />
+              <Phone className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="font-semibold mb-2">Phone Support</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Speak directly with our support team
+                Phone lines currently unavailable
               </p>
-              <Button variant="outline" className="w-full">
-                +234 123 456 7890
+              <Button disabled variant="outline" className="w-full">
+                Please use email
               </Button>
+              <div className="absolute top-2 right-2">
+                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
+                  Unavailable
+                </span>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -263,7 +275,7 @@ export default function SupportPage() {
             <Alert>
               <AlertDescription className="text-center">
                 <strong>Urgent Account Issues?</strong> If you're experiencing critical problems with a purchased account, 
-                contact us immediately at <strong>wisdomthedev@gmail.com</strong> or call <strong>+234 123 456 7890</strong>
+                contact us immediately at <strong>wisdomthedev@gmail.com</strong>. Phone lines are currently unavailable.
               </AlertDescription>
             </Alert>
           </CardContent>

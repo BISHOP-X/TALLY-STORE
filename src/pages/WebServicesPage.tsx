@@ -412,10 +412,10 @@ export default function WebServicesPage() {
           <CardContent>
             <div className="grid md:grid-cols-3 gap-6">
               <div className="flex items-center gap-3">
-                <Phone className="h-5 w-5 text-primary" />
+                <Phone className="h-5 w-5 text-gray-400" />
                 <div>
-                  <p className="font-medium">Call/WhatsApp</p>
-                  <p className="text-sm text-muted-foreground">+234 123 456 7890</p>
+                  <p className="font-medium text-gray-500">Call/WhatsApp</p>
+                  <p className="text-sm text-muted-foreground">Currently unavailable - Use email</p>
                 </div>
               </div>
               
@@ -423,15 +423,15 @@ export default function WebServicesPage() {
                 <Mail className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-medium">Email</p>
-                  <p className="text-sm text-muted-foreground">dev@tallystore.com</p>
+                  <p className="text-sm text-muted-foreground">wisdomthedev@gmail.com</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-3">
-                <MessageCircle className="h-5 w-5 text-primary" />
+                <MessageCircle className="h-5 w-5 text-gray-400" />
                 <div>
-                  <p className="font-medium">Telegram</p>
-                  <p className="text-sm text-muted-foreground">@TallyStoreDev</p>
+                  <p className="font-medium text-gray-500">Telegram</p>
+                  <p className="text-sm text-muted-foreground">Coming Soon - Use email for now</p>
                 </div>
               </div>
             </div>

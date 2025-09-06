@@ -167,27 +167,27 @@ const ContactPage = () => {
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">Email Support</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">support@tallystore.com</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">wisdomthedev@gmail.com</p>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-3">
-                  <div className="bg-green-100 dark:bg-green-900/30 rounded-full w-10 h-10 flex items-center justify-center">
-                    <span className="text-green-600 dark:text-green-400">💬</span>
+                  <div className="bg-gray-100 dark:bg-gray-700/30 rounded-full w-10 h-10 flex items-center justify-center">
+                    <span className="text-gray-600 dark:text-gray-400">💬</span>
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">Live Chat</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Available 24/7 on our website</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Coming Soon - Use email for now</p>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-3">
-                  <div className="bg-purple-100 dark:bg-purple-900/30 rounded-full w-10 h-10 flex items-center justify-center">
-                    <span className="text-purple-600 dark:text-purple-400">📱</span>
+                  <div className="bg-gray-100 dark:bg-gray-700/30 rounded-full w-10 h-10 flex items-center justify-center">
+                    <span className="text-gray-600 dark:text-gray-400">📱</span>
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">Phone Support</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">+1 (555) 123-4567</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Currently unavailable - Please use email</p>
                   </div>
                 </div>
 
@@ -319,7 +319,7 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you offer phone support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Phone support is available for premium customers and emergency issues during business hours.
+                    Phone lines are currently unavailable. Please use email support for all inquiries.
                   </p>
                 </div>
               </div>
@@ -335,14 +335,14 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Can I request a callback?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Yes! Mention in your message that you'd prefer a callback and include your phone number.
+                    Phone lines are currently unavailable. Please use our email support for all inquiries.
                   </p>
                 </div>
                 
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you have live chat support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Live chat is available 24/7 on our homepage for immediate assistance with urgent matters.
+                    Live chat is coming soon! Currently, email support is the best way to reach us.
                   </p>
                 </div>
               </div>
