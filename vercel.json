@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/webhook-ercas.ts": {
-      "runtime": "@vercel/node@20"
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
