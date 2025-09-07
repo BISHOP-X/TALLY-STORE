@@ -347,8 +347,7 @@ export default function ProductsPage() {
             : 'grid-cols-1'
         }`}>
           {filteredCategories.map((category) => (
-            <Link key={category.id} to={`/category/${category.id}`}>
-              <Card className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/20">
+              <Card key={category.id} className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/20">
                 <CardHeader className="pb-4">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -383,14 +382,14 @@ export default function ProductsPage() {
                     </span>
                   </div>
                   
-                  <Link to={`/category/${category.name}`}>
-                    <Button className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                      Browse Accounts
-                    </Button>
-                  </Link>
+                  <Button 
+                    className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                    onClick={() => navigate(`/category/${category.id}`)}
+                  >
+                    Browse Accounts
+                  </Button>
                 </CardContent>
               </Card>
-            </Link>
           ))}
         </div>
 
