@@ -40,19 +40,23 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const loadData = async () => {
-      if (!accountId || !productGroup) {
+      // For bulk purchases, we only need productGroup. For individual purchases, we need accountId
+      if (!productGroup) {
+        console.log('❌ CheckoutPage: No productGroup provided, redirecting to products');
         navigate('/products')
         return
       }
       
-      try {
-        setLoading(true)
-        
-        // Load the specific account details
-        const accountData = await getIndividualAccountById(accountId)
-        if (!accountData) {
-          toast({
-            variant: "destructive",
+      // If we have an accountId, load individual account data
+      if (accountId) {
+        try {
+          setLoading(true)
+          
+          // Load the specific account details
+          const accountData = await getIndividualAccountById(accountId)
+          if (!accountData) {
+            toast({
+              variant: "destructive",
             title: "Error",
             description: "Account not found or no longer available"
           })
@@ -64,16 +68,26 @@ export default function CheckoutPage() {
         
         // Refresh wallet balance
         await refreshWalletBalance()
-        
         setLoading(false)
-      } catch (error) {
-        console.error('Error loading checkout data:', error)
-        toast({
-          variant: "destructive", 
-          title: "Error",
-          description: "Failed to load account details"
-        })
-        navigate('/products')
+        } catch (error) {
+          console.error('Error loading checkout data:', error)
+          toast({
+            variant: "destructive", 
+            title: "Error",
+            description: "Failed to load account details"
+          })
+          navigate('/products')
+        }
+      } else {
+        // For bulk purchases without specific accountId, just refresh wallet and continue
+        console.log('✅ CheckoutPage: Bulk purchase mode, no accountId needed');
+        try {
+          await refreshWalletBalance()
+          setLoading(false)
+        } catch (error) {
+          console.error('Error refreshing wallet:', error)
+          setLoading(false)
+        }
       }
     }
 
@@ -86,64 +100,36 @@ export default function CheckoutPage() {
     setPurchasing(true)
     
     try {
-      let result;
+      // Current system uses bulk purchase flow for all purchases
+      console.log('🔄 Processing purchase for', quantity, 'accounts from product group:', productGroup.id)
       
-      if (isBulk) {
-        // Use bulk purchase for multiple accounts
-        console.log('🔄 Processing bulk purchase for', quantity, 'accounts from product group:', productGroup.id)
+      const result = await processBulkPurchase(user.id, productGroup.id, quantity)
+      
+      if (result.success) {
+        const purchaseType = quantity > 1 ? 'Bulk Purchase' : 'Purchase'
+        const accountCount = result.accounts?.length || quantity
+        const accountText = quantity > 1 ? `${accountCount} accounts` : '1 account'
         
-        result = await processBulkPurchase(user.id, productGroup.id, quantity)
+        toast({
+          title: `${purchaseType} Successful! 🎉`,
+          description: `You've successfully purchased ${accountText} from ${productGroup.name}`,
+        })
         
-        if (result.success) {
-          toast({
-            title: "Bulk Purchase Successful! 🎉",
-            description: `You've successfully purchased ${result.accountsPurchased} accounts from ${productGroup.name}`,
-          })
-          
-          // Redirect to orders with success message
-          navigate('/orders', { 
-            state: { 
-              purchaseSuccess: true, 
-              bulkPurchase: true,
-              accountCount: result.accountsPurchased,
-              productGroupName: productGroup.name
-            } 
-          })
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Purchase Failed",
-            description: result.error || "Failed to complete bulk purchase"
-          })
-        }
+        // Redirect to orders with success message
+        navigate('/orders', { 
+          state: { 
+            purchaseSuccess: true, 
+            bulkPurchase: quantity > 1,
+            accountCount: accountCount,
+            productGroupName: productGroup.name
+          } 
+        })
       } else {
-        // Use single account purchase
-        if (!account) return
-        
-        console.log('🔄 Processing single purchase for account:', account.id)
-        
-        result = await processPurchase(user.id, account.id)
-        
-        if (result.success) {
-          toast({
-            title: "Purchase Successful! 🎉",
-            description: `You've successfully purchased @${account.username}`,
-          })
-          
-          // Redirect to orders with success message
-          navigate('/orders', { 
-            state: { 
-              purchaseSuccess: true, 
-              accountUsername: account.username 
-            } 
-          })
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Purchase Failed",
-            description: result.error || "Failed to complete purchase"
-          })
-        }
+        toast({
+          variant: "destructive",
+          title: "Purchase Failed",
+          description: result.error || "Failed to complete purchase"
+        })
       }
       
     } catch (error) {
@@ -174,8 +160,8 @@ export default function CheckoutPage() {
     )
   }
 
-  // Show error state if no data
-  if (!account || !productGroup) {
+  // Show error state if no product group data
+  if (!productGroup) {
     return (
       <div className="min-h-screen bg-background">
         <NavbarAuth />
@@ -193,7 +179,7 @@ export default function CheckoutPage() {
     )
   }
 
-  const canAfford = walletBalance >= productGroup.price
+  const canAfford = walletBalance >= totalAmount
   const insufficientFunds = !canAfford
 
   return (
@@ -225,8 +211,17 @@ export default function CheckoutPage() {
                   {category?.name === 'Facebook' && '👥'}
                   {!['Instagram', 'TikTok', 'Twitter', 'Facebook'].includes(category?.name || '') && '📱'}
                 </div>
-                <h3 className="text-xl font-semibold">@{account.username}</h3>
-                <p className="text-muted-foreground">{productGroup.name}</p>
+                {isBulk ? (
+                  <>
+                    <h3 className="text-xl font-semibold">{productGroup.name}</h3>
+                    <p className="text-muted-foreground">Purchasing {quantity} accounts</p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-xl font-semibold">@{account?.username}</h3>
+                    <p className="text-muted-foreground">{productGroup.name}</p>
+                  </>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -235,13 +230,20 @@ export default function CheckoutPage() {
                   <span>{category?.name || 'Social Media'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Account Type:</span>
+                  <span className="text-muted-foreground">Product Type:</span>
                   <span>{productGroup.name}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status:</span>
-                  <Badge variant="outline" className="text-green-600">Available</Badge>
-                </div>
+                {isBulk ? (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Quantity:</span>
+                    <span>{quantity} accounts</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status:</span>
+                    <Badge variant="outline" className="text-green-600">Available</Badge>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Verification:</span>
                   <span className="flex items-center gap-1">
@@ -276,9 +278,15 @@ export default function CheckoutPage() {
               {/* Order Summary */}
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span>Account Price:</span>
+                  <span>Price per Account:</span>
                   <span>₦{productGroup.price.toLocaleString()}</span>
                 </div>
+                {quantity > 1 && (
+                  <div className="flex justify-between">
+                    <span>Quantity:</span>
+                    <span>{quantity} accounts</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Processing Fee:</span>
                   <span>₦0</span>
@@ -286,7 +294,7 @@ export default function CheckoutPage() {
                 <Separator />
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Total:</span>
-                  <span className="text-primary">₦{productGroup.price.toLocaleString()}</span>
+                  <span className="text-primary">₦{totalAmount.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -303,7 +311,7 @@ export default function CheckoutPage() {
                 </div>
                 {insufficientFunds && (
                   <p className="text-sm text-red-600">
-                    Insufficient funds. You need ₦{(productGroup.price - walletBalance).toLocaleString()} more.
+                    Insufficient funds. You need ₦{(totalAmount - walletBalance).toLocaleString()} more.
                   </p>
                 )}
               </div>

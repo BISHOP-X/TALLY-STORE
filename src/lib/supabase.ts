@@ -150,10 +150,11 @@ export interface Product {
 export interface Order {
   id: string
   user_id: string
-  product_id: string
-  amount_paid: number
-  purchase_date: string
-  delivery_status: string
+  product_group_id: string // Changed back to product_group_id for foreign key
+  amount: number
+  status: string
+  account_details?: any
+  created_at: string
 }
 
 export interface Transaction {
@@ -519,7 +520,7 @@ export async function updateProductGroupStock(productGroupId: string): Promise<v
     // Update the product group stock
     const { error: updateError } = await supabase
       .from('product_groups')
-      .update({ available_stock: count || 0 })
+      .update({ stock_count: count || 0 })
       .eq('id', productGroupId)
 
     if (updateError) {
@@ -876,12 +877,11 @@ export async function processBulkPurchase(
       return { success: false, error: 'Failed to process payment' }
     }
 
-    // 6. Create order record
+    // 6. Create order record - using actual database schema
     const orderData = {
       user_id: userId,
-      product_group_id: productGroupId,
-      quantity: quantity,
-      total_amount: totalPrice,
+      product_group_id: productGroupId, // Changed back to product_group_id for foreign key
+      amount: totalPrice,
       status: 'completed',
       account_details: {
         accounts: availableAccounts.map(acc => ({
@@ -906,6 +906,9 @@ export async function processBulkPurchase(
       .single()
 
     if (orderError) {
+      console.error('❌ Order creation failed:', orderError)
+      console.error('❌ Order data that failed:', orderData)
+      
       // Rollback: restore wallet balance and unreserve accounts
       await supabase
         .from('profiles')
@@ -917,7 +920,7 @@ export async function processBulkPurchase(
         .update({ status: 'available' })
         .in('id', accountIds)
       
-      return { success: false, error: 'Failed to create order' }
+      return { success: false, error: `Failed to create order: ${orderError.message}` }
     }
 
     // 7. Mark accounts as sold
@@ -1037,8 +1040,7 @@ export async function processPurchase(
     // 6. Create order record
     const orderData = {
       user_id: userId,
-      account_id: accountId,
-      product_group_id: account.product_group_id,
+      product_group_id: account.product_group_id, // Changed back to product_group_id
       amount: productGroup.price,
       status: 'completed',
       account_details: {
@@ -1049,7 +1051,9 @@ export async function processPurchase(
         two_fa_code: account.two_fa_code,
         additional_info: account.additional_info,
         product_name: productGroup.name,
-        category: productGroup.categories?.name
+        category: productGroup.categories?.name,
+        quantity: 1,
+        price_per_unit: productGroup.price
       }
     }
 
@@ -1060,6 +1064,9 @@ export async function processPurchase(
       .single()
 
     if (orderError) {
+      console.error('❌ Single account order creation failed:', orderError)
+      console.error('❌ Order data that failed:', orderData)
+      
       // Rollback: restore wallet balance and unreserve account
       await supabase
         .from('profiles')
@@ -1071,7 +1078,7 @@ export async function processPurchase(
         .update({ status: 'available' })
         .eq('id', accountId)
       
-      return { success: false, error: 'Failed to create order' }
+      return { success: false, error: `Failed to create order: ${orderError.message}` }
     }
 
     // 7. Mark account as sold

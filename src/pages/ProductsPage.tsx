@@ -3,70 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Search, Filter, Grid, List, Star, Shield, TrendingUp, Loader2, Plus, Minus, ShoppingCart, Package } from 'lucide-react'
+import { Search, Grid, List, Star, Shield, TrendingUp, Loader2, ShoppingCart } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import ProductTemplateCard from '@/components/ProductTemplateCard'
 import { getCategories, getAllProductGroups, testConnection, type Category, type ProductGroup } from '@/lib/supabase'
-
-// Mock Categories Data
-const mockCategories = [
-  {
-    id: 1,
-    name: 'Instagram Accounts',
-    description: 'High-quality Instagram accounts with real followers',
-    productCount: 45,
-    priceRange: '₦2,500 - ₦25,000',
-    image: '/placeholder.svg',
-    isPopular: true
-  },
-  {
-    id: 2,
-    name: 'Twitter Accounts',
-    description: 'Verified and aged Twitter accounts',
-    productCount: 32,
-    priceRange: '₦1,500 - ₦15,000',
-    image: '/placeholder.svg',
-    isPopular: false
-  },
-  {
-    id: 3,
-    name: 'YouTube Channels',
-    description: 'Monetized YouTube channels with subscribers',
-    productCount: 18,
-    priceRange: '₦5,000 - ₦50,000',
-    image: '/placeholder.svg',
-    isPopular: true
-  },
-  {
-    id: 4,
-    name: 'TikTok Accounts',
-    description: 'Trending TikTok accounts with high engagement',
-    productCount: 28,
-    priceRange: '₦2,000 - ₦20,000',
-    image: '/placeholder.svg',
-    isPopular: false
-  },
-  {
-    id: 5,
-    name: 'Facebook Pages',
-    description: 'Business Facebook pages with likes and engagement',
-    productCount: 22,
-    priceRange: '₦3,000 - ₦30,000',
-    image: '/placeholder.svg',
-    isPopular: false
-  },
-  {
-    id: 6,
-    name: 'LinkedIn Profiles',
-    description: 'Professional LinkedIn profiles with connections',
-    productCount: 15,
-    priceRange: '₦4,000 - ₦40,000',
-    image: '/placeholder.svg',
-    isPopular: true
-  }
-]
 
 export default function ProductsPage() {
   const navigate = useNavigate()

@@ -25,7 +25,9 @@ export default function ProductTemplateCard({
     }
   }
 
-  const handleAddToCart = () => {
+  const handleAddToCart = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
     onAddToCart(productGroup.id, quantity)
   }
 
@@ -150,16 +152,11 @@ export default function ProductTemplateCard({
               Out of Stock
             </Button>
           ) : (
-            <Button onClick={handleAddToCart} className="w-full">
+            <Button type="button" onClick={handleAddToCart} className="w-full">
               <ShoppingCart className="h-4 w-4 mr-2" />
-              Add {quantity} Account{quantity > 1 ? 's' : ''} to Cart
+              Purchase Now
             </Button>
           )}
-          
-          <Button variant="outline" className="w-full" size="sm">
-            <Star className="h-4 w-4 mr-2" />
-            View Details
-          </Button>
         </div>
 
         {/* Quality Indicators */}
