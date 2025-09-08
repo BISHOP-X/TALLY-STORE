@@ -936,7 +936,10 @@ export async function processBulkPurchase(
       console.error('Warning: Accounts not marked as sold, but purchase completed')
     }
 
-    // 8. Record transaction
+    // 8. Update product group stock count
+    await updateProductGroupStock(productGroupId)
+
+    // 9. Record transaction
     const newBalance = walletBalance - totalPrice
     await supabase
       .from('transactions')
@@ -950,6 +953,9 @@ export async function processBulkPurchase(
       }])
 
     console.log('✅ Bulk purchase completed successfully!')
+    
+    // Update product group stock count
+    await updateProductGroupStock(productGroupId)
     
     return { 
       success: true, 
@@ -1094,7 +1100,10 @@ export async function processPurchase(
       console.error('Warning: Account not marked as sold, but purchase completed')
     }
 
-    // 8. Record transaction
+    // 8. Update product group stock count
+    await updateProductGroupStock(account.product_group_id)
+
+    // 9. Record transaction
     const newBalance = walletBalance - productGroup.price
     await supabase
       .from('transactions')
@@ -1108,6 +1117,9 @@ export async function processPurchase(
       }])
 
     console.log('✅ Purchase completed successfully!')
+    
+    // Update product group stock count
+    await updateProductGroupStock(account.product_group_id)
     
     return { 
       success: true, 

@@ -82,6 +82,74 @@ export default function ProductsPage() {
     loadData()
   }, [])
 
+  // Refresh data when user returns to page (after purchase)
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('🔄 Page focused - refreshing product data...')
+      // Reload product groups to get updated stock counts
+      getAllProductGroups().then(productGroupsData => {
+        setProductGroups(productGroupsData)
+        console.log('✅ Product groups refreshed')
+      }).catch(err => {
+        console.error('❌ Error refreshing product groups:', err)
+      })
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [])
+
+  // Refresh data when user returns to page (for stock updates after purchases)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !loading) {
+        console.log('🔄 Page became visible, refreshing product data for updated stock...')
+        const refreshData = async () => {
+          try {
+            const [categoriesData, productGroupsData] = await Promise.all([
+              getCategories(),
+              getAllProductGroups()
+            ])
+            setCategories(categoriesData)
+            setProductGroups(productGroupsData)
+            console.log('✅ Product data refreshed after returning to page')
+          } catch (err) {
+            console.error('❌ Error refreshing data:', err)
+          }
+        }
+        refreshData()
+      }
+    }
+
+    const handleFocus = () => {
+      if (!loading) {
+        console.log('🔄 Window focused, refreshing product data...')
+        const refreshData = async () => {
+          try {
+            const [categoriesData, productGroupsData] = await Promise.all([
+              getCategories(),
+              getAllProductGroups()
+            ])
+            setCategories(categoriesData)
+            setProductGroups(productGroupsData)
+            console.log('✅ Product data refreshed on window focus')
+          } catch (err) {
+            console.error('❌ Error refreshing data:', err)
+          }
+        }
+        refreshData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [loading])
+
   // Show loading state
   if (loading) {
     return (
@@ -179,6 +247,30 @@ export default function ProductsPage() {
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-semibold">Available Products</h2>
             <Badge variant="secondary">{filteredProductGroups.length} products</Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                console.log('🔄 Manual refresh triggered...')
+                setLoading(true)
+                try {
+                  const [categoriesData, productGroupsData] = await Promise.all([
+                    getCategories(),
+                    getAllProductGroups()
+                  ])
+                  setCategories(categoriesData)
+                  setProductGroups(productGroupsData)
+                  console.log('✅ Product data manually refreshed')
+                } catch (err) {
+                  console.error('❌ Error manually refreshing data:', err)
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : '🔄 Refresh Stock'}
+            </Button>
           </div>
           
           <div className="flex items-center gap-4">

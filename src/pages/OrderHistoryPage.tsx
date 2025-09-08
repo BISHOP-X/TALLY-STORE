@@ -84,11 +84,22 @@ export default function OrderHistoryPage() {
     let filtered = orders
 
     if (searchTerm) {
-      filtered = filtered.filter(order => 
-        order.account_details?.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.account_details?.username?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      filtered = filtered.filter(order => {
+        const searchLower = searchTerm.toLowerCase()
+        const productName = order.account_details?.product_name?.toLowerCase() || ''
+        const orderId = order.id.toLowerCase()
+        
+        // Search in accounts array for bulk purchases or direct username for single purchases
+        const usernameMatch = order.account_details?.accounts 
+          ? order.account_details.accounts.some((account: any) => 
+              account.username?.toLowerCase().includes(searchLower)
+            )
+          : order.account_details?.username?.toLowerCase().includes(searchLower) || false
+
+        return productName.includes(searchLower) || 
+               orderId.includes(searchLower) || 
+               usernameMatch
+      })
     }
 
     if (statusFilter !== 'all') {
@@ -103,18 +114,42 @@ export default function OrderHistoryPage() {
   }, [orders, searchTerm, statusFilter, categoryFilter])
 
   const handleDownload = (order: any) => {
+    // Handle both bulk purchases (accounts array) and single purchases (direct properties)
+    const accountsData = order.account_details?.accounts 
+      ? order.account_details.accounts  // Bulk purchase - array of accounts
+      : order.account_details?.username  // Single purchase - check if direct properties exist
+        ? [{  // Wrap single account in array for consistent structure
+            username: order.account_details.username,
+            password: order.account_details.password,
+            email: order.account_details.email,
+            email_password: order.account_details.email_password,
+            two_fa_code: order.account_details.two_fa_code,
+            additional_info: order.account_details.additional_info
+          }]
+        : [] // No account data found
+
+    // Validate we have account credentials
+    if (!accountsData || accountsData.length === 0) {
+      alert('❌ No account credentials found for this order. Please contact support.')
+      return
+    }
+
     const credentials = {
       orderId: order.id,
       productName: order.account_details?.product_name || 'Unknown Product',
       category: order.account_details?.category || 'Unknown Category',
       purchaseDate: order.created_at,
       amount: order.amount,
-      username: order.account_details?.username,
-      password: order.account_details?.password,
-      email: order.account_details?.email,
-      email_password: order.account_details?.email_password,
-      two_fa_code: order.account_details?.two_fa_code,
-      additional_info: order.account_details?.additional_info
+      quantity: accountsData.length,
+      accounts: accountsData.map((account, index) => ({
+        accountNumber: index + 1,
+        username: account.username,
+        password: account.password,
+        email: account.email,
+        email_password: account.email_password,
+        two_fa_code: account.two_fa_code,
+        additional_info: account.additional_info
+      }))
     }
 
     const blob = new Blob([JSON.stringify(credentials, null, 2)], { type: 'application/json' })
@@ -297,7 +332,10 @@ export default function OrderHistoryPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="font-semibold text-lg">
-                            @{order.account_details?.username || 'Account'}
+                            {order.account_details?.accounts 
+                              ? `${order.account_details.accounts.length} Account${order.account_details.accounts.length > 1 ? 's' : ''}`
+                              : `@${order.account_details?.username || 'Account'}`
+                            }
                           </h3>
                           <Badge variant={statusColors[order.status as keyof typeof statusColors]}>
                             <StatusIcon className="mr-1 h-3 w-3" />
@@ -331,15 +369,32 @@ export default function OrderHistoryPage() {
                               <div>
                                 <span className="text-muted-foreground">Category:</span> {order.account_details.category}
                               </div>
-                              {order.account_details.username && (
-                                <div>
-                                  <span className="text-muted-foreground">Username:</span> @{order.account_details.username}
-                                </div>
-                              )}
-                              {order.account_details.email && (
-                                <div>
-                                  <span className="text-muted-foreground">Email:</span> {order.account_details.email}
-                                </div>
+                              {order.account_details.accounts ? (
+                                // Bulk purchase - show account count and first account preview
+                                <>
+                                  <div>
+                                    <span className="text-muted-foreground">Accounts:</span> {order.account_details.accounts.length} purchased
+                                  </div>
+                                  {order.account_details.accounts[0]?.username && (
+                                    <div>
+                                      <span className="text-muted-foreground">Sample Username:</span> @{order.account_details.accounts[0].username}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                // Single purchase - show individual account details
+                                <>
+                                  {order.account_details.username && (
+                                    <div>
+                                      <span className="text-muted-foreground">Username:</span> @{order.account_details.username}
+                                    </div>
+                                  )}
+                                  {order.account_details.email && (
+                                    <div>
+                                      <span className="text-muted-foreground">Email:</span> {order.account_details.email}
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>
