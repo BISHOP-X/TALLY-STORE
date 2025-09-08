@@ -3,7 +3,7 @@ import emailjs from '@emailjs/browser'
 // EmailJS configuration
 const EMAILJS_CONFIG = {
   serviceId: 'service_mp7nl2m',
-  templateId: 'template_eotz387',
+  templateId: 'template_eotz387', // This might need to be a credentials-specific template
   publicKey: '_UHN5HZe4-ufjrQaL'
 }
 
@@ -27,17 +27,21 @@ export const sendCredentialsEmail = async ({
     // Format credentials for email
     const formattedCredentials = JSON.stringify(credentials, null, 2)
     
+    // Template parameters - make sure to_email goes to customer, not admin
     const templateParams = {
-      to_email: userEmail,
+      to_email: userEmail, // CUSTOMER EMAIL - not admin!
       to_name: userName || userEmail.split('@')[0],
-      from_name: 'TallyStore',
+      from_name: 'TallyStore Support',
+      from_email: 'noreply@tallystore.com',
+      subject: `Your TallyStore Credentials - Order ${orderId}`,
       order_id: orderId,
       credentials: formattedCredentials,
-      message: `Your TallyStore account credentials for order ${orderId} are ready!`,
-      reply_to: 'support@tallystore.com'
+      message: `Your account credentials for order ${orderId} are ready! Please keep this information secure.`,
+      // Don't include admin email in any field that might override to_email
     }
 
-    console.log('📧 Sending credentials email...', { userEmail, orderId })
+    console.log('📧 Sending credentials email to customer:', userEmail)
+    console.log('📧 Template params:', { ...templateParams, credentials: '[HIDDEN]' })
 
     const response = await emailjs.send(
       EMAILJS_CONFIG.serviceId,
@@ -45,11 +49,11 @@ export const sendCredentialsEmail = async ({
       templateParams
     )
 
-    console.log('✅ Email sent successfully:', response)
+    console.log('✅ Email sent successfully to customer:', response)
     
     return { success: true }
   } catch (error) {
-    console.error('❌ Failed to send email:', error)
+    console.error('❌ Failed to send customer email:', error)
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to send email'
@@ -70,7 +74,7 @@ export const sendSupportEmail = async ({
 }): Promise<{ success: boolean; error?: string }> => {
   try {
     const templateParams = {
-      to_email: 'support@tallystore.com',
+      to_email: 'wisdomthedev@gmail.com', // Admin email for support
       from_email: userEmail,
       from_name: userName,
       subject: subject,
