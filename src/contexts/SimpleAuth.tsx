@@ -99,7 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: {
           data: {
             full_name: email.split('@')[0], // Use email prefix as name
-          }
+          },
+          emailRedirectTo: `${window.location.origin}/email-confirmation`
         }
       })
 

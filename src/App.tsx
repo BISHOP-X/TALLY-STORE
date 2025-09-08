@@ -28,6 +28,7 @@ import AboutPage from '@/pages/AboutPage'
 import ContactPage from '@/pages/ContactPage'
 import WebServicesPage from '@/pages/WebServicesPage'
 import AdminPage from '@/pages/AdminPage'
+import EmailConfirmation from '@/pages/EmailConfirmation'
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ const App = () => (
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/web-services" element={<WebServicesPage />} />
+              <Route path="/email-confirmation" element={<EmailConfirmation />} />
               
               {/* Auth Routes - redirect to dashboard if already logged in */}
               <Route 

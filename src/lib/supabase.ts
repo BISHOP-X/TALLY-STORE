@@ -346,6 +346,39 @@ export async function updateProductGroup(id: string, updates: Partial<ProductGro
 
 export async function deleteProductGroup(id: string): Promise<boolean> {
   try {
+    // First check if there are any orders referencing this product group
+    const { data: orders, error: ordersError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('product_group_id', id)
+      .limit(1)
+
+    if (ordersError) {
+      console.error('❌ Error checking orders:', ordersError)
+      throw ordersError
+    }
+
+    if (orders && orders.length > 0) {
+      throw new Error('Cannot delete product group that has existing orders. Please archive it instead or contact support.')
+    }
+
+    // Check if there are any individual accounts referencing this product group
+    const { data: accounts, error: accountsError } = await supabase
+      .from('individual_accounts')
+      .select('id')
+      .eq('product_group_id', id)
+      .limit(1)
+
+    if (accountsError) {
+      console.error('❌ Error checking accounts:', accountsError)
+      throw accountsError
+    }
+
+    if (accounts && accounts.length > 0) {
+      throw new Error('Cannot delete product group that has existing accounts. Please remove all accounts first.')
+    }
+
+    // If no dependencies, proceed with deletion
     const { error } = await supabase
       .from('product_groups')
       .delete()
@@ -360,6 +393,48 @@ export async function deleteProductGroup(id: string): Promise<boolean> {
     return true
   } catch (error) {
     console.error('❌ Failed to delete product group:', error)
+    return false
+  }
+}
+
+// Archive a product group (set is_active to false)
+export async function archiveProductGroup(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('product_groups')
+      .update({ is_active: false })
+      .eq('id', id)
+
+    if (error) {
+      console.error('❌ Error archiving product group:', error)
+      throw error
+    }
+
+    console.log('✅ Product group archived:', id)
+    return true
+  } catch (error) {
+    console.error('❌ Failed to archive product group:', error)
+    return false
+  }
+}
+
+// Restore an archived product group
+export async function restoreProductGroup(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('product_groups')
+      .update({ is_active: true })
+      .eq('id', id)
+
+    if (error) {
+      console.error('❌ Error restoring product group:', error)
+      throw error
+    }
+
+    console.log('✅ Product group restored:', id)
+    return true
+  } catch (error) {
+    console.error('❌ Failed to restore product group:', error)
     return false
   }
 }

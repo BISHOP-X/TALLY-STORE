@@ -31,6 +31,8 @@ import {
   createProductGroup,
   updateProductGroup,
   deleteProductGroup,
+  archiveProductGroup,
+  restoreProductGroup,
   createIndividualAccount,
   deleteIndividualAccount,
   updateIndividualAccount,
@@ -89,6 +91,7 @@ export default function AdminPage() {
   const [viewingAccount, setViewingAccount] = useState<IndividualAccount | null>(null)
   const [editingAccount, setEditingAccount] = useState<IndividualAccount | null>(null)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null)
 
   // Load real data
   useEffect(() => {
@@ -253,6 +256,96 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error updating account:', error)
       alert('Failed to update account')
+    }
+  }
+
+  // Edit template
+  const handleEditTemplate = (template: any) => {
+    setEditingTemplate(template)
+  }
+
+  // Delete template
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm('Are you sure you want to delete this product template? This action cannot be undone.')) return
+
+    try {
+      const success = await deleteProductGroup(templateId)
+      if (success) {
+        setProductGroups(prev => prev.filter(pg => pg.id !== templateId))
+        alert('Product template deleted successfully!')
+      } else {
+        alert('Failed to delete product template. This template may have existing orders or accounts associated with it.')
+      }
+    } catch (error: any) {
+      console.error('Error deleting product template:', error)
+      const errorMessage = error?.message || 'Failed to delete product template'
+      alert(errorMessage)
+    }
+  }
+
+  // Archive template
+  const handleArchiveTemplate = async (templateId: string) => {
+    if (!confirm('Archive this product template? It will be hidden from customers but preserved for existing orders.')) return
+
+    try {
+      const success = await archiveProductGroup(templateId)
+      if (success) {
+        // Refresh the data to reflect the change
+        const updatedGroups = await getAllProductGroups()
+        setProductGroups(updatedGroups)
+        alert('Product template archived successfully!')
+      } else {
+        alert('Failed to archive product template')
+      }
+    } catch (error: any) {
+      console.error('Error archiving product template:', error)
+      alert('Failed to archive product template')
+    }
+  }
+
+  // Restore template
+  const handleRestoreTemplate = async (templateId: string) => {
+    if (!confirm('Restore this product template? It will be visible to customers again.')) return
+
+    try {
+      const success = await restoreProductGroup(templateId)
+      if (success) {
+        // Refresh the data to reflect the change
+        const updatedGroups = await getAllProductGroups()
+        setProductGroups(updatedGroups)
+        alert('Product template restored successfully!')
+      } else {
+        alert('Failed to restore product template')
+      }
+    } catch (error: any) {
+      console.error('Error restoring product template:', error)
+      alert('Failed to restore product template')
+    }
+  }
+
+  // Update template
+  const handleUpdateTemplate = async (updatedTemplate: any) => {
+    try {
+      const result = await updateProductGroup(updatedTemplate.id, {
+        name: updatedTemplate.name,
+        description: updatedTemplate.description,
+        price: updatedTemplate.price,
+        category_id: updatedTemplate.category_id
+      })
+
+      if (result) {
+        // Update local state with the updated template
+        setProductGroups(prev => 
+          prev.map(pg => pg.id === result.id ? result : pg)
+        )
+        setEditingTemplate(null)
+        alert('Product template updated successfully!')
+      } else {
+        alert('Failed to update product template')
+      }
+    } catch (error) {
+      console.error('Error updating product template:', error)
+      alert('Failed to update product template')
     }
   }
 
@@ -635,6 +728,65 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+          {editingTemplate && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+                <h2 className="text-xl font-bold mb-4">Edit Product Template</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Product Name</label>
+                    <Input
+                      value={editingTemplate.name}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Description</label>
+                    <Textarea
+                      value={editingTemplate.description}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, description: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Price (₦)</label>
+                    <Input
+                      type="number"
+                      value={editingTemplate.price}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, price: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Category</label>
+                    <Select 
+                      value={editingTemplate.category_id} 
+                      onValueChange={(value) => 
+                        setEditingTemplate({...editingTemplate, category_id: value})
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-6">
+                  <Button onClick={() => setEditingTemplate(null)} variant="outline" className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button onClick={() => handleUpdateTemplate(editingTemplate)} className="flex-1">
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Stats Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -778,30 +930,66 @@ export default function AdminPage() {
                       ) : (
                         productGroups.map((template) => {
                           const category = categories.find(cat => cat.id === template.category_id)
+                          const isArchived = template.is_active === false
                           return (
                             <div
                               key={template.id}
-                              className="flex items-center justify-between p-4 border rounded-lg"
+                              className={`flex items-center justify-between p-4 border rounded-lg ${isArchived ? 'bg-gray-50 dark:bg-gray-800/50 opacity-75' : ''}`}
                             >
                               <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-2">
-                                  <h4 className="font-medium">{template.name}</h4>
+                                  <h4 className={`font-medium ${isArchived ? 'text-gray-500' : ''}`}>
+                                    {template.name}
+                                  </h4>
                                   <Badge variant="outline">{category?.name || 'Unknown'}</Badge>
+                                  {isArchived && (
+                                    <Badge variant="secondary">Archived</Badge>
+                                  )}
                                   <Badge variant={template.stock_count > 0 ? 'default' : 'secondary'}>
                                     {template.stock_count} in stock
                                   </Badge>
                                 </div>
-                                <p className="text-sm text-muted-foreground">
+                                <p className={`text-sm text-muted-foreground ${isArchived ? 'text-gray-400' : ''}`}>
                                   {template.description} • ₦{template.price.toLocaleString()}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleEditTemplate(template)}
+                                >
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button variant="outline" size="sm">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {isArchived ? (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => handleRestoreTemplate(template.id)}
+                                    className="text-green-600 hover:text-green-700"
+                                  >
+                                    Restore
+                                  </Button>
+                                ) : (
+                                  <>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => handleArchiveTemplate(template.id)}
+                                      className="text-orange-600 hover:text-orange-700"
+                                    >
+                                      Archive
+                                    </Button>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => handleDeleteTemplate(template.id)}
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           )
