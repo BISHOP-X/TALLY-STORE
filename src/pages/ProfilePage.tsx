@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { User, Shield, Calendar, Wallet } from 'lucide-react'
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { getUserTransactions } from '@/lib/supabase'
 
@@ -72,7 +73,12 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-background">
       <NavbarAuth />
       
-      <div className="container mx-auto px-6 pt-24 pb-12 max-w-4xl">
+      {/* Wallet Balance Widget */}
+      <div className="container mx-auto px-6 pt-24 pb-4 max-w-4xl">
+        <WalletBalanceWidget showRefresh={true} />
+      </div>
+      
+      <div className="container mx-auto px-6 pb-12 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">My Profile</h1>
           <p className="text-muted-foreground">

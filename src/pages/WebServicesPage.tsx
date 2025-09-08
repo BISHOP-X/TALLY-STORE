@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 
 // Web service packages
 const webServices = [
@@ -150,7 +151,12 @@ export default function WebServicesPage() {
     <div className="min-h-screen bg-background">
       <NavbarAuth />
       
-      <div className="container mx-auto px-6 pt-24 pb-12 max-w-6xl">
+      {/* Wallet Balance Widget */}
+      <div className="container mx-auto px-6 pt-24 pb-4 max-w-6xl">
+        <WalletBalanceWidget showRefresh={true} />
+      </div>
+      
+      <div className="container mx-auto px-6 pb-12 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Professional Web Development Services</h1>
@@ -412,10 +418,10 @@ export default function WebServicesPage() {
           <CardContent>
             <div className="grid md:grid-cols-3 gap-6">
               <div className="flex items-center gap-3">
-                <Phone className="h-5 w-5 text-gray-400" />
+                <Phone className="h-5 w-5 text-green-500" />
                 <div>
-                  <p className="font-medium text-gray-500">Call/WhatsApp</p>
-                  <p className="text-sm text-muted-foreground">Currently unavailable - Use email</p>
+                  <p className="font-medium text-green-600">WhatsApp Only</p>
+                  <p className="text-sm text-muted-foreground">+234 902 459 5121</p>
                 </div>
               </div>
               

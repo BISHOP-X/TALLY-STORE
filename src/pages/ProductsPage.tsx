@@ -8,6 +8,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import ProductTemplateCard from '@/components/ProductTemplateCard'
+import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { getCategories, getAllProductGroups, testConnection, type Category, type ProductGroup } from '@/lib/supabase'
 
 export default function ProductsPage() {
@@ -46,8 +47,6 @@ export default function ProductsPage() {
     const loadData = async () => {
       try {
         setLoading(true)
-        console.log('🔄 Loading data from Supabase...')
-        
         // Test connection first
         const connectionOk = await testConnection()
         if (!connectionOk) {
@@ -64,13 +63,6 @@ export default function ProductsPage() {
         setProductGroups(productGroupsData)
         setError(null)
         
-        console.log('✅ Data loaded successfully:', { 
-          categories: categoriesData.length, 
-          productGroups: productGroupsData.length,
-          categoriesData,
-          productGroupsData
-        })
-        
       } catch (err) {
         console.error('❌ Error loading data:', err)
         setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -85,13 +77,11 @@ export default function ProductsPage() {
   // Refresh data when user returns to page (after purchase)
   useEffect(() => {
     const handleFocus = () => {
-      console.log('🔄 Page focused - refreshing product data...')
       // Reload product groups to get updated stock counts
       getAllProductGroups().then(productGroupsData => {
         setProductGroups(productGroupsData)
-        console.log('✅ Product groups refreshed')
       }).catch(err => {
-        console.error('❌ Error refreshing product groups:', err)
+        console.error('Error refreshing product groups:', err)
       })
     }
 
@@ -103,7 +93,6 @@ export default function ProductsPage() {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && !loading) {
-        console.log('🔄 Page became visible, refreshing product data for updated stock...')
         const refreshData = async () => {
           try {
             const [categoriesData, productGroupsData] = await Promise.all([
@@ -112,9 +101,8 @@ export default function ProductsPage() {
             ])
             setCategories(categoriesData)
             setProductGroups(productGroupsData)
-            console.log('✅ Product data refreshed after returning to page')
           } catch (err) {
-            console.error('❌ Error refreshing data:', err)
+            console.error('Error refreshing data:', err)
           }
         }
         refreshData()
@@ -123,7 +111,6 @@ export default function ProductsPage() {
 
     const handleFocus = () => {
       if (!loading) {
-        console.log('🔄 Window focused, refreshing product data...')
         const refreshData = async () => {
           try {
             const [categoriesData, productGroupsData] = await Promise.all([
@@ -132,9 +119,8 @@ export default function ProductsPage() {
             ])
             setCategories(categoriesData)
             setProductGroups(productGroupsData)
-            console.log('✅ Product data refreshed on window focus')
           } catch (err) {
-            console.error('❌ Error refreshing data:', err)
+            console.error('Error refreshing data:', err)
           }
         }
         refreshData()
@@ -215,6 +201,11 @@ export default function ProductsPage() {
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       <Navbar />
       
+      {/* Wallet Balance Widget */}
+      <div className="container mx-auto px-6 pt-24 pb-4">
+        <WalletBalanceWidget showRefresh={true} />
+      </div>
+      
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-primary to-primary/80 text-white">
         <div className="container mx-auto px-6 py-16">
@@ -251,7 +242,6 @@ export default function ProductsPage() {
               variant="outline"
               size="sm"
               onClick={async () => {
-                console.log('🔄 Manual refresh triggered...')
                 setLoading(true)
                 try {
                   const [categoriesData, productGroupsData] = await Promise.all([
@@ -260,9 +250,8 @@ export default function ProductsPage() {
                   ])
                   setCategories(categoriesData)
                   setProductGroups(productGroupsData)
-                  console.log('✅ Product data manually refreshed')
                 } catch (err) {
-                  console.error('❌ Error manually refreshing data:', err)
+                  console.error('Error manually refreshing data:', err)
                 } finally {
                   setLoading(false)
                 }

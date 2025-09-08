@@ -182,12 +182,12 @@ const ContactPage = () => {
                 </div>
 
                 <div className="flex items-center space-x-3">
-                  <div className="bg-gray-100 dark:bg-gray-700/30 rounded-full w-10 h-10 flex items-center justify-center">
-                    <span className="text-gray-600 dark:text-gray-400">📱</span>
+                  <div className="bg-green-100 dark:bg-green-900/30 rounded-full w-10 h-10 flex items-center justify-center">
+                    <span className="text-green-600 dark:text-green-400">📱</span>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-white">Phone Support</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Currently unavailable - Please use email</p>
+                    <p className="font-medium text-gray-900 dark:text-white">WhatsApp Support</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">+234 902 459 5121 (WhatsApp only)</p>
                   </div>
                 </div>
 
@@ -319,7 +319,7 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you offer phone support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Phone lines are currently unavailable. Please use email support for all inquiries.
+                    We offer WhatsApp support at +234 902 459 5121 (WhatsApp only). For email support, use wisdomthedev@gmail.com.
                   </p>
                 </div>
               </div>
@@ -335,7 +335,7 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Can I request a callback?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Phone lines are currently unavailable. Please use our email support for all inquiries.
+                    Traditional phone calls are not available. Please contact us via WhatsApp at +234 902 459 5121 or email at wisdomthedev@gmail.com.
                   </p>
                 </div>
                 

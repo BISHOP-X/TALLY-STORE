@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { MessageCircle, Phone, Mail, Clock, CheckCircle, HelpCircle, Send } from 'lucide-react'
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 
 export default function SupportPage() {
   const [formData, setFormData] = useState({
@@ -67,7 +68,12 @@ export default function SupportPage() {
     <div className="min-h-screen bg-background">
       <NavbarAuth />
       
-      <div className="container mx-auto px-6 pt-24 pb-12 max-w-6xl">
+      {/* Wallet Balance Widget */}
+      <div className="container mx-auto px-6 pt-24 pb-4 max-w-6xl">
+        <WalletBalanceWidget showRefresh={true} />
+      </div>
+      
+      <div className="container mx-auto px-6 pb-12 max-w-6xl">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Support Center</h1>
           <p className="text-xl text-muted-foreground">
@@ -108,19 +114,23 @@ export default function SupportPage() {
             </CardContent>
           </Card>
 
-          <Card className="text-center relative">
+          <Card className="text-center">
             <CardContent className="pt-6">
-              <Phone className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Phone Support</h3>
+              <Phone className="h-12 w-12 text-green-500 mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">WhatsApp Support</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Phone lines currently unavailable
+                Contact us on WhatsApp for immediate assistance
               </p>
-              <Button disabled variant="outline" className="w-full">
-                Please use email
+              <Button 
+                variant="outline" 
+                className="w-full bg-green-50 border-green-200 hover:bg-green-100" 
+                onClick={() => window.open('https://wa.me/2349024595121', '_blank')}
+              >
+                +234 902 459 5121
               </Button>
-              <div className="absolute top-2 right-2">
-                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
-                  Unavailable
+              <div className="mt-2">
+                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                  WhatsApp Only
                 </span>
               </div>
             </CardContent>
@@ -275,7 +285,7 @@ export default function SupportPage() {
             <Alert>
               <AlertDescription className="text-center">
                 <strong>Urgent Account Issues?</strong> If you're experiencing critical problems with a purchased account, 
-                contact us immediately at <strong>wisdomthedev@gmail.com</strong>. Phone lines are currently unavailable.
+                contact us immediately at <strong>wisdomthedev@gmail.com</strong> or WhatsApp us at <strong>+234 902 459 5121</strong> (WhatsApp only).
               </AlertDescription>
             </Alert>
           </CardContent>

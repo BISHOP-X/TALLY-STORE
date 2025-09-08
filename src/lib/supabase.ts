@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { sendCredentialsEmail } from './email'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -957,6 +958,47 @@ export async function processBulkPurchase(
     // Update product group stock count
     await updateProductGroupStock(productGroupId)
     
+    // Send credentials email automatically
+    try {
+      // Get user email for sending credentials
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .single()
+
+      if (userProfile) {
+        // Get user auth data for email
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (user?.email) {
+          const credentials = {
+            accounts: availableAccounts.map((account, index) => ({
+              accountNumber: index + 1,
+              username: account.username,
+              password: account.password,
+              email: account.email,
+              email_password: account.email_password,
+              two_fa_code: account.two_fa_code,
+              additional_info: account.additional_info
+            }))
+          }
+
+          await sendCredentialsEmail({
+            userEmail: user.email,
+            userName: user.email.split('@')[0],
+            credentials,
+            orderId: order.id
+          })
+          
+          console.log('✅ Credentials email sent automatically')
+        }
+      }
+    } catch (emailError) {
+      console.error('⚠️ Failed to send automatic credentials email:', emailError)
+      // Don't fail the purchase if email fails
+    }
+    
     return { 
       success: true, 
       orderData: {
@@ -1120,6 +1162,47 @@ export async function processPurchase(
     
     // Update product group stock count
     await updateProductGroupStock(account.product_group_id)
+    
+    // Send credentials email automatically
+    try {
+      // Get user email for sending credentials
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .single()
+
+      if (userProfile) {
+        // Get user auth data for email
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (user?.email) {
+          const credentials = {
+            accounts: [{
+              accountNumber: 1,
+              username: account.username,
+              password: account.password,
+              email: account.email,
+              email_password: account.email_password,
+              two_fa_code: account.two_fa_code,
+              additional_info: account.additional_info
+            }]
+          }
+
+          await sendCredentialsEmail({
+            userEmail: user.email,
+            userName: user.email.split('@')[0],
+            credentials,
+            orderId: order.id
+          })
+          
+          console.log('✅ Credentials email sent automatically')
+        }
+      }
+    } catch (emailError) {
+      console.error('⚠️ Failed to send automatic credentials email:', emailError)
+      // Don't fail the purchase if email fails
+    }
     
     return { 
       success: true, 

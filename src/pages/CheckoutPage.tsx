@@ -9,6 +9,7 @@ import { CheckCircle, CreditCard, Wallet, ArrowLeft, Shield, Clock, Loader2, Use
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import { BackButton, BackToProducts } from '@/components/ui/back-button'
+import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { 
   processPurchase, 
@@ -186,7 +187,12 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-background">
       <NavbarAuth />
       
-      <div className="container mx-auto px-6 pt-24 pb-12">
+      {/* Wallet Balance Widget */}
+      <div className="container mx-auto px-6 pt-24 pb-4">
+        <WalletBalanceWidget showRefresh={true} />
+      </div>
+      
+      <div className="container mx-auto px-6 pb-12">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2">Complete Your Purchase</h1>
