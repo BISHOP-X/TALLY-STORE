@@ -8,6 +8,7 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   signOut: () => Promise<void>
+  resendConfirmation: (email: string) => Promise<{ success: boolean; error?: string }>
   isAdmin: boolean
   walletBalance: number
   refreshWalletBalance: () => Promise<void>
@@ -105,6 +106,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
+        // If user already exists but isn't confirmed, offer to resend confirmation
+        if (error.message.includes('already registered') || error.message.includes('User already registered')) {
+          return { 
+            success: false, 
+            error: 'User already exists. Please check your email for the confirmation link, or we can resend it.' 
+          }
+        }
         return { success: false, error: error.message }
       }
 
@@ -136,12 +144,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAdmin(false)
   }
 
+  const resendConfirmation = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/email-confirmation`
+        }
+      })
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: 'Failed to resend confirmation email' }
+    }
+  }
+
   const value = {
     user,
     loading,
     signUp,
     signIn,
     signOut,
+    resendConfirmation,
     isAdmin,
     walletBalance,
     refreshWalletBalance
