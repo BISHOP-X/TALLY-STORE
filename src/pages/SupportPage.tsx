@@ -86,16 +86,20 @@ export default function SupportPage() {
           <Card className="text-center relative">
             <CardContent className="pt-6">
               <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Live Chat</h3>
+              <h3 className="font-semibold mb-2">Telegram Support</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Chat with our support team in real-time
+                Join our Telegram support group for quick updates
               </p>
-              <Button disabled className="w-full" variant="outline">
-                Coming Soon
+              <Button 
+                className="w-full" 
+                variant="outline"
+                onClick={() => window.open('https://t.me/Tallystoreorg', '_blank')}
+              >
+                Join Telegram
               </Button>
               <div className="absolute top-2 right-2">
-                <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">
-                  Coming Soon
+                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                  Active
                 </span>
               </div>
             </CardContent>
@@ -108,8 +112,8 @@ export default function SupportPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 Get detailed help via email support
               </p>
-              <Button variant="outline" className="w-full" onClick={() => window.location.href = 'mailto:wisdomthedev@gmail.com'}>
-                wisdomthedev@gmail.com
+              <Button variant="outline" className="w-full" onClick={() => window.location.href = 'mailto:tallystoreorg@gmail.com'}>
+                tallystoreorg@gmail.com
               </Button>
             </CardContent>
           </Card>
@@ -285,7 +289,7 @@ export default function SupportPage() {
             <Alert>
               <AlertDescription className="text-center">
                 <strong>Urgent Account Issues?</strong> If you're experiencing critical problems with a purchased account, 
-                contact us immediately at <strong>wisdomthedev@gmail.com</strong> or WhatsApp us at <strong>+234 902 459 5121</strong> (WhatsApp only).
+                contact us immediately at <strong>tallystoreorg@gmail.com</strong> or WhatsApp us at <strong>+234 902 459 5121</strong> (WhatsApp only).
               </AlertDescription>
             </Alert>
           </CardContent>

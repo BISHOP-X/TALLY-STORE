@@ -160,8 +160,8 @@ This project is proprietary and confidential. All rights reserved.
 ## 📞 Support
 
 For support and inquiries:
-- 📧 Email: wisdomthedev@gmail.com
-- 💬 Live Chat: Coming Soon - Use email for now
+- 📧 Email: tallystoreorg@gmail.com
+- 💬 Telegram: https://t.me/Tallystoreorg
 - 🐛 Issues: Create an issue in this repository
 
 ---

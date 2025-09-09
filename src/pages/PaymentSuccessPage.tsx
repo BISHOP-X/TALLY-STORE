@@ -203,7 +203,7 @@ export default function PaymentSuccessPage() {
           </div>
 
           <div className="text-xs text-muted-foreground text-center">
-            Need help? Contact us at wisdomthedev@gmail.com
+            Need help? Contact us at tallystoreorg@gmail.com
           </div>
         </CardContent>
       </Card>

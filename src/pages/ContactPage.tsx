@@ -167,7 +167,7 @@ const ContactPage = () => {
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">Email Support</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">wisdomthedev@gmail.com</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">tallystoreorg@gmail.com</p>
                   </div>
                 </div>
 
@@ -176,8 +176,14 @@ const ContactPage = () => {
                     <span className="text-gray-600 dark:text-gray-400">💬</span>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-white">Live Chat</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Coming Soon - Use email for now</p>
+                    <p className="font-medium text-gray-900 dark:text-white">Telegram Support</p>
+                    <Button 
+                      variant="outline" 
+                      className="mt-2"
+                      onClick={() => window.open('https://t.me/Tallystoreorg', '_blank')}
+                    >
+                      Join Telegram Group
+                    </Button>
                   </div>
                 </div>
 
@@ -319,7 +325,7 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you offer phone support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    We offer WhatsApp support at +234 902 459 5121 (WhatsApp only). For email support, use wisdomthedev@gmail.com.
+                    We offer WhatsApp support at +234 902 459 5121 (WhatsApp only). For email support, use tallystoreorg@gmail.com.
                   </p>
                 </div>
               </div>
@@ -335,14 +341,14 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Can I request a callback?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Traditional phone calls are not available. Please contact us via WhatsApp at +234 902 459 5121 or email at wisdomthedev@gmail.com.
+                    Traditional phone calls are not available. Please contact us via WhatsApp at +234 902 459 5121 or email at tallystoreorg@gmail.com.
                   </p>
                 </div>
                 
                 <div>
-                  <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you have live chat support?</h4>
+                  <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you have Telegram support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Live chat is coming soon! Currently, email support is the best way to reach us.
+                    Yes! Join our Telegram support group for quick updates and assistance at https://t.me/Tallystoreorg
                   </p>
                 </div>
               </div>

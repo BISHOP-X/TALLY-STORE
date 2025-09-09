@@ -421,7 +421,7 @@ export default function WebServicesPage() {
                 <Phone className="h-5 w-5 text-green-500" />
                 <div>
                   <p className="font-medium text-green-600">WhatsApp Only</p>
-                  <p className="text-sm text-muted-foreground">+234 902 459 5121</p>
+                  <p className="text-sm text-muted-foreground">09067679407</p>
                 </div>
               </div>
               
@@ -437,7 +437,13 @@ export default function WebServicesPage() {
                 <MessageCircle className="h-5 w-5 text-gray-400" />
                 <div>
                   <p className="font-medium text-gray-500">Telegram</p>
-                  <p className="text-sm text-muted-foreground">Coming Soon - Use email for now</p>
+                  <Button 
+                    variant="outline" 
+                    className="mt-2"
+                    onClick={() => window.open('https://t.me/Tallystoreorg', '_blank')}
+                  >
+                    Join Telegram
+                  </Button>
                 </div>
               </div>
             </div>

@@ -74,7 +74,7 @@ export const sendSupportEmail = async ({
 }): Promise<{ success: boolean; error?: string }> => {
   try {
     const templateParams = {
-      to_email: 'wisdomthedev@gmail.com', // Admin email for support
+      to_email: 'tallystoreorg@gmail.com', // Admin email for support
       from_email: userEmail,
       from_name: userName,
       subject: subject,
