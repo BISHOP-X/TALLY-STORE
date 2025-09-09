@@ -55,7 +55,7 @@ export default function RegisterPage() {
       if (result.success) {
         toast({
           title: "Account created!",
-          description: "Please check your email to verify your account"
+          description: "You can now sign in to your account"
         })
         navigate('/login')
       } else {
