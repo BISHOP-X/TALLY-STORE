@@ -37,6 +37,7 @@ import {
   deleteIndividualAccount,
   updateIndividualAccount,
   getUserCount,
+  getAdminSalesStats,
   bulkCreateIndividualAccounts,
   parseCSV,
   createProductTemplate,
@@ -63,6 +64,7 @@ export default function AdminPage() {
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
   const [individualAccounts, setIndividualAccounts] = useState<IndividualAccount[]>([])
   const [userCount, setUserCount] = useState<number>(0)
+  const [salesStats, setSalesStats] = useState({ totalSales: 0, totalRevenue: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,23 +105,27 @@ export default function AdminPage() {
       setLoading(true)
       setError(null)
 
-      const [categoriesData, productGroupsData, accountsData, userCountData] = await Promise.all([
+      const [categoriesData, productGroupsData, accountsData, userCountData, salesStatsData] = await Promise.all([
         getCategories(),
         getAllProductGroups(),
         getIndividualAccounts(),
-        getUserCount()
+        getUserCount(),
+        getAdminSalesStats()
       ])
 
       setCategories(categoriesData)
       setProductGroups(productGroupsData)
       setIndividualAccounts(accountsData)
       setUserCount(userCountData)
+      setSalesStats(salesStatsData)
 
       console.log('✅ Admin data loaded:', {
         categories: categoriesData.length,
         productGroups: productGroupsData.length,
         accounts: accountsData.length,
-        users: userCountData
+        users: userCountData,
+        sales: salesStatsData.totalSales,
+        revenue: salesStatsData.totalRevenue
       })
 
     } catch (err) {
@@ -434,13 +440,8 @@ export default function AdminPage() {
   const stats = {
     totalUsers: userCount,
     totalProducts: individualAccounts.length,
-    totalSales: individualAccounts.filter(acc => acc.status === 'sold').length,
-    revenue: individualAccounts
-      .filter(acc => acc.status === 'sold')
-      .reduce((sum, acc) => {
-        const productGroup = productGroups.find(pg => pg.id === acc.product_group_id)
-        return sum + (productGroup?.price || 0)
-      }, 0),
+    totalSales: salesStats.totalSales,
+    revenue: salesStats.totalRevenue,
     pendingOrders: 0, // Add order tracking later
     lowStock: productGroups.filter(pg => pg.stock_count < 5).length
   }

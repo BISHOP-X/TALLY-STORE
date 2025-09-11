@@ -1493,3 +1493,26 @@ export async function getUserCount(): Promise<number> {
     return 0
   }
 }
+
+// Get admin sales statistics from orders table
+export async function getAdminSalesStats(): Promise<{ totalSales: number; totalRevenue: number }> {
+  try {
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('amount, status')
+      .eq('status', 'completed')
+
+    if (error) {
+      console.error('Error fetching sales stats:', error)
+      return { totalSales: 0, totalRevenue: 0 }
+    }
+
+    const totalSales = orders?.length || 0
+    const totalRevenue = orders?.reduce((sum, order) => sum + (order.amount || 0), 0) || 0
+
+    return { totalSales, totalRevenue }
+  } catch (error) {
+    console.error('Error getting admin sales stats:', error)
+    return { totalSales: 0, totalRevenue: 0 }
+  }
+}
