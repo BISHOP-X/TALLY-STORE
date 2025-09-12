@@ -84,7 +84,8 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           timestamp: Date.now()
         }));
 
-        // Open payment page in new tab instead of redirecting
+
+        // Open payment page in new tab instead of redirecting, redirecting causing pop up customers complaining
         window.location.assign(response.data.checkouturl);
         
         // Close the modal and show instructions
