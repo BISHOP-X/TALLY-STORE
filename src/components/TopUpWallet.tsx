@@ -85,7 +85,7 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
         }));
 
         // Open payment page in new tab instead of redirecting
-        window.open(response.data.checkoutUrl, '_blank', 'noopener,noreferrer');
+        window.location.assign(response.data.checkouturl);
         
         // Close the modal and show instructions
         setIsOpen(false);
