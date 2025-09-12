@@ -69,7 +69,8 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           userId: user.id,  // Keep userId for backward compatibility
           type: 'wallet_topup',
           originalAmount: topUpAmount
-        }
+        },
+        feebearer: "merchant"
       };
 
       console.log('🚀 Initiating wallet top-up...', paymentData);
@@ -86,7 +87,24 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
 
 
         // Open payment page in new tab instead of redirecting, redirecting causing pop up customers complaining
-        window.location.assign(response.data.checkouturl);
+        
+        const checkoutUrl =
+          response?.data?.checkoutUrl ??
+          response?.data?.data?.checkoutUrl ?? null;
+        
+        console.log('Checkout URL →', checkoutUrl);
+        
+        if (!checkoutUrl || !/^https?:\/\//.test(checkoutUrl)) {
+          toast({
+            variant: "destructive",
+            title: "Invalid checkout URL",
+            description: "Payment link is missing or malformed."
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        window.location.assign(checkoutUrl); // same tab (no pop-up)
         
         // Close the modal and show instructions
         setIsOpen(false);
