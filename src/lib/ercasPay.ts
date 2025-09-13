@@ -93,7 +93,7 @@ class ErcasPayService {
           customerPhoneNumber: paymentData.customerPhoneNumber,
           redirectUrl: paymentData.redirectUrl,
           description: paymentData.description,
-          feeBearer: paymentData.feeBearer || 'customer',
+          feeBearer: paymentData.feeBearer || 'merchant',
           metadata: {
             ...paymentData.metadata,
             platform: 'tally-store',
