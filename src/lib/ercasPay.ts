@@ -78,7 +78,6 @@ class ErcasPayService {
     try {
       console.log("🚀 Sending payment init request:", {
         amount: paymentData.amount,
-        feeBearer: paymentData.feeBearer || 'merchant',
         customer: paymentData.customerEmail,
         reference: paymentData.paymentReference
       })
@@ -100,7 +99,7 @@ class ErcasPayService {
           customerPhoneNumber: paymentData.customerPhoneNumber,
           redirectUrl: paymentData.redirectUrl,
           description: paymentData.description,
-          feeBearer: 'merchant',
+          feeBearer: paymentData.feeBearer || 'merchant',
           metadata: {
             ...paymentData.metadata,
             platform: 'tally-store',
