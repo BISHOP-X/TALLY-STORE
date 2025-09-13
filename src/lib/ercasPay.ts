@@ -76,6 +76,13 @@ class ErcasPayService {
    */
   async initializePayment(paymentData: PaymentData): Promise<PaymentResponse> {
     try {
+      console.log("🚀 Sending payment init request:", {
+        amount: paymentData.amount,
+        feeBearer: paymentData.feeBearer || 'merchant',
+        customer: paymentData.customerEmail,
+        reference: paymentData.paymentReference
+      })
+      
       const response = await fetch(`${this.config.baseUrl}/third-party/payment/initiate`, {
         method: 'POST',
         headers: {
@@ -93,7 +100,7 @@ class ErcasPayService {
           customerPhoneNumber: paymentData.customerPhoneNumber,
           redirectUrl: paymentData.redirectUrl,
           description: paymentData.description,
-          feeBearer: paymentData.feeBearer || 'merchant',
+          feeBearer: 'merchant',
           metadata: {
             ...paymentData.metadata,
             platform: 'tally-store',
