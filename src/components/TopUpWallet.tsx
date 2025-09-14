@@ -57,19 +57,6 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
 
     setIsLoading(true);
 
-    // STEP 1: Pre-open window immediately (prevents popup blocking)
-    const paymentWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
-    
-    if (!paymentWindow) {
-      toast({
-        title: "Popup Blocked",
-        description: "Please allow popups for this site and try again.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
-
     try {
       const paymentData: PaymentData = {
         amount: topUpAmount,
@@ -90,11 +77,10 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
       const response = await initiatePayment(paymentData);
 
       if (response.success && response.data?.checkoutUrl) {
-        // STEP 2: Validate checkout URL for security
+        // Validate checkout URL for security (keep this improvement)
         const checkoutUrl = response.data.checkoutUrl;
         
         if (!checkoutUrl || !/^https?:\/\//.test(checkoutUrl)) {
-          paymentWindow.close();
           toast({
             variant: "destructive",
             title: "Invalid Payment URL",
@@ -111,8 +97,8 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           timestamp: Date.now()
         }));
 
-        // STEP 3: Navigate pre-opened window to payment page
-        paymentWindow.location.href = checkoutUrl;
+        // REVERT TO ORIGINAL: Direct window.open (works on Android)
+        window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
         
         // Close the modal and show instructions
         setIsOpen(false);
@@ -121,18 +107,11 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           description: "Complete your payment in the new tab. Your wallet will update automatically when payment is successful.",
         });
       } else {
-        // Close blank window on error
-        paymentWindow.close();
         throw new Error(response.error || 'Failed to initiate payment');
       }
 
     } catch (error: any) {
       console.error('❌ Top-up error:', error);
-      
-      // Close blank window on error
-      if (paymentWindow && !paymentWindow.closed) {
-        paymentWindow.close();
-      }
       
       toast({
         title: "Payment Failed",
