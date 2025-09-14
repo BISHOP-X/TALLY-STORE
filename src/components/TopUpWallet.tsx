@@ -57,6 +57,19 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
 
     setIsLoading(true);
 
+    // STEP 1: Pre-open window immediately (prevents popup blocking)
+    const paymentWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
+    
+    if (!paymentWindow) {
+      toast({
+        title: "Popup Blocked",
+        description: "Please allow popups for this site and try again.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const paymentData: PaymentData = {
         amount: topUpAmount,
@@ -77,6 +90,20 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
       const response = await initiatePayment(paymentData);
 
       if (response.success && response.data?.checkoutUrl) {
+        // STEP 2: Validate checkout URL for security
+        const checkoutUrl = response.data.checkoutUrl;
+        
+        if (!checkoutUrl || !/^https?:\/\//.test(checkoutUrl)) {
+          paymentWindow.close();
+          toast({
+            variant: "destructive",
+            title: "Invalid Payment URL",
+            description: "Payment link is missing or malformed. Please try again.",
+          });
+          setIsLoading(false);
+          return;
+        }
+
         // Store transaction reference for verification later
         localStorage.setItem('pending_topup', JSON.stringify({
           transactionReference: response.data.transactionReference,
@@ -84,8 +111,8 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           timestamp: Date.now()
         }));
 
-        // Open payment page in new tab instead of redirecting
-        window.open(response.data.checkoutUrl, '_blank', 'noopener,noreferrer');
+        // STEP 3: Navigate pre-opened window to payment page
+        paymentWindow.location.href = checkoutUrl;
         
         // Close the modal and show instructions
         setIsOpen(false);
@@ -94,11 +121,19 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           description: "Complete your payment in the new tab. Your wallet will update automatically when payment is successful.",
         });
       } else {
+        // Close blank window on error
+        paymentWindow.close();
         throw new Error(response.error || 'Failed to initiate payment');
       }
 
     } catch (error: any) {
       console.error('❌ Top-up error:', error);
+      
+      // Close blank window on error
+      if (paymentWindow && !paymentWindow.closed) {
+        paymentWindow.close();
+      }
+      
       toast({
         title: "Payment Failed",
         description: error.message || "Failed to initiate payment. Please try again.",
