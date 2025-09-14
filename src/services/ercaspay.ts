@@ -99,7 +99,7 @@ export const initiatePayment = async (paymentData: PaymentData): Promise<Payment
       redirectUrl: paymentData.redirectUrl || `${window.location.origin}/payment-success`,
       description: paymentData.description || 'Wallet Top-up',
       currency: 'NGN',
-      feeBearer: 'customer',
+      feeBearer: 'merchant',
       metadata: {
         source: 'tally-store-wallet-topup',
         user_id: paymentData.metadata?.user_id, // Include user_id for webhook processing
