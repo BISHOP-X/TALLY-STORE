@@ -46,9 +46,14 @@ export default function OrderHistoryPage() {
   // Check for purchase success message
   useEffect(() => {
     if (location.state?.purchaseSuccess) {
+      const accountCount = location.state?.accountCount || 1
+      const productName = location.state?.productGroupName || 'account'
+      const accountText = accountCount > 1 ? `${accountCount} accounts` : '1 account'
+      
       toast({
         title: "Purchase Successful! 🎉",
-        description: `Account @${location.state.accountUsername} has been added to your orders`,
+        description: `You purchased ${accountText} from ${productName}. Click "Download Credentials" below to access your account details.`,
+        duration: 10000, // Show for 10 seconds instead of default 5
       })
     }
   }, [location.state, toast])
@@ -270,6 +275,21 @@ export default function OrderHistoryPage() {
           <p className="text-muted-foreground">View and download your purchased accounts</p>
         </div>
 
+        {/* Success Alert for New Purchases */}
+        {location.state?.purchaseSuccess && (
+          <Alert className="mb-6 border-green-500 bg-green-50 dark:bg-green-950/50">
+            <Download className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <div className="ml-2">
+              <h3 className="font-semibold text-green-800 dark:text-green-200 mb-1">
+                📥 Your Credentials Are Ready!
+              </h3>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                Your purchase is complete! Click the <strong>"Download Credentials"</strong> button on your latest order below to get your account details as a JSON file.
+              </p>
+            </div>
+          </Alert>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card>
@@ -481,18 +501,19 @@ export default function OrderHistoryPage() {
                       
                       <div className="flex gap-2">
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="default"
+                          size="default"
                           onClick={() => handleDownload(order)}
                           disabled={order.status !== 'completed'}
+                          className="min-w-[140px]"
                         >
                           <Download className="h-4 w-4 mr-2" />
-                          Download
+                          Download Credentials
                         </Button>
                         
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="default"
                           onClick={() => handleEmailCredentials(order)}
                           disabled={order.status !== 'completed' || emailingSending === order.id}
                         >
