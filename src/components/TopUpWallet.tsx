@@ -57,6 +57,57 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
 
     setIsLoading(true);
 
+    // SOLUTION: Open window IMMEDIATELY before async call to bypass Safari/iOS popup blockers
+    // This is a direct user action, so browsers won't block it
+    const paymentWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
+    
+    // Show loading state in the new window if possible
+    if (paymentWindow) {
+      paymentWindow.document.write(`
+        <html>
+          <head>
+            <title>Processing Payment...</title>
+            <style>
+              body {
+                margin: 0;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+              }
+              .loader {
+                text-align: center;
+              }
+              .spinner {
+                border: 4px solid rgba(255,255,255,0.3);
+                border-top: 4px solid white;
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 20px;
+              }
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="loader">
+              <div class="spinner"></div>
+              <h2>Processing your payment...</h2>
+              <p>Please wait while we redirect you to Ercas Pay</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
     try {
       const paymentData: PaymentData = {
         amount: topUpAmount,
@@ -77,10 +128,13 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
       const response = await initiatePayment(paymentData);
 
       if (response.success && response.data?.checkoutUrl) {
-        // Validate checkout URL for security (keep this improvement)
+        // Validate checkout URL for security
         const checkoutUrl = response.data.checkoutUrl;
         
         if (!checkoutUrl || !/^https?:\/\//.test(checkoutUrl)) {
+          // Close the payment window if URL is invalid
+          paymentWindow?.close();
+          
           toast({
             variant: "destructive",
             title: "Invalid Payment URL",
@@ -97,21 +151,42 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           timestamp: Date.now()
         }));
 
-        // REVERT TO ORIGINAL: Direct window.open (works on Android)
-        window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-        
-        // Close the modal and show instructions
-        setIsOpen(false);
-        toast({
-          title: "Payment Window Opened",
-          description: "Complete your payment in the new tab. Your wallet will update automatically when payment is successful.",
-        });
+        // Check if payment window is still open and not blocked
+        if (paymentWindow && !paymentWindow.closed) {
+          // SUCCESS: Redirect the already-open window to payment gateway
+          console.log('✅ Redirecting payment window to:', checkoutUrl);
+          paymentWindow.location.href = checkoutUrl;
+          
+          // Close the modal and show success message
+          setIsOpen(false);
+          toast({
+            title: "Payment Window Opened",
+            description: "Complete your payment in the new tab. Your wallet will update automatically when payment is successful.",
+          });
+        } else {
+          // FALLBACK: Window was blocked or closed - use same-window redirect
+          console.log('⚠️ Popup blocked - using same-window redirect');
+          toast({
+            title: "Redirecting to Payment",
+            description: "Opening payment gateway...",
+          });
+          
+          // Small delay to show the toast
+          setTimeout(() => {
+            window.location.href = checkoutUrl;
+          }, 500);
+        }
       } else {
+        // Close the payment window on error
+        paymentWindow?.close();
         throw new Error(response.error || 'Failed to initiate payment');
       }
 
     } catch (error: any) {
       console.error('❌ Top-up error:', error);
+      
+      // Close the payment window on error
+      paymentWindow?.close();
       
       toast({
         title: "Payment Failed",
