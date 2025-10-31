@@ -57,9 +57,19 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
 
     setIsLoading(true);
 
-    // SOLUTION: Open window IMMEDIATELY before async call to bypass Safari/iOS popup blockers
-    // This is a direct user action, so browsers won't block it
-    const paymentWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
+    // SOLUTION: Open popup window IMMEDIATELY before async call to bypass Safari/iOS popup blockers
+    // Using empty URL ('') instead of 'about:blank' prevents browser from creating separate contexts
+    // This ensures location.href properly replaces the window instead of opening a second window
+    const width = 800;
+    const height = 900;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    
+    const paymentWindow = window.open(
+      '', 
+      'ErcasPayCheckout',
+      `width=${width},height=${height},left=${left},top=${top},popup=1,resizable=1,scrollbars=1`
+    );
     
     // Show loading state in the new window if possible
     if (paymentWindow) {

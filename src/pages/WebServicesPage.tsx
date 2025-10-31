@@ -502,7 +502,7 @@ export default function WebServicesPage() {
                     variant="default" 
                     size="sm"
                     className="mt-3 bg-green-600 hover:bg-green-700"
-                    onClick={() => window.open('https://wa.me/2349067679407', '_blank')}
+                    onClick={() => window.open('https://wa.link/3ophik', '_blank')}
                   >
                     Chat Now
                   </Button>
