@@ -754,22 +754,24 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       <Navbar />
       
-      <div className="container mx-auto px-6 py-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-            <p className="text-muted-foreground">
-              Manage products, categories, and view analytics
-            </p>
-          </div>
+      {/* Add padding-top to account for fixed navbar */}
+      <div className="pt-20 sm:pt-24">
+        <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          <div className="max-w-7xl mx-auto">
+            {/* Header */}
+            <div className="mb-6 sm:mb-8">
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Admin Dashboard</h1>
+              <p className="text-sm sm:text-base text-muted-foreground">
+                Manage products, categories, and view analytics
+              </p>
+            </div>
 
           {/* View Account Modal */}
           {viewingAccount && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-                <h2 className="text-xl font-bold mb-4">Account Details</h2>
-                <div className="space-y-3">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <h2 className="text-lg sm:text-xl font-bold mb-4">Account Details</h2>
+                <div className="space-y-3 text-sm sm:text-base">
                   <div><strong>Username:</strong> @{viewingAccount.username}</div>
                   <div><strong>Password:</strong> {viewingAccount.password}</div>
                   {viewingAccount.email && <div><strong>Email:</strong> {viewingAccount.email}</div>}
@@ -798,9 +800,9 @@ export default function AdminPage() {
 
           {/* Edit Category Modal */}
           {editingCategory && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-                <h2 className="text-xl font-bold mb-4">Edit Category</h2>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <h2 className="text-lg sm:text-xl font-bold mb-4">Edit Category</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium block mb-1">Category Name</label>
@@ -846,9 +848,9 @@ export default function AdminPage() {
             </div>
           )}
           {editingAccount && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-                <h2 className="text-xl font-bold mb-4">Edit Account</h2>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <h2 className="text-lg sm:text-xl font-bold mb-4">Edit Account</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium block mb-1">Username</label>
@@ -916,9 +918,9 @@ export default function AdminPage() {
             </div>
           )}
           {editingTemplate && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-                <h2 className="text-xl font-bold mb-4">Edit Product Template</h2>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <h2 className="text-lg sm:text-xl font-bold mb-4">Edit Product Template</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium block mb-1">Product Name</label>
@@ -977,10 +979,10 @@ export default function AdminPage() {
 
           {/* Balance Adjustment Modal */}
           <Dialog open={adjustBalanceOpen} onOpenChange={setAdjustBalanceOpen}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md w-[95vw] sm:w-full">
               <DialogHeader>
                 <DialogTitle>Adjust User Balance</DialogTitle>
-                <DialogDescription>
+                <DialogDescription className="break-words">
                   Modify wallet balance for {selectedUser?.email}
                 </DialogDescription>
               </DialogHeader>
@@ -1070,7 +1072,7 @@ export default function AdminPage() {
 
           {/* User Details Modal */}
           <Dialog open={viewUserOpen} onOpenChange={setViewUserOpen}>
-            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto w-[95vw] sm:w-full">
               <DialogHeader>
                 <DialogTitle>User Details</DialogTitle>
                 <DialogDescription>
@@ -1085,7 +1087,7 @@ export default function AdminPage() {
                     <CardTitle className="text-lg">Account Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">Email</p>
                         <p className="font-mono text-sm">{selectedUser?.email}</p>
@@ -1300,14 +1302,16 @@ export default function AdminPage() {
 
           {/* Main Content */}
           <Tabs defaultValue="templates" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-6">
-              <TabsTrigger value="templates">Templates</TabsTrigger>
-              <TabsTrigger value="products">Products</TabsTrigger>
-              <TabsTrigger value="add-product">Add Product</TabsTrigger>
-              <TabsTrigger value="bulk-upload">Bulk Upload</TabsTrigger>
-              <TabsTrigger value="categories">Categories</TabsTrigger>
-              <TabsTrigger value="users">Users</TabsTrigger>
-            </TabsList>
+            <div className="w-full overflow-x-auto pb-2">
+              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-6">
+                <TabsTrigger value="templates" className="flex-shrink-0">Templates</TabsTrigger>
+                <TabsTrigger value="products" className="flex-shrink-0">Products</TabsTrigger>
+                <TabsTrigger value="add-product" className="flex-shrink-0">Add Product</TabsTrigger>
+                <TabsTrigger value="bulk-upload" className="flex-shrink-0">Bulk Upload</TabsTrigger>
+                <TabsTrigger value="categories" className="flex-shrink-0">Categories</TabsTrigger>
+                <TabsTrigger value="users" className="flex-shrink-0">Users</TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* Product Templates Management */}
             <TabsContent value="templates" className="space-y-6">
@@ -1394,39 +1398,40 @@ export default function AdminPage() {
                           return (
                             <div
                               key={template.id}
-                              className={`flex items-center justify-between p-4 border rounded-lg ${isArchived ? 'bg-gray-50 dark:bg-gray-800/50 opacity-75' : ''}`}
+                              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3 ${isArchived ? 'bg-gray-50 dark:bg-gray-800/50 opacity-75' : ''}`}
                             >
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <h4 className={`font-medium ${isArchived ? 'text-gray-500' : ''}`}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                  <h4 className={`font-medium break-words ${isArchived ? 'text-gray-500' : ''}`}>
                                     {template.name}
                                   </h4>
-                                  <Badge variant="outline">{category?.name || 'Unknown'}</Badge>
+                                  <Badge variant="outline" className="whitespace-nowrap">{category?.name || 'Unknown'}</Badge>
                                   {isArchived && (
                                     <Badge variant="secondary">Archived</Badge>
                                   )}
-                                  <Badge variant={template.stock_count > 0 ? 'default' : 'secondary'}>
+                                  <Badge variant={template.stock_count > 0 ? 'default' : 'secondary'} className="whitespace-nowrap">
                                     {template.stock_count} in stock
                                   </Badge>
                                 </div>
-                                <p className={`text-sm text-muted-foreground ${isArchived ? 'text-gray-400' : ''}`}>
+                                <p className={`text-sm text-muted-foreground break-words ${isArchived ? 'text-gray-400' : ''}`}>
                                   {template.description} • ₦{template.price.toLocaleString()}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap sm:flex-shrink-0">
                                 <Button 
                                   variant="outline" 
                                   size="sm"
                                   onClick={() => handleEditTemplate(template)}
                                 >
-                                  <Edit className="h-4 w-4" />
+                                  <Edit className="h-4 w-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">Edit</span>
                                 </Button>
                                 {isArchived ? (
                                   <Button 
                                     variant="outline" 
                                     size="sm"
                                     onClick={() => handleRestoreTemplate(template.id)}
-                                    className="text-green-600 hover:text-green-700"
+                                    className="text-green-600 hover:text-green-700 whitespace-nowrap"
                                   >
                                     Restore
                                   </Button>
@@ -1436,7 +1441,7 @@ export default function AdminPage() {
                                       variant="outline" 
                                       size="sm"
                                       onClick={() => handleArchiveTemplate(template.id)}
-                                      className="text-orange-600 hover:text-orange-700"
+                                      className="text-orange-600 hover:text-orange-700 whitespace-nowrap"
                                     >
                                       Archive
                                     </Button>
@@ -1485,34 +1490,35 @@ export default function AdminPage() {
                         return (
                           <div
                             key={account.id}
-                            className="flex items-center justify-between p-4 border rounded-lg"
+                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-4"
                           >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <h3 className="font-medium">@{account.username}</h3>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
+                                <h3 className="font-medium break-all">@{account.username}</h3>
                                 <Badge variant={account.status === 'available' ? 'default' : account.status === 'sold' ? 'secondary' : 'destructive'}>
                                   {account.status}
                                 </Badge>
                                 {account.additional_info?.followers && (
-                                  <Badge variant="outline">{parseInt(account.additional_info.followers).toLocaleString()} followers</Badge>
+                                  <Badge variant="outline" className="whitespace-nowrap">{parseInt(account.additional_info.followers).toLocaleString()} followers</Badge>
                                 )}
                               </div>
-                              <div className="text-sm text-muted-foreground space-x-4">
-                                <span>Category: {category?.name || 'Unknown'}</span>
-                                <span>Price: ₦{productGroup?.price?.toLocaleString() || '0'}</span>
-                                <span>Added: {new Date(account.created_at).toLocaleDateString()}</span>
-                                {account.email && <span>Email: {account.email}</span>}
+                              <div className="text-sm text-muted-foreground space-y-1 sm:space-y-0 sm:space-x-4">
+                                <span className="block sm:inline">Category: {category?.name || 'Unknown'}</span>
+                                <span className="block sm:inline">Price: ₦{productGroup?.price?.toLocaleString() || '0'}</span>
+                                <span className="block sm:inline">Added: {new Date(account.created_at).toLocaleDateString()}</span>
+                                {account.email && <span className="block sm:inline break-all">Email: {account.email}</span>}
                               </div>
                             </div>
                             
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 sm:flex-shrink-0">
                               <Button 
                                 variant="outline" 
                                 size="sm"
                                 onClick={() => handleViewAccount(account)}
                                 title="View details"
                               >
-                                <Eye className="h-4 w-4" />
+                                <Eye className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">View</span>
                               </Button>
                               <Button 
                                 variant="outline" 
@@ -1520,7 +1526,8 @@ export default function AdminPage() {
                                 onClick={() => handleEditAccount(account)}
                                 title="Edit account"
                               >
-                                <Edit className="h-4 w-4" />
+                                <Edit className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Edit</span>
                               </Button>
                               <Button 
                                 variant="outline" 
@@ -1768,23 +1775,24 @@ export default function AdminPage() {
                     {categories.map((category) => (
                       <div
                         key={category.id}
-                        className="flex items-center justify-between p-4 border rounded-lg"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-3"
                       >
-                        <div>
-                          <h3 className="font-medium">{category.name}</h3>
-                          <p className="text-sm text-muted-foreground">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium break-words">{category.name}</h3>
+                          <p className="text-sm text-muted-foreground break-words">
                             {category.description} • {productGroups.filter(pg => pg.category_id === category.id).length} product groups
                           </p>
                         </div>
                         
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 sm:flex-shrink-0">
                           <Button 
                             variant="outline" 
                             size="sm"
                             onClick={() => handleEditCategory(category)}
                             title="Edit category"
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden sm:inline">Edit</span>
                           </Button>
                           <Button 
                             variant="outline" 
@@ -1874,7 +1882,8 @@ export default function AdminPage() {
                       </div>
                     </div>
                   ) : (
-                    <Table>
+                    <div className="overflow-x-auto">
+                      <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Email</TableHead>
@@ -1908,22 +1917,22 @@ export default function AdminPage() {
                               {format(new Date(user.created_at), 'MMM d, yyyy')}
                             </TableCell>
                             <TableCell>
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 whitespace-nowrap">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleViewUser(user)}
                                 >
-                                  <Eye className="h-4 w-4 mr-1" />
-                                  View
+                                  <Eye className="h-4 w-4 md:mr-1" />
+                                  <span className="hidden md:inline">View</span>
                                 </Button>
                                 <Button
                                   variant="default"
                                   size="sm"
                                   onClick={() => handleAdjustBalance(user)}
                                 >
-                                  <DollarSign className="h-4 w-4 mr-1" />
-                                  Adjust
+                                  <DollarSign className="h-4 w-4 md:mr-1" />
+                                  <span className="hidden md:inline">Adjust</span>
                                 </Button>
                               </div>
                             </TableCell>
@@ -1931,6 +1940,7 @@ export default function AdminPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -1938,7 +1948,7 @@ export default function AdminPage() {
               {/* User stats summary */}
               <Card>
                 <CardContent className="p-6">
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                     <div>
                       <p className="text-2xl font-bold">{users.length}</p>
                       <p className="text-sm text-muted-foreground">Total Users Shown</p>
@@ -1960,6 +1970,7 @@ export default function AdminPage() {
               </Card>
             </TabsContent>
           </Tabs>
+          </div>
         </div>
       </div>
 
