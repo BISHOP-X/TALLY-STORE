@@ -149,13 +149,12 @@ export default function AdminPage() {
       setLoading(true)
       setError(null)
 
-      const [categoriesData, productGroupsData, accountsData, userCountData, salesStatsData, usersData] = await Promise.all([
+      const [categoriesData, productGroupsData, accountsData, userCountData, salesStatsData] = await Promise.all([
         getCategories(),
         getAllProductGroups(),
         getIndividualAccounts(),
         getUserCount(),
-        getAdminSalesStats(),
-        getAllUsers()
+        getAdminSalesStats()
       ])
 
       setCategories(categoriesData)
@@ -163,7 +162,6 @@ export default function AdminPage() {
       setIndividualAccounts(accountsData)
       setUserCount(userCountData)
       setSalesStats(salesStatsData)
-      setUsers(usersData)
 
       console.log('✅ Admin data loaded:', {
         categories: categoriesData.length,
@@ -171,8 +169,7 @@ export default function AdminPage() {
         accounts: accountsData.length,
         users: userCountData,
         sales: salesStatsData.totalSales,
-        revenue: salesStatsData.totalRevenue,
-        usersLoaded: usersData.length
+        revenue: salesStatsData.totalRevenue
       })
 
     } catch (err) {
@@ -534,9 +531,11 @@ export default function AdminPage() {
   // Search users
   const handleSearchUsers = async () => {
     if (!userSearchQuery.trim()) {
-      // If empty, show all users
-      const usersData = await getAllUsers()
-      setUsers(usersData)
+      toast({
+        title: "Search required",
+        description: "Please enter an email or name to search",
+        variant: "destructive"
+      })
       return
     }
 
@@ -1863,9 +1862,16 @@ export default function AdminPage() {
               <Card>
                 <CardContent className="p-0">
                   {users.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No users found. Try a different search.</p>
+                    <div className="text-center py-16 px-4">
+                      <Search className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                      <h3 className="text-lg font-semibold mb-2">Search for Users</h3>
+                      <p className="text-muted-foreground mb-4">
+                        Enter an email address or name in the search box above to find users
+                      </p>
+                      <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-muted px-4 py-2 rounded-lg">
+                        <kbd className="px-2 py-1 bg-background border rounded text-xs">Enter</kbd>
+                        <span>or click Search to begin</span>
+                      </div>
                     </div>
                   ) : (
                     <Table>
