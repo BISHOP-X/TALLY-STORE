@@ -17,7 +17,9 @@ import {
   Trash2,
   Eye,
   DollarSign,
-  Loader2
+  Loader2,
+  Search,
+  Download
 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
@@ -42,11 +44,36 @@ import {
   parseCSV,
   createProductTemplate,
   processBulkAccountUpload,
+  getAllUsers,
+  searchUsers,
+  getUserTransactions,
+  getUserOrdersAdmin,
+  adminAdjustBalance,
   type Category, 
   type ProductGroup,
   type IndividualAccount,
   type ProductTemplate
 } from '@/lib/supabase'
+import { format } from 'date-fns'
+import { useAuth } from '@/contexts/SimpleAuth'
+import { useToast } from '@/hooks/use-toast'
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table'
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 
 // Mock admin stats
 const mockStats = {
@@ -59,6 +86,9 @@ const mockStats = {
 }
 
 export default function AdminPage() {
+  const { user } = useAuth()
+  const { toast } = useToast()
+
   // Real data state
   const [categories, setCategories] = useState<Category[]>([])
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
@@ -67,6 +97,20 @@ export default function AdminPage() {
   const [salesStats, setSalesStats] = useState({ totalSales: 0, totalRevenue: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // User management state
+  const [users, setUsers] = useState<any[]>([])
+  const [userSearchQuery, setUserSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [viewUserOpen, setViewUserOpen] = useState(false)
+  const [adjustBalanceOpen, setAdjustBalanceOpen] = useState(false)
+  const [adjustmentAmount, setAdjustmentAmount] = useState('')
+  const [adjustmentReason, setAdjustmentReason] = useState('')
+  const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract'>('add')
+  const [userTransactions, setUserTransactions] = useState<any[]>([])
+  const [userOrders, setUserOrders] = useState<any[]>([])
+  const [isAdjusting, setIsAdjusting] = useState(false)
 
   // UI state
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -105,12 +149,13 @@ export default function AdminPage() {
       setLoading(true)
       setError(null)
 
-      const [categoriesData, productGroupsData, accountsData, userCountData, salesStatsData] = await Promise.all([
+      const [categoriesData, productGroupsData, accountsData, userCountData, salesStatsData, usersData] = await Promise.all([
         getCategories(),
         getAllProductGroups(),
         getIndividualAccounts(),
         getUserCount(),
-        getAdminSalesStats()
+        getAdminSalesStats(),
+        getAllUsers()
       ])
 
       setCategories(categoriesData)
@@ -118,6 +163,7 @@ export default function AdminPage() {
       setIndividualAccounts(accountsData)
       setUserCount(userCountData)
       setSalesStats(salesStatsData)
+      setUsers(usersData)
 
       console.log('✅ Admin data loaded:', {
         categories: categoriesData.length,
@@ -125,7 +171,8 @@ export default function AdminPage() {
         accounts: accountsData.length,
         users: userCountData,
         sales: salesStatsData.totalSales,
-        revenue: salesStatsData.totalRevenue
+        revenue: salesStatsData.totalRevenue,
+        usersLoaded: usersData.length
       })
 
     } catch (err) {
@@ -482,6 +529,146 @@ export default function AdminPage() {
     setCsvFile(file || null)
   }
 
+  // ==================== USER MANAGEMENT HANDLERS ====================
+
+  // Search users
+  const handleSearchUsers = async () => {
+    if (!userSearchQuery.trim()) {
+      // If empty, show all users
+      const usersData = await getAllUsers()
+      setUsers(usersData)
+      return
+    }
+
+    try {
+      setIsSearching(true)
+      const results = await searchUsers(userSearchQuery)
+      setUsers(results)
+      toast({
+        title: "Search complete",
+        description: `Found ${results.length} user(s)`
+      })
+    } catch (error: any) {
+      toast({
+        title: "Search failed",
+        description: error.message,
+        variant: "destructive"
+      })
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  // View user details
+  const handleViewUser = async (user: any) => {
+    try {
+      setSelectedUser(user)
+      
+      // Load user transactions and orders
+      const [transactions, orders] = await Promise.all([
+        getUserTransactions(user.id),
+        getUserOrdersAdmin(user.id)
+      ])
+      
+      setUserTransactions(transactions)
+      setUserOrders(orders)
+      setViewUserOpen(true)
+    } catch (error: any) {
+      toast({
+        title: "Error loading user details",
+        description: error.message,
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Open balance adjustment modal
+  const handleAdjustBalance = (user: any) => {
+    setSelectedUser(user)
+    setAdjustmentAmount('')
+    setAdjustmentReason('')
+    setAdjustmentType('add')
+    setAdjustBalanceOpen(true)
+  }
+
+  // Submit balance adjustment
+  const handleSubmitAdjustment = async () => {
+    if (!adjustmentAmount || !adjustmentReason || !selectedUser) {
+      toast({
+        title: "Validation error",
+        description: "Please fill in all fields",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const amount = parseFloat(adjustmentAmount)
+    if (isNaN(amount) || amount === 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid amount",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Calculate actual adjustment (negative for deduction)
+    const adjustment = adjustmentType === 'add' ? amount : -amount
+
+    try {
+      setIsAdjusting(true)
+      
+      const result = await adminAdjustBalance(
+        selectedUser.id,
+        adjustment,
+        adjustmentReason,
+        user?.email || 'admin'
+      )
+
+      if (result.success) {
+        // Update local user list
+        setUsers(prev => prev.map(u => 
+          u.id === selectedUser.id 
+            ? { ...u, wallet_balance: result.newBalance }
+            : u
+        ))
+
+        toast({
+          title: "Balance adjusted successfully!",
+          description: `New balance: ₦${result.newBalance.toLocaleString()}`
+        })
+
+        // Close modal and reset
+        setAdjustBalanceOpen(false)
+        setAdjustmentAmount('')
+        setAdjustmentReason('')
+        setSelectedUser(null)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Adjustment failed",
+        description: error.message,
+        variant: "destructive"
+      })
+    } finally {
+      setIsAdjusting(false)
+    }
+  }
+
+  // Calculate new balance preview
+  const calculateNewBalance = () => {
+    if (!selectedUser || !adjustmentAmount) return '0'
+    const current = selectedUser.wallet_balance || 0
+    const amount = parseFloat(adjustmentAmount) || 0
+    const adjustment = adjustmentType === 'add' ? amount : -amount
+    return (current + adjustment).toLocaleString()
+  }
+
+  // Calculate total spent by user
+  const calculateTotalSpent = (orders: any[]) => {
+    return orders.reduce((sum, order) => sum + (order.amount || 0), 0).toLocaleString()
+  }
+
   const handleAddProduct = async () => {
     if (!newProduct.title || !newProduct.category || !newProduct.price || !newProduct.username || !newProduct.password) {
       alert('Please fill in all required fields (title, category, price, username, password)')
@@ -789,6 +976,278 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* Balance Adjustment Modal */}
+          <Dialog open={adjustBalanceOpen} onOpenChange={setAdjustBalanceOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Adjust User Balance</DialogTitle>
+                <DialogDescription>
+                  Modify wallet balance for {selectedUser?.email}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                {/* Current Balance Display */}
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-1">Current Balance</p>
+                  <p className="text-2xl font-bold">
+                    ₦{(selectedUser?.wallet_balance || 0).toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Adjustment Type Selector */}
+                <div className="space-y-2">
+                  <Label>Action</Label>
+                  <Select value={adjustmentType} onValueChange={(value: 'add' | 'subtract') => setAdjustmentType(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="add">Add Funds (Credit)</SelectItem>
+                      <SelectItem value="subtract">Deduct Funds (Debit)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Amount Input */}
+                <div className="space-y-2">
+                  <Label>Amount (₦)</Label>
+                  <Input
+                    type="number"
+                    placeholder="5000"
+                    value={adjustmentAmount}
+                    onChange={(e) => setAdjustmentAmount(e.target.value)}
+                    min="1"
+                  />
+                </div>
+
+                {/* Reason Textarea */}
+                <div className="space-y-2">
+                  <Label>Reason (Required)</Label>
+                  <Textarea
+                    placeholder="e.g., Refund for order #123, Compensation, Manual top-up..."
+                    value={adjustmentReason}
+                    onChange={(e) => setAdjustmentReason(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+
+                {/* Preview */}
+                {adjustmentAmount && (
+                  <div className="p-4 bg-muted rounded-lg border-2 border-primary/20">
+                    <p className="text-sm font-semibold mb-2">Preview:</p>
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        Current: ₦{(selectedUser?.wallet_balance || 0).toLocaleString()}
+                      </p>
+                      <p className={adjustmentType === 'add' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                        {adjustmentType === 'add' ? '+' : '-'}₦{parseFloat(adjustmentAmount || '0').toLocaleString()}
+                      </p>
+                      <p className="font-bold border-t pt-1 mt-1">
+                        New Balance: ₦{calculateNewBalance()}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setAdjustBalanceOpen(false)}
+                  disabled={isAdjusting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSubmitAdjustment} 
+                  disabled={!adjustmentAmount || !adjustmentReason || isAdjusting}
+                >
+                  {isAdjusting ? 'Processing...' : (adjustmentType === 'add' ? 'Add Funds' : 'Deduct Funds')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* User Details Modal */}
+          <Dialog open={viewUserOpen} onOpenChange={setViewUserOpen}>
+            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>User Details</DialogTitle>
+                <DialogDescription>
+                  Complete account information and activity
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                {/* Account Information Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Account Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Email</p>
+                        <p className="font-mono text-sm">{selectedUser?.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Full Name</p>
+                        <p>{selectedUser?.full_name || 'Not set'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Wallet Balance</p>
+                        <p className="text-lg font-bold">
+                          ₦{(selectedUser?.wallet_balance || 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Account Status</p>
+                        <div className="mt-1">
+                          {selectedUser?.is_admin ? (
+                            <Badge>Admin</Badge>
+                          ) : (
+                            <Badge variant="secondary">Customer</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">User ID</p>
+                        <p className="font-mono text-xs">{selectedUser?.id}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Joined Date</p>
+                        <p>{selectedUser?.created_at && format(new Date(selectedUser.created_at), 'PPP')}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Recent Transactions Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>Recent Transactions</span>
+                      <Badge variant="outline">{userTransactions.length} total</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {userTransactions.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-4">No transactions found</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {userTransactions.slice(0, 5).map((tx) => (
+                          <div key={tx.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge 
+                                  variant={
+                                    tx.type === 'TOP_UP' || tx.type === 'ADMIN_CREDIT' 
+                                      ? 'default' 
+                                      : 'secondary'
+                                  }
+                                >
+                                  {tx.type}
+                                </Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {format(new Date(tx.created_at), 'MMM d, HH:mm')}
+                                </span>
+                              </div>
+                              <p className="text-sm">{tx.description || 'No description'}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-bold ${
+                                tx.type === 'TOP_UP' || tx.type === 'ADMIN_CREDIT' 
+                                  ? 'text-green-600' 
+                                  : 'text-red-600'
+                              }`}>
+                                {tx.type === 'TOP_UP' || tx.type === 'ADMIN_CREDIT' ? '+' : '-'}
+                                ₦{(tx.amount || 0).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        {userTransactions.length > 5 && (
+                          <p className="text-sm text-muted-foreground text-center pt-2">
+                            Showing 5 of {userTransactions.length} transactions
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Order History Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>Order History</span>
+                      <Badge variant="outline">{userOrders.length} orders</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {userOrders.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-4">No orders found</p>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Total Orders</p>
+                            <p className="text-2xl font-bold">{userOrders.length}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Total Spent</p>
+                            <p className="text-2xl font-bold">₦{calculateTotalSpent(userOrders)}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {userOrders.slice(0, 5).map((order) => (
+                            <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg">
+                              <div className="flex-1">
+                                <p className="font-medium">
+                                  {order.product_groups?.name || 'Unknown Product'}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {format(new Date(order.created_at), 'MMM d, yyyy')} • 
+                                  Order #{order.id.slice(0, 8)}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold">₦{(order.amount || 0).toLocaleString()}</p>
+                                <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                                  {order.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                          {userOrders.length > 5 && (
+                            <p className="text-sm text-muted-foreground text-center pt-2">
+                              Showing 5 of {userOrders.length} orders
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setViewUserOpen(false)}>
+                  Close
+                </Button>
+                <Button onClick={() => {
+                  setViewUserOpen(false)
+                  handleAdjustBalance(selectedUser)
+                }}>
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Adjust Balance
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           {/* Stats Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card>
@@ -842,12 +1301,13 @@ export default function AdminPage() {
 
           {/* Main Content */}
           <Tabs defaultValue="templates" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="templates">Templates</TabsTrigger>
               <TabsTrigger value="products">Products</TabsTrigger>
               <TabsTrigger value="add-product">Add Product</TabsTrigger>
               <TabsTrigger value="bulk-upload">Bulk Upload</TabsTrigger>
               <TabsTrigger value="categories">Categories</TabsTrigger>
+              <TabsTrigger value="users">Users</TabsTrigger>
             </TabsList>
 
             {/* Product Templates Management */}
@@ -1365,6 +1825,129 @@ export default function AdminPage() {
                           Add Category
                         </Button>
                       </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Users Management */}
+            <TabsContent value="users" className="space-y-6">
+              {/* Search Bar */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Management</CardTitle>
+                  <p className="text-muted-foreground">
+                    Search users and manage wallet balances
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Search by email or name..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearchUsers()}
+                      className="flex-1"
+                    />
+                    <Button onClick={handleSearchUsers} disabled={isSearching}>
+                      <Search className="h-4 w-4 mr-2" />
+                      {isSearching ? 'Searching...' : 'Search'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Users Table */}
+              <Card>
+                <CardContent className="p-0">
+                  {users.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No users found. Try a different search.</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Full Name</TableHead>
+                          <TableHead>Wallet Balance</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Joined</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map((user) => (
+                          <TableRow key={user.id}>
+                            <TableCell className="font-mono text-sm">
+                              {user.email}
+                            </TableCell>
+                            <TableCell>{user.full_name || '-'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="font-mono">
+                                ₦{(user.wallet_balance || 0).toLocaleString()}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {user.is_admin ? (
+                                <Badge>Admin</Badge>
+                              ) : (
+                                <Badge variant="secondary">Customer</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {format(new Date(user.created_at), 'MMM d, yyyy')}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewUser(user)}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleAdjustBalance(user)}
+                                >
+                                  <DollarSign className="h-4 w-4 mr-1" />
+                                  Adjust
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* User stats summary */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-2xl font-bold">{users.length}</p>
+                      <p className="text-sm text-muted-foreground">Total Users Shown</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        ₦{users.reduce((sum, u) => sum + (u.wallet_balance || 0), 0).toLocaleString()}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Total Balance</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {users.filter(u => u.is_admin).length}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Admins</p>
                     </div>
                   </div>
                 </CardContent>

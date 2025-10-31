@@ -1516,3 +1516,137 @@ export async function getAdminSalesStats(): Promise<{ totalSales: number; totalR
     return { totalSales: 0, totalRevenue: 0 }
   }
 }
+
+// ==================== USER MANAGEMENT FUNCTIONS ====================
+
+// Search users by email or name
+export async function searchUsers(query: string) {
+  try {
+    if (!query || query.trim() === '') {
+      return getAllUsers()
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .or(`email.ilike.%${query}%,full_name.ilike.%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (error) {
+      console.error('Error searching users:', error)
+      throw error
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error in searchUsers:', error)
+    throw error
+  }
+}
+
+// Admin adjust user wallet balance
+export async function adminAdjustBalance(
+  userId: string,
+  amount: number,
+  reason: string,
+  adminEmail: string
+): Promise<{ success: boolean; newBalance: number }> {
+  try {
+    // 1. Get current balance
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('wallet_balance, email')
+      .eq('id', userId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching user balance:', fetchError)
+      throw new Error('Failed to fetch user balance')
+    }
+
+    const currentBalance = profile.wallet_balance || 0
+    const newBalance = currentBalance + amount
+
+    // 2. Validate - prevent negative balance
+    if (newBalance < 0) {
+      throw new Error(`Insufficient balance. Current: ₦${currentBalance.toLocaleString()}, Attempted deduction: ₦${Math.abs(amount).toLocaleString()}`)
+    }
+
+    // 3. Update balance
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ wallet_balance: newBalance })
+      .eq('id', userId)
+
+    if (updateError) {
+      console.error('Error updating balance:', updateError)
+      throw new Error('Failed to update user balance')
+    }
+
+    // 4. Create transaction record for audit trail
+    const transactionType = amount > 0 ? 'ADMIN_CREDIT' : 'ADMIN_DEBIT'
+    
+    const { error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: userId,
+        type: transactionType,
+        amount: Math.abs(amount),
+        status: 'completed',
+        description: `Admin adjustment: ${reason} (by ${adminEmail})`,
+        reference: `ADMIN_${Date.now()}`
+      })
+
+    if (txError) {
+      console.error('Error creating transaction record:', txError)
+      // Don't throw - balance already updated, just log the error
+      console.warn('Balance updated but transaction record failed to create')
+    }
+
+    console.log('✅ Balance adjusted:', {
+      user: profile.email,
+      oldBalance: currentBalance,
+      adjustment: amount,
+      newBalance,
+      reason,
+      admin: adminEmail
+    })
+
+    return { success: true, newBalance }
+  } catch (error) {
+    console.error('Error in adminAdjustBalance:', error)
+    throw error
+  }
+}
+
+// Get user's order history (admin view)
+export async function getUserOrdersAdmin(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        product_groups (
+          name,
+          price,
+          category_id,
+          categories (
+            name
+          )
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching user orders:', error)
+      throw error
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error in getUserOrdersAdmin:', error)
+    throw error
+  }
+}
