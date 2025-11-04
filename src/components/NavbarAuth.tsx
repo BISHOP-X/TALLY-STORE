@@ -1,14 +1,18 @@
 import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
-import { Menu, X, User, LogOut, Wallet } from "lucide-react"
+import { Menu, X, User, LogOut, Wallet, Download } from "lucide-react"
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
+import InstallAppDialog from '@/components/InstallAppDialog'
+import { usePWAInstall } from '@/hooks/usePWAInstall'
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [showInstallDialog, setShowInstallDialog] = useState(false)
   const { user, signOut, isAdmin, walletBalance } = useAuth()
+  const { canInstall, isInstalled } = usePWAInstall()
   const navigate = useNavigate()
 
   // Mock data for display - now using actual user data from context
@@ -107,6 +111,21 @@ export default function Navbar() {
                           Wallet
                         </Link>
                       )}
+                      
+                      {/* Download App in dropdown */}
+                      {!isInstalled && (canInstall || true) && (
+                        <>
+                          <div className="border-t border-gray-200 dark:border-gray-600 my-2"></div>
+                          <button 
+                            onClick={() => setShowInstallDialog(true)} 
+                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-primary flex items-center gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download App
+                          </button>
+                        </>
+                      )}
+                      
                       <div className="border-t border-gray-200 dark:border-gray-600 my-2"></div>
                       <button onClick={handleSignOut} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-red-600">
                         Sign Out
@@ -124,6 +143,18 @@ export default function Navbar() {
               </div>
             ) : (
               <div className="flex items-center space-x-4">
+                {/* Download App Button for non-logged-in users */}
+                {!isInstalled && (canInstall || true) && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => setShowInstallDialog(true)}
+                    className="border-primary/50 text-primary hover:bg-primary/10"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download App
+                  </Button>
+                )}
+                
                 <Link to="/login">
                   <Button variant="ghost">Sign In</Button>
                 </Link>
@@ -210,6 +241,21 @@ export default function Navbar() {
                       </div>
                     )}
                     
+                    {/* Download App Button - Only show if not installed */}
+                    {!isInstalled && (canInstall || true) && (
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          setShowInstallDialog(true)
+                          setIsMobileMenuOpen(false)
+                        }}
+                        className="w-full justify-start gap-2 border-primary/50 text-primary hover:bg-primary/10"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download App
+                      </Button>
+                    )}
+                    
                     <Button 
                       variant="outline" 
                       onClick={handleSignOut}
@@ -221,6 +267,21 @@ export default function Navbar() {
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    {/* Download App Button - Show for non-logged-in users too */}
+                    {!isInstalled && (canInstall || true) && (
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          setShowInstallDialog(true)
+                          setIsMobileMenuOpen(false)
+                        }}
+                        className="w-full justify-start gap-2 border-primary/50 text-primary hover:bg-primary/10"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download App
+                      </Button>
+                    )}
+                    
                     <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="ghost" className="w-full">
                         Sign In
@@ -238,6 +299,12 @@ export default function Navbar() {
           </div>
         )}
       </div>
+      
+      {/* Install App Dialog */}
+      <InstallAppDialog 
+        open={showInstallDialog} 
+        onOpenChange={setShowInstallDialog}
+      />
     </nav>
   )
 }

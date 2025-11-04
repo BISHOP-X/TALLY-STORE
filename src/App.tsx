@@ -6,6 +6,7 @@ import { Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from '@/contexts/SimpleAuth'
 import { ProtectedRoute, PublicRoute } from '@/components/SimpleProtectedRoute'
+import InstallPromptBanner from '@/components/InstallPromptBanner'
 
 // Pages
 import Index from "./pages/Index";
@@ -44,6 +45,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <InstallPromptBanner />
           <AuthProvider>
             <Routes>
               {/* Public Routes */}
