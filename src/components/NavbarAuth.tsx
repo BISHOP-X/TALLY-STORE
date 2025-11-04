@@ -6,13 +6,15 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
 import InstallAppDialog from '@/components/InstallAppDialog'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
+import { useToast } from '@/hooks/use-toast'
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showInstallDialog, setShowInstallDialog] = useState(false)
   const { user, signOut, isAdmin, walletBalance } = useAuth()
-  const { canInstall, isInstalled } = usePWAInstall()
+  const { canInstall, isInstalled, isAndroid, isIOS, installApp } = usePWAInstall()
+  const { toast } = useToast()
   const navigate = useNavigate()
 
   // Mock data for display - now using actual user data from context
@@ -41,6 +43,31 @@ export default function Navbar() {
   const handleSignOut = async () => {
     signOut()
     setIsMobileMenuOpen(false)
+  }
+
+  const handleDownloadClick = async () => {
+    // Android: Auto-install immediately
+    if (isAndroid || canInstall) {
+      const success = await installApp()
+      if (success) {
+        toast({
+          title: "App Installing! 📱",
+          description: "TallyStore is being added to your home screen.",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Installation Cancelled",
+          description: "You can install the app anytime from the menu.",
+        })
+      }
+    } else if (isIOS) {
+      // iOS: Show instructions dialog
+      setShowInstallDialog(true)
+    } else {
+      // Fallback: Show dialog
+      setShowInstallDialog(true)
+    }
   }
 
   return (
@@ -117,7 +144,7 @@ export default function Navbar() {
                         <>
                           <div className="border-t border-gray-200 dark:border-gray-600 my-2"></div>
                           <button 
-                            onClick={() => setShowInstallDialog(true)} 
+                            onClick={handleDownloadClick} 
                             className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-primary flex items-center gap-2"
                           >
                             <Download className="h-4 w-4" />
@@ -147,7 +174,7 @@ export default function Navbar() {
                 {!isInstalled && (canInstall || true) && (
                   <Button 
                     variant="outline"
-                    onClick={() => setShowInstallDialog(true)}
+                    onClick={handleDownloadClick}
                     className="border-primary/50 text-primary hover:bg-primary/10"
                   >
                     <Download className="h-4 w-4 mr-2" />
@@ -246,7 +273,7 @@ export default function Navbar() {
                       <Button 
                         variant="outline"
                         onClick={() => {
-                          setShowInstallDialog(true)
+                          handleDownloadClick()
                           setIsMobileMenuOpen(false)
                         }}
                         className="w-full justify-start gap-2 border-primary/50 text-primary hover:bg-primary/10"
@@ -272,7 +299,7 @@ export default function Navbar() {
                       <Button 
                         variant="outline"
                         onClick={() => {
-                          setShowInstallDialog(true)
+                          handleDownloadClick()
                           setIsMobileMenuOpen(false)
                         }}
                         className="w-full justify-start gap-2 border-primary/50 text-primary hover:bg-primary/10"
