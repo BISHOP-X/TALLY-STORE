@@ -178,7 +178,7 @@ export default function InstallAppDialog({ open, onOpenChange }: InstallAppDialo
                   <p className="font-medium mb-1">Tap the Share button</p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Share2 className="h-4 w-4" />
-                    <span>Look for <strong>Share icon</strong> or <strong>aA button</strong> at the bottom</span>
+                    <span>Look for the <strong>Share icon</strong> (square with arrow) at the bottom or top</span>
                   </div>
                 </div>
               </div>
@@ -192,15 +192,29 @@ export default function InstallAppDialog({ open, onOpenChange }: InstallAppDialo
                   <p className="font-medium mb-1">Scroll down and tap "Add to Home Screen"</p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Plus className="h-4 w-4" />
-                    <span>You may need to scroll down in the menu to find it</span>
+                    <span>In the Share menu, scroll down to find this option</span>
                   </div>
                 </div>
               </div>
 
-              {/* Step 3 */}
+              {/* Step 3 - NEW: iOS 26+ Toggle */}
               <div className="flex gap-4">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm">
                   3
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium mb-1">Ensure "Open as a web app" is enabled</p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <CheckCircle className="h-4 w-4" />
+                    <span>This toggle should be <strong>ON</strong> by default (iOS 26+)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm">
+                  4
                 </div>
                 <div className="flex-1">
                   <p className="font-medium mb-1">Tap "Add" in the top right corner</p>
@@ -216,10 +230,10 @@ export default function InstallAppDialog({ open, onOpenChange }: InstallAppDialo
                 <AlertDescription className="text-center">
                   <div className="text-4xl mb-2">📱</div>
                   <p className="text-sm font-medium mb-1">
-                    Look for the <Share2 className="h-3 w-3 inline mx-1" /> Share button at the bottom
+                    Look for the <Share2 className="h-3 w-3 inline mx-1" /> Share button
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Or tap <strong>aA</strong> button, then tap <strong>Share</strong>
+                    Square icon with an upward arrow at the bottom or top of Safari
                   </p>
                 </AlertDescription>
               </Alert>
