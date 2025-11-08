@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Bitcoin, DollarSign, TrendingDown, Copy, ExternalLink, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { Bitcoin, DollarSign, TrendingDown, Copy, ExternalLink, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
@@ -81,11 +81,15 @@ export default function CryptoExchange() {
     return () => clearInterval(interval);
   }, [depositInfo]);
 
-  const fetchRates = async () => {
+  const fetchRates = async (skipLoadingState = false) => {
     try {
+      if (!skipLoadingState) {
+        setLoadingRates(true);
+      }
+
       const { data, error } = await supabase
         .from('crypto_exchange_rates')
-        .select('crypto_type, market_rate, manual_rate, use_manual, markup_percentage');
+        .select('crypto_type, market_rate, manual_rate, use_manual, markup_percentage, last_updated');
 
       if (error) throw error;
 
@@ -103,6 +107,42 @@ export default function CryptoExchange() {
       toast({
         title: "Error",
         description: "Failed to load exchange rates",
+        variant: "destructive",
+      });
+    } finally {
+      if (!skipLoadingState) {
+        setLoadingRates(false);
+      }
+    }
+  };
+
+  const updateLiveRates = async () => {
+    try {
+      setLoadingRates(true);
+      
+      // Call Edge Function to update rates from CoinGecko
+      const { data, error } = await supabase.functions.invoke('update-crypto-rates', {
+        method: 'POST',
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to update rates');
+      }
+
+      // Refresh rates from database (skip loading state since we're already showing it)
+      await fetchRates(true);
+
+      toast({
+        title: "Rates Updated! 🔄",
+        description: `BTC: ₦${data.rates.BTC.toLocaleString()}`,
+      });
+    } catch (error: any) {
+      console.error('Error updating rates:', error);
+      toast({
+        title: "Update Failed",
+        description: error.message || "Could not fetch live rates",
         variant: "destructive",
       });
     } finally {
@@ -437,9 +477,20 @@ export default function CryptoExchange() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Exchange Rate:</span>
-                      <span className="font-semibold text-lg">
-                        1 {crypto} = ₦{rates[crypto]?.toLocaleString()}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-lg">
+                          1 {crypto} = ₦{rates[crypto]?.toLocaleString()}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={updateLiveRates}
+                          disabled={loadingRates}
+                          className="h-7 px-2"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${loadingRates ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Markup:</span>
@@ -517,7 +568,7 @@ export default function CryptoExchange() {
 
       {/* Deposit Instructions Modal */}
       <Dialog open={showDepositModal} onOpenChange={setShowDepositModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">
               Send {depositInfo?.cryptoType} to Complete Sale
