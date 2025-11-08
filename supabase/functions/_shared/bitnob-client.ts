@@ -113,12 +113,45 @@ export class BitnobClient {
       const response = await this.makeRequest('POST', endpoint, payload);
 
       if (!response.success) {
+        console.error('Bitnob generateAddress failed:', {
+          cryptoType: request.cryptoType,
+          chain: request.chain,
+          endpoint,
+          payload,
+          response,
+        });
         return { success: false, error: response.message || 'Failed to generate address' };
       }
 
+      const generatedAddress = response.data?.address || response.data?.lightning_address;
+      
+      // VALIDATION: Check if address matches expected network (only for stablecoins)
+      if (request.cryptoType !== 'BTC' && request.chain === 'tron') {
+        // For USDT/USDC on TRON, address MUST start with 'T'
+        if (!generatedAddress?.startsWith('T')) {
+          console.error('CRITICAL: Bitnob returned wrong address type for stablecoin!', {
+            expected: 'TRON address (starts with T)',
+            received: generatedAddress,
+            cryptoType: request.cryptoType,
+            chain: request.chain,
+            fullResponse: response,
+          });
+          return { 
+            success: false, 
+            error: `Stablecoin address validation failed: Expected TRON address but got ${generatedAddress?.slice(0, 10)}... Please contact support.` 
+          };
+        }
+      }
+
+      console.log('Bitnob address generated successfully:', {
+        cryptoType: request.cryptoType,
+        chain: request.chain,
+        addressPrefix: generatedAddress?.slice(0, 10),
+      });
+
       return {
         success: true,
-        address: response.data?.address || response.data?.lightning_address,
+        address: generatedAddress,
         reference: response.data?.reference || response.data?.id,
         expiresAt: response.data?.expiresAt,
       };

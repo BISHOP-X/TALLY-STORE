@@ -43,7 +43,7 @@ interface DepositInfo {
 }
 
 export default function CryptoExchange() {
-  const [crypto, setCrypto] = useState<CryptoType>("USDT");
+  const [crypto, setCrypto] = useState<CryptoType>("BTC"); // Default to BTC (only working option)
   const [amount, setAmount] = useState("");
   const [rates, setRates] = useState<ExchangeRates>({ BTC: 0, USDT: 0, USDC: 0 });
   const [loading, setLoading] = useState(false);
@@ -360,26 +360,42 @@ export default function CryptoExchange() {
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="USDT" className="cursor-pointer">
+                  <SelectItem value="USDT" disabled className="cursor-not-allowed opacity-50">
                     <div className="flex items-center gap-3 py-1">
                       <DollarSign className="w-5 h-5 text-green-500" />
                       <div>
-                        <div className="font-medium">Tether (USDT)</div>
-                        <div className="text-xs text-muted-foreground">TRC20 - Lowest fees</div>
+                        <div className="font-medium flex items-center gap-2">
+                          Tether (USDT)
+                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Coming Soon</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">TRC20 - Waiting on API clarification</div>
                       </div>
                     </div>
                   </SelectItem>
-                  <SelectItem value="USDC" className="cursor-pointer">
+                  <SelectItem value="USDC" disabled className="cursor-not-allowed opacity-50">
                     <div className="flex items-center gap-3 py-1">
                       <DollarSign className="w-5 h-5 text-blue-500" />
                       <div>
-                        <div className="font-medium">USD Coin (USDC)</div>
-                        <div className="text-xs text-muted-foreground">Multiple networks</div>
+                        <div className="font-medium flex items-center gap-2">
+                          USD Coin (USDC)
+                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Coming Soon</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">Multiple networks - Waiting on API clarification</div>
                       </div>
                     </div>
                   </SelectItem>
                 </SelectContent>
               </Select>
+              
+              {/* Stablecoin Notice */}
+              {(crypto === 'USDT' || crypto === 'USDC') && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs text-blue-800">
+                    ℹ️ <strong>USDT/USDC support is temporarily disabled</strong> while we clarify the correct API integration with Bitnob. 
+                    Bitcoin (Lightning) is fully operational and ready to use.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Amount Input */}
@@ -464,12 +480,17 @@ export default function CryptoExchange() {
               onClick={handleSell}
               className="w-full h-14 text-lg"
               size="lg"
-              disabled={loading || loadingRates || !amount || parseFloat(amount) <= 0}
+              disabled={loading || loadingRates || !amount || parseFloat(amount) <= 0 || crypto !== 'BTC'}
             >
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   Creating Order...
+                </>
+              ) : crypto !== 'BTC' ? (
+                <>
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  {crypto} Temporarily Unavailable
                 </>
               ) : (
                 <>
@@ -521,6 +542,23 @@ export default function CryptoExchange() {
             {/* Deposit Address */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Deposit Address</Label>
+              
+              {/* Network Warning - PROMINENT */}
+              <div className="p-3 bg-red-50 border-2 border-red-400 rounded-lg mb-3">
+                <p className="text-sm font-bold text-red-900 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  CRITICAL: Use {depositInfo && getNetworkName(depositInfo.chain)} Network ONLY!
+                </p>
+                <p className="text-xs text-red-800 mt-2">
+                  {depositInfo?.chain === 'tron' 
+                    ? '⚠️ Do NOT send from Bitcoin, Ethereum, or other networks. This is a TRON address (starts with T). Sending from wrong network = PERMANENT LOSS.'
+                    : depositInfo?.chain === 'btc'
+                    ? '⚠️ Do NOT send from TRON, Ethereum, or other networks. This is a Bitcoin Lightning address. Sending from wrong network = PERMANENT LOSS.'
+                    : '⚠️ Use the correct network only. Wrong network = PERMANENT LOSS of funds.'
+                  }
+                </p>
+              </div>
+
               <div className="flex gap-2">
                 <Input
                   value={depositInfo?.depositAddress || ""}
@@ -569,12 +607,23 @@ export default function CryptoExchange() {
 
             {/* Important Warnings */}
             <div className="space-y-2 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-              <p className="text-sm font-semibold text-orange-900">⚠️ Important:</p>
+              <p className="text-sm font-semibold text-orange-900">⚠️ Important Instructions:</p>
               <ul className="text-xs text-orange-800 space-y-1 list-disc list-inside">
                 <li>Send <strong>exactly {depositInfo?.cryptoAmount} {depositInfo?.cryptoType}</strong> (not more, not less)</li>
-                <li>Use <strong>{depositInfo && getNetworkName(depositInfo.chain)}</strong> network only</li>
-                <li>Funds will be credited after 3 blockchain confirmations</li>
-                <li>Do not close this window until payment is sent</li>
+                <li>Use <strong>{depositInfo && getNetworkName(depositInfo.chain)}</strong> network in your wallet app</li>
+                <li>
+                  {depositInfo?.chain === 'tron' && (
+                    <>Your wallet MUST show "<strong>TRC-20</strong>" or "<strong>TRON</strong>" when selecting network</>
+                  )}
+                  {depositInfo?.chain === 'btc' && (
+                    <>Your wallet MUST show "<strong>Bitcoin</strong>" or "<strong>BTC Lightning</strong>" when selecting network</>
+                  )}
+                  {depositInfo?.chain !== 'tron' && depositInfo?.chain !== 'btc' && (
+                    <>Select the correct network in your wallet</>
+                  )}
+                </li>
+                <li>Funds will be credited after 3 blockchain confirmations (~5-15 minutes)</li>
+                <li>Wrong network = <strong className="text-red-700">PERMANENT LOSS</strong> of your crypto</li>
               </ul>
             </div>
 
