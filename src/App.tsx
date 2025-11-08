@@ -30,6 +30,9 @@ import ContactPage from '@/pages/ContactPage'
 import WebServicesPage from '@/pages/WebServicesPage'
 import AdminPage from '@/pages/AdminPage'
 import EmailConfirmation from '@/pages/EmailConfirmation'
+import CryptoExchange from '@/pages/CryptoExchange'
+import CryptoWithdrawal from '@/pages/CryptoWithdrawal'
+import CryptoHistory from '@/pages/CryptoHistory'
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -135,6 +138,30 @@ const App = () => (
                 element={
                   <ProtectedRoute requireRole="user">
                     <PaymentSuccessPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/crypto-exchange" 
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <CryptoExchange />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/crypto-withdrawal" 
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <CryptoWithdrawal />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/crypto-history" 
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <CryptoHistory />
                   </ProtectedRoute>
                 } 
               />

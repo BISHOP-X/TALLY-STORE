@@ -124,9 +124,20 @@ export default function Navbar() {
                   {/* Dropdown Menu */}
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div className="py-2">
-                      <Link to={isAdmin ? '/admin' : '/dashboard'} className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
-                        {isAdmin ? 'Admin Panel' : 'Dashboard'}
-                      </Link>
+                      {isAdmin ? (
+                        <>
+                          <Link to="/admin" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                            Admin Panel
+                          </Link>
+                          <Link to="/dashboard" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                            My Dashboard
+                          </Link>
+                        </>
+                      ) : (
+                        <Link to="/dashboard" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                          Dashboard
+                        </Link>
+                      )}
                       <Link to="/profile" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
                         Profile Settings
                       </Link>
@@ -254,12 +265,29 @@ export default function Navbar() {
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 {user ? (
                   <div className="space-y-4">
-                    <Link to={isAdmin ? '/admin' : '/dashboard'} onClick={() => setIsMobileMenuOpen(false)}>
-                      <Button variant="ghost" className="w-full justify-start gap-2">
-                        <User className="h-4 w-4" />
-                        {isAdmin ? 'Admin Panel' : 'Dashboard'}
-                      </Button>
-                    </Link>
+                    {isAdmin ? (
+                      <>
+                        <Link to="/admin" onClick={() => setIsMobileMenuOpen(false)}>
+                          <Button variant="ghost" className="w-full justify-start gap-2">
+                            <User className="h-4 w-4" />
+                            Admin Panel
+                          </Button>
+                        </Link>
+                        <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                          <Button variant="ghost" className="w-full justify-start gap-2">
+                            <User className="h-4 w-4" />
+                            My Dashboard
+                          </Button>
+                        </Link>
+                      </>
+                    ) : (
+                      <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start gap-2">
+                          <User className="h-4 w-4" />
+                          Dashboard
+                        </Button>
+                      </Link>
+                    )}
                     
                     {!isAdmin && (
                       <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 px-4">

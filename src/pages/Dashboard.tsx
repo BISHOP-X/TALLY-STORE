@@ -1,11 +1,13 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Wallet, ShoppingBag, Download, Settings } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
+import { CryptoBalanceCard } from '@/components/CryptoBalanceCard'
 
 export default function Dashboard() {
   const { user, walletBalance, signOut } = useAuth()
+  const navigate = useNavigate()
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
@@ -26,25 +28,31 @@ export default function Dashboard() {
 
       {/* Dashboard Content */}
       <div className="container mx-auto px-6 py-8">
-        {/* Wallet Balance Card */}
-        <Card className="mb-8 bg-gradient-primary text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              Wallet Balance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold mb-2">
-              ₦{walletBalance?.toLocaleString() || '0.00'}
-            </div>
-            <Link to="/wallet">
-              <Button variant="secondary" className="bg-white/20 hover:bg-white/30 text-white">
-                Top Up Wallet
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+        {/* Balance Cards - Side by Side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* TallyStore Wallet Balance Card */}
+          <Card className="bg-gradient-primary text-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                TallyStore Balance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold mb-2">
+                ₦{walletBalance?.toLocaleString() || '0.00'}
+              </div>
+              <Link to="/wallet">
+                <Button variant="secondary" className="bg-white/20 hover:bg-white/30 text-white">
+                  Top Up Wallet
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* Crypto Balance Card */}
+          <CryptoBalanceCard />
+        </div>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
