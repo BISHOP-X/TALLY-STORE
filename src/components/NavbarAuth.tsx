@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
-import { Menu, X, User, LogOut, Wallet, Download } from "lucide-react"
+import { Menu, X, User, LogOut, Wallet, Download, Bitcoin } from "lucide-react"
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
 import InstallAppDialog from '@/components/InstallAppDialog'
@@ -149,6 +149,10 @@ export default function Navbar() {
                           Wallet
                         </Link>
                       )}
+                      <Link to="/crypto-exchange" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                        <Bitcoin className="h-4 w-4" />
+                        Crypto Exchange
+                      </Link>
                       
                       {/* Download App in dropdown */}
                       {!isInstalled && (canInstall || true) && (
@@ -295,6 +299,13 @@ export default function Navbar() {
                         Balance: ₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}
                       </div>
                     )}
+                    
+                    <Link to="/crypto-exchange" onClick={() => setIsMobileMenuOpen(false)}>
+                      <Button variant="ghost" className="w-full justify-start gap-2">
+                        <Bitcoin className="h-4 w-4" />
+                        Crypto Exchange
+                      </Button>
+                    </Link>
                     
                     {/* Download App Button - Only show if not installed */}
                     {!isInstalled && (canInstall || true) && (

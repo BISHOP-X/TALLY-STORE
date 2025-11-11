@@ -12,11 +12,11 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       {/* Navigation */}
-      <nav className="border-b bg-white/80 backdrop-blur-sm">
+      <nav className="border-b bg-white dark:bg-gray-900 shadow-sm">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-primary">TallyStore</h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
               Welcome back, {user?.email?.split('@')[0] || 'User'}!
             </p>
           </div>

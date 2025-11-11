@@ -32,11 +32,6 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // 🔒 BETA: Only show crypto features to admins during testing phase
-  if (!isAdmin) {
-    return null;
-  }
-
   // Fetch user balances
   useEffect(() => {
     fetchBalances();
