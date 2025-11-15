@@ -348,7 +348,7 @@ const PrivacyPage = () => {
           </div>
           
           <p className="text-gray-600 dark:text-gray-400 text-sm">
-            © 2024 TallyStore. All rights reserved.
+            © 2024 Tallybest Store LTD. All rights reserved.
           </p>
         </div>
       </div>
