@@ -64,7 +64,7 @@ interface CryptoWithdrawal {
   account_number: string;
   account_name: string;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'pending_approval';
-  bitnob_reference: string | null;
+  payment_reference: string | null;
   created_at: string;
   processed_at: string | null;
 }

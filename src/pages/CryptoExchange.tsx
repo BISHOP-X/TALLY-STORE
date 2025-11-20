@@ -431,8 +431,8 @@ export default function CryptoExchange() {
               {(crypto === 'USDT' || crypto === 'USDC') && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-xs text-blue-800">
-                    ℹ️ <strong>USDT/USDC support is temporarily disabled</strong> while we clarify the correct API integration with Bitnob. 
-                    Bitcoin (Lightning) is fully operational and ready to use.
+                    ℹ️ <strong>USDT/USDC support is temporarily disabled</strong> during system upgrade. 
+                    Bitcoin is fully operational and ready to use.
                   </p>
                 </div>
               )}

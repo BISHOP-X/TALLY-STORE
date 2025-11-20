@@ -104,7 +104,7 @@ export default function CryptoWithdrawal() {
     setAccountName("");
 
     try {
-      // In production, this would call Bitnob or Paystack API to resolve account
+      // In production, this would call SageCloud API to resolve account
       // For now, simulate validation
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -478,7 +478,7 @@ export default function CryptoWithdrawal() {
               </p>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                Secure bank transfer via Bitnob payment gateway
+                Secure bank transfer via SageCloud payment gateway
               </p>
             </div>
           </CardContent>
