@@ -62,15 +62,16 @@ export default function PaymentSuccessPage() {
         console.log('📥 Verification result:', verification);
 
         if (verification.success && verification.status === 'success') {
-          // Payment successful - update wallet balance
+          // Payment successful - update wallet balance (idempotent updater)
           if (user?.id) {
             try {
-              await updateUserWalletBalance(user.id, verification.amount);
+              const transactionRef = transactionReference || '';
+              await updateUserWalletBalance(user.id, verification.amount, transactionRef, verification.transactionReference);
               await refreshWalletBalance();
-              
+
               // Clear pending transaction
               localStorage.removeItem('pending_topup');
-              
+
               setVerificationResult({
                 success: true,
                 status: 'success',

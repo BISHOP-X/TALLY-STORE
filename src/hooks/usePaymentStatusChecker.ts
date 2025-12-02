@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { verifyPayment } from '@/services/ercaspay';
-import { updateUserWalletBalance, recordTopUpTransaction } from '@/lib/supabase';
+import { updateUserWalletBalance } from '@/lib/supabase';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -103,19 +103,18 @@ export function usePaymentStatusChecker() {
           
           console.log('✅ No duplicate found, processing payment...');
           console.log('💰 Adding amount to wallet:', verification.amount);
-          console.log('📝 Recording transaction for user:', user.id);
-          
-          await updateUserWalletBalance(user.id, verification.amount);
-          
-          const transactionRecorded = await recordTopUpTransaction(
-            user.id, 
-            verification.amount, 
-            transactionRef, 
+          console.log('📝 Recording transaction for user via atomic updater:', user.id);
+
+          // Use the idempotent wallet updater which also records the transaction when a reference is provided
+          const updated = await updateUserWalletBalance(
+            user.id,
+            verification.amount,
+            transactionRef,
             verification.transactionReference
           );
-          
-          console.log('📝 Transaction recorded:', transactionRecorded);
-          
+
+          console.log('📝 Wallet update result:', updated);
+
           await refreshWalletBalance();
           
           // Mark transaction as processed
@@ -265,19 +264,17 @@ export function usePaymentStatusChecker() {
               
               console.log('✅ Focus check: No duplicate found, processing payment...');
               console.log('💰 Adding amount to wallet on focus:', verification.amount);
-              console.log('📝 Recording transaction on focus for user:', user.id);
-              
-              await updateUserWalletBalance(user.id, verification.amount);
-              
-              const transactionRecorded = await recordTopUpTransaction(
-                user.id, 
-                verification.amount, 
-                transactionRef, 
+              console.log('📝 Recording transaction on focus via atomic updater for user:', user.id);
+
+              const updatedFocus = await updateUserWalletBalance(
+                user.id,
+                verification.amount,
+                transactionRef,
                 verification.transactionReference
               );
-              
-              console.log('📝 Transaction recorded on focus:', transactionRecorded);
-              
+
+              console.log('📝 Wallet update result on focus:', updatedFocus);
+
               await refreshWalletBalance();
               
               // Mark transaction as processed

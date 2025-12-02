@@ -20,7 +20,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Bitcoin, 
-  DollarSign, 
   ArrowDownCircle, 
   Clock, 
   CheckCircle2, 
@@ -31,7 +30,9 @@ import {
   Loader2,
   History,
   TrendingDown,
-  Banknote
+  Banknote,
+  RefreshCw,
+  Zap
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -41,18 +42,37 @@ import QRCode from "react-qr-code";
 
 interface CryptoTransaction {
   id: string;
-  crypto_type: 'BTC' | 'USDT' | 'USDC';
+  crypto_type: string;
   crypto_amount: number;
   naira_amount: number;
-  exchange_rate: number;
-  deposit_address: string;
-  chain: string;
-  status: 'pending' | 'confirmed' | 'completed' | 'expired' | 'failed';
-  confirmations: number;
-  tx_hash: string | null;
+  rate: number;
+  status: string; // pending, processing, completed, failed, expired, refunded, partially_paid
+  transaction_type: string;
+  payment_provider: string;
+  
+  // NowPayments fields
+  nowpayments_payment_id?: string;
+  nowpayments_purchase_id?: string;
+  nowpayments_pay_address?: string;
+  nowpayments_payin_extra_id?: string | null; // Memo/Tag for XRP, XLM, EOS
+  nowpayments_network?: string;
+  nowpayments_smart_contract?: string | null;
+  nowpayments_amount_received?: number | null;
+  actually_paid?: number;
+  outcome_amount?: number;
+  outcome_currency?: string;
+  payment_type?: string;
+  burning_percent?: number | null;
+  expiration_date?: string;
+  fixed_rate_valid_until?: string;
+  payout_hash?: string | null;
+  payment_extra_ids?: string | null; // JSON array of child payment IDs
+  parent_payment_id?: number | null;
+  origin_type?: string | null;
+  
+  payment_reference?: string;
   created_at: string;
-  expires_at: string;
-  completed_at: string | null;
+  updated_at?: string;
 }
 
 interface CryptoWithdrawal {
@@ -63,8 +83,14 @@ interface CryptoWithdrawal {
   bank_name: string;
   account_number: string;
   account_name: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'pending_approval';
+  status: string; // pending, processing, completed, failed
   payment_reference: string | null;
+  
+  // SageCloud fields
+  sagecloud_reference?: string | null;
+  sagecloud_session_id?: string | null;
+  sagecloud_response?: any;
+  
   created_at: string;
   processed_at: string | null;
 }
@@ -73,6 +99,7 @@ export default function CryptoHistory() {
   const [transactions, setTransactions] = useState<CryptoTransaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<CryptoWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<CryptoTransaction | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const { toast } = useToast();
@@ -83,14 +110,20 @@ export default function CryptoHistory() {
     
     // Auto-refresh every 30 seconds for pending transactions
     const interval = setInterval(() => {
-      fetchHistory();
+      fetchHistory(true);
     }, 30000);
 
     return () => clearInterval(interval);
   }, []);
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (silent = false) => {
     try {
+      if (!silent) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         navigate('/login');
@@ -119,60 +152,72 @@ export default function CryptoHistory() {
 
     } catch (error: any) {
       console.error('Error fetching history:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load transaction history",
-        variant: "destructive",
-      });
+      if (!silent) {
+        toast({
+          title: "Error",
+          description: "Failed to load transaction history",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { variant: any; icon: any; label: string }> = {
+    const statusConfig: Record<string, { variant: any; icon: any; label: string; color?: string }> = {
       pending: { 
         variant: "secondary", 
         icon: Clock, 
-        label: "Pending Payment" 
-      },
-      confirmed: { 
-        variant: "default", 
-        icon: AlertCircle, 
-        label: "Confirming" 
-      },
-      completed: { 
-        variant: "default", 
-        icon: CheckCircle2, 
-        label: "Completed" 
-      },
-      expired: { 
-        variant: "destructive", 
-        icon: XCircle, 
-        label: "Expired" 
-      },
-      failed: { 
-        variant: "destructive", 
-        icon: XCircle, 
-        label: "Failed" 
+        label: "Awaiting Payment",
+        color: "text-yellow-700"
       },
       processing: { 
         variant: "default", 
         icon: Loader2, 
-        label: "Processing" 
+        label: "Confirming",
+        color: "text-blue-700"
       },
-      pending_approval: { 
+      completed: { 
+        variant: "default", 
+        icon: CheckCircle2, 
+        label: "Completed",
+        color: "text-green-700"
+      },
+      failed: { 
+        variant: "destructive", 
+        icon: XCircle, 
+        label: "Failed"
+      },
+      expired: { 
+        variant: "destructive", 
+        icon: XCircle, 
+        label: "Expired"
+      },
+      refunded: { 
         variant: "secondary", 
         icon: AlertCircle, 
-        label: "Pending Approval" 
+        label: "Refunded",
+        color: "text-orange-700"
+      },
+      partially_paid: { 
+        variant: "secondary", 
+        icon: AlertCircle, 
+        label: "Partial Payment",
+        color: "text-orange-700"
       },
     };
 
-    const config = statusConfig[status] || statusConfig.pending;
+    const config = statusConfig[status] || { 
+      variant: "secondary", 
+      icon: Clock, 
+      label: status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
+    };
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant} className="gap-1">
+      <Badge variant={config.variant} className={`gap-1 ${config.color || ''}`}>
         <Icon className={`w-3 h-3 ${status === 'processing' ? 'animate-spin' : ''}`} />
         {config.label}
       </Badge>
@@ -180,16 +225,7 @@ export default function CryptoHistory() {
   };
 
   const getCryptoIcon = (crypto: string) => {
-    switch (crypto) {
-      case 'BTC':
-        return <Bitcoin className="w-4 h-4 text-orange-500" />;
-      case 'USDT':
-        return <DollarSign className="w-4 h-4 text-green-500" />;
-      case 'USDC':
-        return <DollarSign className="w-4 h-4 text-blue-500" />;
-      default:
-        return <Bitcoin className="w-4 h-4" />;
-    }
+    return <Bitcoin className="w-4 h-4 text-primary" />;
   };
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -208,29 +244,53 @@ export default function CryptoHistory() {
     }
   };
 
-  const getExplorerUrl = (chain: string, hash: string): string => {
+  const getExplorerUrl = (network: string, hash: string): string => {
     const explorers: Record<string, string> = {
       btc: `https://mempool.space/tx/${hash}`,
+      bitcoin: `https://mempool.space/tx/${hash}`,
+      trc20: `https://tronscan.org/#/transaction/${hash}`,
       tron: `https://tronscan.org/#/transaction/${hash}`,
+      erc20: `https://etherscan.io/tx/${hash}`,
       ethereum: `https://etherscan.io/tx/${hash}`,
-      polygon: `https://polygonscan.com/tx/${hash}`,
+      bep20: `https://bscscan.com/tx/${hash}`,
       bsc: `https://bscscan.com/tx/${hash}`,
+      polygon: `https://polygonscan.com/tx/${hash}`,
+      sol: `https://solscan.io/tx/${hash}`,
+      solana: `https://solscan.io/tx/${hash}`,
+      xrp: `https://xrpscan.com/tx/${hash}`,
+      ripple: `https://xrpscan.com/tx/${hash}`,
     };
-    return explorers[chain] || '#';
+    return explorers[network.toLowerCase()] || `https://blockchain.info/tx/${hash}`;
   };
 
-  const getNetworkName = (chain: string): string => {
+  const getNetworkName = (network: string): string => {
+    if (!network) return 'Unknown';
+    
     const names: Record<string, string> = {
-      btc: "Bitcoin Lightning",
-      tron: "TRON (TRC20)",
-      ethereum: "Ethereum (ERC20)",
+      btc: "Bitcoin",
+      bitcoin: "Bitcoin",
+      trc20: "TRON (TRC20)",
+      tron: "TRON",
+      erc20: "Ethereum (ERC20)",
+      ethereum: "Ethereum",
+      bep20: "BSC (BEP20)",
+      bsc: "BSC",
       polygon: "Polygon",
-      bsc: "BSC (BEP20)",
+      sol: "Solana",
+      solana: "Solana",
+      xrp: "Ripple",
+      ripple: "Ripple",
+      ada: "Cardano",
+      cardano: "Cardano",
+      ltc: "Litecoin",
+      litecoin: "Litecoin",
     };
-    return names[chain] || chain.toUpperCase();
+    return names[network.toLowerCase()] || network.toUpperCase();
   };
 
   const getTimeRemaining = (expiresAt: string): string => {
+    if (!expiresAt) return "N/A";
+    
     const now = new Date().getTime();
     const expires = new Date(expiresAt).getTime();
     const remaining = Math.max(0, Math.floor((expires - now) / 1000));
@@ -245,6 +305,14 @@ export default function CryptoHistory() {
   const viewTransactionDetails = (tx: CryptoTransaction) => {
     setSelectedTransaction(tx);
     setShowDetailsModal(true);
+  };
+
+  const hasChildPayments = (tx: CryptoTransaction): boolean => {
+    return !!(tx.payment_extra_ids && tx.payment_extra_ids !== 'null');
+  };
+
+  const isChildPayment = (tx: CryptoTransaction): boolean => {
+    return !!(tx.parent_payment_id && tx.origin_type === 'REPEATED');
   };
 
   if (loading) {
@@ -262,24 +330,32 @@ export default function CryptoHistory() {
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       {/* Navigation */}
       <nav className="border-b bg-gradient-to-r from-primary to-primary/90 shadow-lg sticky top-0 z-10">
-        <div className="container mx-auto px-6 py-5 flex justify-between items-center">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-5 flex justify-between items-center">
           <Button
             variant="ghost"
             onClick={() => navigate('/dashboard')}
-            className="gap-2 text-white hover:bg-white/20 hover:text-white font-medium"
+            className="gap-1 sm:gap-2 text-white hover:bg-white/20 hover:text-white font-medium text-sm sm:text-base"
           >
-            ← Back to Dashboard
+            ← <span className="hidden sm:inline">Back to Dashboard</span><span className="sm:hidden">Back</span>
           </Button>
-          <div className="flex items-center gap-3">
-            <History className="w-7 h-7 text-white" />
-            <h1 className="text-2xl font-bold text-white">Crypto History</h1>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <History className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white">History</h1>
           </div>
-          <div className="w-40" /> {/* Spacer */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => fetchHistory()}
+            disabled={refreshing}
+            className="text-white hover:bg-white/20"
+          >
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
       </nav>
 
       {/* Main Content */}
-      <div className="container mx-auto p-6 max-w-7xl">
+      <div className="container mx-auto p-4 sm:p-6 max-w-7xl">
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <Button
@@ -323,7 +399,8 @@ export default function CryptoHistory() {
                   <p className="text-muted-foreground mb-6">
                     Start selling your crypto to get Naira instantly
                   </p>
-                  <Button onClick={() => navigate('/crypto-exchange')}>
+                  <Button onClick={() => navigate('/crypto-exchange')} size="lg">
+                    <Zap className="w-4 h-4 mr-2" />
                     Sell Crypto Now
                   </Button>
                 </CardContent>
@@ -331,9 +408,12 @@ export default function CryptoHistory() {
             ) : (
               <Card>
                 <CardHeader>
-                  <CardTitle>Crypto Sale Transactions</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5" />
+                    Crypto Sale Transactions
+                  </CardTitle>
                   <CardDescription>
-                    Track your crypto-to-Naira conversions
+                    Powered by NowPayments • Track your crypto-to-Naira conversions
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -345,13 +425,17 @@ export default function CryptoHistory() {
                           <TableHead>Crypto</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Naira Value</TableHead>
+                          <TableHead>Network</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {transactions.map((tx) => (
-                          <TableRow key={tx.id}>
+                          <TableRow 
+                            key={tx.id}
+                            className={isChildPayment(tx) ? 'bg-blue-50/50' : ''}
+                          >
                             <TableCell>
                               <div className="text-sm">
                                 {new Date(tx.created_at).toLocaleDateString()}
@@ -364,16 +448,44 @@ export default function CryptoHistory() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {getCryptoIcon(tx.crypto_type)}
-                                <span className="font-medium">{tx.crypto_type}</span>
+                                <span className="font-medium">{tx.crypto_type.toUpperCase()}</span>
                               </div>
                             </TableCell>
                             <TableCell className="font-mono">
-                              {tx.crypto_amount} {tx.crypto_type}
+                              <div>
+                                {tx.crypto_amount} {tx.crypto_type.toUpperCase()}
+                              </div>
+                              {tx.actually_paid > 0 && tx.actually_paid !== tx.crypto_amount && (
+                                <div className="text-xs text-muted-foreground">
+                                  Received: {tx.actually_paid}
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="font-semibold text-green-600">
-                              ₦{tx.naira_amount.toLocaleString()}
+                              ₦{tx.naira_amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
-                            <TableCell>{getStatusBadge(tx.status)}</TableCell>
+                            <TableCell>
+                              <span className="text-xs text-muted-foreground">
+                                {getNetworkName(tx.nowpayments_network || '')}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {getStatusBadge(tx.status)}
+                              {hasChildPayments(tx) && (
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    +{JSON.parse(tx.payment_extra_ids!).length} more
+                                  </Badge>
+                                </div>
+                              )}
+                              {isChildPayment(tx) && (
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="text-xs bg-blue-50">
+                                    Repeated
+                                  </Badge>
+                                </div>
+                              )}
+                            </TableCell>
                             <TableCell>
                               <Button
                                 variant="outline"
@@ -403,7 +515,7 @@ export default function CryptoHistory() {
                   <p className="text-muted-foreground mb-6">
                     Withdraw your crypto balance to your bank account
                   </p>
-                  <Button onClick={() => navigate('/crypto-withdrawal')}>
+                  <Button onClick={() => navigate('/crypto-withdrawal')} size="lg">
                     Withdraw Now
                   </Button>
                 </CardContent>
@@ -413,7 +525,7 @@ export default function CryptoHistory() {
                 <CardHeader>
                   <CardTitle>Bank Withdrawals</CardTitle>
                   <CardDescription>
-                    Track your bank withdrawal requests
+                    Powered by SageCloud • Track your bank withdrawal requests
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -453,13 +565,13 @@ export default function CryptoHistory() {
                               </div>
                             </TableCell>
                             <TableCell className="font-mono">
-                              ₦{wd.amount.toLocaleString()}
+                              ₦{wd.amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
                             <TableCell className="text-red-600 font-mono">
-                              -₦{wd.fee.toLocaleString()}
+                              -₦{wd.fee.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
                             <TableCell className="font-semibold text-green-600">
-                              ₦{wd.net_amount.toLocaleString()}
+                              ₦{wd.net_amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
                             <TableCell>{getStatusBadge(wd.status)}</TableCell>
                           </TableRow>
@@ -476,7 +588,7 @@ export default function CryptoHistory() {
 
       {/* Transaction Details Modal */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedTransaction && getCryptoIcon(selectedTransaction.crypto_type)}
@@ -495,34 +607,54 @@ export default function CryptoHistory() {
                   ? 'bg-green-50 border-green-300' 
                   : selectedTransaction.status === 'pending'
                   ? 'bg-yellow-50 border-yellow-300'
-                  : selectedTransaction.status === 'confirmed'
+                  : selectedTransaction.status === 'processing'
                   ? 'bg-blue-50 border-blue-300'
+                  : selectedTransaction.status === 'partially_paid'
+                  ? 'bg-orange-50 border-orange-300'
                   : 'bg-red-50 border-red-300'
               }`}>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-2">
                   <span className="font-medium">Status:</span>
                   {getStatusBadge(selectedTransaction.status)}
                 </div>
-                {selectedTransaction.status === 'pending' && (
-                  <p className="text-xs mt-2 text-muted-foreground">
-                    ⏳ Time remaining: {getTimeRemaining(selectedTransaction.expires_at)}
+                {selectedTransaction.status === 'pending' && selectedTransaction.expiration_date && (
+                  <p className="text-xs text-yellow-700">
+                    ⏳ Time remaining: {getTimeRemaining(selectedTransaction.expiration_date)}
                   </p>
                 )}
-                {selectedTransaction.status === 'confirmed' && (
-                  <p className="text-xs mt-2 text-blue-700">
-                    🔄 Confirmations: {selectedTransaction.confirmations}/3
+                {selectedTransaction.status === 'processing' && (
+                  <p className="text-xs text-blue-700">
+                    🔄 Payment received, waiting for confirmations...
+                  </p>
+                )}
+                {selectedTransaction.status === 'completed' && (
+                  <p className="text-xs text-green-700">
+                    ✅ Funds credited to your balance!
+                  </p>
+                )}
+                {selectedTransaction.status === 'partially_paid' && (
+                  <p className="text-xs text-orange-700">
+                    ⚠️ Partial payment received. Expected: {selectedTransaction.crypto_amount}, Received: {selectedTransaction.actually_paid}
                   </p>
                 )}
               </div>
 
               {/* QR Code (for pending transactions) */}
-              {selectedTransaction.status === 'pending' && (
-                <div className="flex justify-center p-4 bg-white rounded-lg border-2 border-dashed">
-                  <QRCode 
-                    value={selectedTransaction.deposit_address} 
-                    size={180}
-                    level="M"
-                  />
+              {selectedTransaction.status === 'pending' && selectedTransaction.nowpayments_pay_address && (
+                <div className="space-y-2">
+                  <div className="flex justify-center p-4 bg-white rounded-lg border-2 border-dashed">
+                    <QRCode 
+                      value={selectedTransaction.nowpayments_payin_extra_id 
+                        ? `${selectedTransaction.crypto_type.toLowerCase()}:${selectedTransaction.nowpayments_pay_address}?dt=${selectedTransaction.nowpayments_payin_extra_id}`
+                        : selectedTransaction.nowpayments_pay_address
+                      } 
+                      size={180}
+                      level="M"
+                    />
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground">
+                    Scan to pay with your wallet
+                  </p>
                 </div>
               )}
 
@@ -533,59 +665,128 @@ export default function CryptoHistory() {
                   <span className="font-mono text-sm">{selectedTransaction.id.slice(0, 8)}...</span>
                 </div>
 
+                {selectedTransaction.nowpayments_payment_id && (
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Payment ID:</span>
+                    <span className="font-mono text-sm">{selectedTransaction.nowpayments_payment_id}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground">Cryptocurrency:</span>
-                  <span className="font-medium">{selectedTransaction.crypto_amount} {selectedTransaction.crypto_type}</span>
+                  <span className="font-medium">{selectedTransaction.crypto_amount} {selectedTransaction.crypto_type.toUpperCase()}</span>
                 </div>
+
+                {selectedTransaction.actually_paid > 0 && selectedTransaction.actually_paid !== selectedTransaction.crypto_amount && (
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Actually Paid:</span>
+                    <span className="font-medium text-orange-600">
+                      {selectedTransaction.actually_paid} {selectedTransaction.crypto_type.toUpperCase()}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground">Naira Value:</span>
-                  <span className="font-semibold text-green-600">₦{selectedTransaction.naira_amount.toLocaleString()}</span>
+                  <span className="font-semibold text-green-600">
+                    ₦{selectedTransaction.naira_amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
 
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground">Exchange Rate:</span>
-                  <span className="font-mono">₦{selectedTransaction.exchange_rate.toLocaleString()}</span>
+                  <span className="font-mono">₦{selectedTransaction.rate.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
 
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Network:</span>
-                  <span className="font-medium">{getNetworkName(selectedTransaction.chain)}</span>
-                </div>
-
-                <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-muted-foreground">Deposit Address:</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs">
-                      {selectedTransaction.deposit_address.slice(0, 12)}...
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => copyToClipboard(selectedTransaction.deposit_address, 'Address')}
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
+                {selectedTransaction.nowpayments_network && (
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Network:</span>
+                    <span className="font-medium">{getNetworkName(selectedTransaction.nowpayments_network)}</span>
                   </div>
-                </div>
+                )}
 
-                {selectedTransaction.tx_hash && (
+                {selectedTransaction.nowpayments_pay_address && (
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-muted-foreground">Transaction Hash:</span>
+                    <span className="text-muted-foreground">Payment Address:</span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs">
-                        {selectedTransaction.tx_hash.slice(0, 12)}...
+                        {selectedTransaction.nowpayments_pay_address.slice(0, 12)}...
                       </span>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => window.open(getExplorerUrl(selectedTransaction.chain, selectedTransaction.tx_hash!), '_blank')}
+                        onClick={() => copyToClipboard(selectedTransaction.nowpayments_pay_address!, 'Address')}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedTransaction.nowpayments_payin_extra_id && (
+                  <div className="flex justify-between items-center py-2 border-b bg-yellow-50 px-2 rounded">
+                    <span className="text-muted-foreground font-semibold">Memo/Tag:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-red-600">
+                        {selectedTransaction.nowpayments_payin_extra_id}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => copyToClipboard(selectedTransaction.nowpayments_payin_extra_id!, 'Memo/Tag')}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedTransaction.nowpayments_smart_contract && (
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-muted-foreground">Smart Contract:</span>
+                    <span className="font-mono text-xs">
+                      {selectedTransaction.nowpayments_smart_contract.slice(0, 10)}...{selectedTransaction.nowpayments_smart_contract.slice(-8)}
+                    </span>
+                  </div>
+                )}
+
+                {selectedTransaction.payout_hash && (
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-muted-foreground">Transaction Hash:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs">
+                        {selectedTransaction.payout_hash.slice(0, 12)}...
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => window.open(
+                          getExplorerUrl(selectedTransaction.nowpayments_network || '', selectedTransaction.payout_hash!), 
+                          '_blank'
+                        )}
                       >
                         <ExternalLink className="w-4 h-4" />
                       </Button>
                     </div>
+                  </div>
+                )}
+
+                {isChildPayment(selectedTransaction) && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-700">
+                      ℹ️ This is a repeated payment to the same address. Parent Payment ID: {selectedTransaction.parent_payment_id}
+                    </p>
+                  </div>
+                )}
+
+                {hasChildPayments(selectedTransaction) && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-700">
+                      ℹ️ This payment has {JSON.parse(selectedTransaction.payment_extra_ids!).length} additional payment(s) to the same address.
+                    </p>
                   </div>
                 )}
 
@@ -596,18 +797,35 @@ export default function CryptoHistory() {
                   </span>
                 </div>
 
-                {selectedTransaction.completed_at && (
+                {selectedTransaction.updated_at && selectedTransaction.updated_at !== selectedTransaction.created_at && (
                   <div className="flex justify-between py-2 border-b">
-                    <span className="text-muted-foreground">Completed:</span>
+                    <span className="text-muted-foreground">Last Updated:</span>
                     <span className="text-sm">
-                      {new Date(selectedTransaction.completed_at).toLocaleString()}
+                      {new Date(selectedTransaction.updated_at).toLocaleString()}
                     </span>
+                  </div>
+                )}
+
+                {selectedTransaction.payment_reference && (
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Reference:</span>
+                    <span className="font-mono text-xs">{selectedTransaction.payment_reference}</span>
                   </div>
                 )}
               </div>
 
               {/* Actions */}
-              <div className="pt-4">
+              <div className="pt-4 space-y-2">
+                {selectedTransaction.status === 'pending' && selectedTransaction.nowpayments_pay_address && (
+                  <Button
+                    onClick={() => copyToClipboard(selectedTransaction.nowpayments_pay_address!, 'Payment Address')}
+                    className="w-full"
+                    variant="outline"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Payment Address
+                  </Button>
+                )}
                 <Button
                   onClick={() => setShowDetailsModal(false)}
                   className="w-full"

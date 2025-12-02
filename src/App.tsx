@@ -33,6 +33,8 @@ import EmailConfirmation from '@/pages/EmailConfirmation'
 import CryptoExchange from '@/pages/CryptoExchange'
 import CryptoWithdrawal from '@/pages/CryptoWithdrawal'
 import CryptoHistory from '@/pages/CryptoHistory'
+import BillsPayment from "./pages/BillsPayment";
+import GetIP from "./pages/GetIP";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -150,6 +152,14 @@ const App = () => (
                 } 
               />
               <Route 
+                path="/bills" 
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <BillsPayment />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
                 path="/crypto-withdrawal" 
                 element={
                   <ProtectedRoute requireRole="admin">
@@ -162,6 +172,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireRole="admin">
                     <CryptoHistory />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/get-ip" 
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <GetIP />
                   </ProtectedRoute>
                 } 
               />

@@ -1,20 +1,15 @@
-// Edge Function: update-crypto-rates
-// Updates crypto exchange rates from CoinGecko API
-// Can be called manually or via cron job
+// Edge Function: update-crypto-rates (RENAMED: get-crypto-estimate)
+// Gets real-time crypto price estimates from NowPayments API
+// Converts crypto amount to NGN with live market rates
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { createNowPaymentsClient } from '../_shared/nowpayments-client.ts';
+import { getUsdToNgnRate } from '../_shared/forex-rates.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-interface CoinGeckoResponse {
-  bitcoin?: { ngn: number };
-  tether?: { ngn: number };
-  'usd-coin'?: { ngn: number };
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -22,103 +17,98 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🔄 Fetching live crypto rates from CoinGecko...');
+    // Parse request body
+    const { crypto_amount, crypto_currency } = await req.json();
 
-    // Fetch rates from CoinGecko (Free API, no key needed)
-    const coingeckoUrl = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,tether,usd-coin&vs_currencies=ngn';
-    
-    const response = await fetch(coingeckoUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
+    // Validation
+    if (!crypto_amount || !crypto_currency) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Missing required fields: crypto_amount, crypto_currency' 
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    if (crypto_amount <= 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'crypto_amount must be greater than 0' 
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    console.log(`🔄 Fetching live rate for ${crypto_amount} ${crypto_currency.toUpperCase()}...`);
+
+    // Initialize NowPayments client
+    const nowpaymentsApiKey = Deno.env.get('NOWPAYMENTS_API_KEY');
+    if (!nowpaymentsApiKey) {
+      throw new Error('NOWPAYMENTS_API_KEY not configured');
+    }
+
+    const nowpayments = createNowPaymentsClient({
+      apiKey: nowpaymentsApiKey,
     });
 
-    if (!response.ok) {
-      throw new Error(`CoinGecko API failed: ${response.status} ${response.statusText}`);
-    }
-
-    const data: CoinGeckoResponse = await response.json();
-
-    console.log('✅ Received rates:', data);
-
-    // Extract rates
-    const btcRate = data.bitcoin?.ngn;
-    const usdtRate = data.tether?.ngn;
-    const usdcRate = data['usd-coin']?.ngn;
-
-    if (!btcRate || !usdtRate || !usdcRate) {
-      throw new Error('Missing rates in API response');
-    }
-
-    // Create Supabase client with service role
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    // Get estimated price from NowPayments
+    // currency_from = crypto (e.g., btc, eth, usdt)
+    // currency_to = usd (we'll convert USD to NGN)
+    const estimate = await nowpayments.getEstimatedPrice(
+      crypto_amount,
+      crypto_currency.toLowerCase(),
+      'usd'
     );
 
-    // Update rates in database
-    const updates = [
-      { crypto_type: 'BTC', market_rate: btcRate },
-      { crypto_type: 'USDT', market_rate: usdtRate },
-      { crypto_type: 'USDC', market_rate: usdcRate },
-    ];
+    console.log(`✅ NowPayments estimate: ${estimate.amount_from} ${estimate.currency_from.toUpperCase()} = $${estimate.estimated_amount}`);
 
-    const results = [];
+    // Convert USD to NGN using live forex rate
+    const usdToNgn = await getUsdToNgnRate();
+    const ngnAmount = estimate.estimated_amount * usdToNgn;
 
-    for (const update of updates) {
-      const { data: updated, error } = await supabaseAdmin
-        .from('crypto_exchange_rates')
-        .update({
-          market_rate: update.market_rate,
-          last_updated: new Date().toISOString(),
-        })
-        .eq('crypto_type', update.crypto_type)
-        .select()
-        .single();
+    // Apply 5% markup for service fee
+    const markup = 1.05;
+    const finalNgnAmount = ngnAmount * markup;
 
-      if (error) {
-        console.error(`Failed to update ${update.crypto_type}:`, error);
-        results.push({ crypto_type: update.crypto_type, success: false, error: error.message });
-      } else {
-        console.log(`✅ Updated ${update.crypto_type}: ₦${update.market_rate.toLocaleString()}`);
-        results.push({ 
-          crypto_type: update.crypto_type, 
-          success: true, 
-          rate: update.market_rate,
-          use_manual: updated.use_manual,
-        });
-      }
-    }
+    console.log(`💰 Final amount: ₦${finalNgnAmount.toLocaleString()} (with 5% markup)`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Exchange rates updated successfully',
-        rates: {
-          BTC: btcRate,
-          USDT: usdtRate,
-          USDC: usdcRate,
-        },
+        crypto_amount: crypto_amount,
+        crypto_currency: crypto_currency.toLowerCase(),
+        usd_amount: estimate.estimated_amount,
+        ngn_amount: Math.round(finalNgnAmount * 100) / 100, // Round to 2 decimal places
+        usd_to_ngn_rate: usdToNgn,
+        markup_percentage: 5,
         timestamp: new Date().toISOString(),
-        results,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
+
   } catch (error: any) {
-    console.error('❌ Error updating rates:', error);
+    console.error('❌ Error getting crypto estimate:', error);
+    
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Failed to get estimate',
         timestamp: new Date().toISOString(),
       }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
   }

@@ -17,48 +17,58 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Bitcoin, DollarSign, TrendingDown, Copy, ExternalLink, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw } from "lucide-react";
+import { Bitcoin, TrendingDown, Copy, ExternalLink, Loader2, AlertCircle, CheckCircle2, Clock, Search, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import QRCode from "react-qr-code";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-type CryptoType = "BTC" | "USDT" | "USDC";
-type ChainType = "btc" | "tron" | "ethereum" | "polygon" | "bsc";
-
-interface ExchangeRates {
-  BTC: number;
-  USDT: number;
-  USDC: number;
+interface CryptoOption {
+  ticker: string;
+  name: string;
+  logo_url?: string;
+  networks: string[];
 }
 
 interface DepositInfo {
   transactionId: string;
-  cryptoType: CryptoType;
+  cryptoType: string;
   cryptoAmount: number;
   nairaAmount: number;
   depositAddress: string;
   expiresAt: string;
-  chain: ChainType;
+  network: string;
+  memo?: string | null;
+  smartContract?: string | null;
 }
 
 export default function CryptoExchange() {
-  const [crypto, setCrypto] = useState<CryptoType>("BTC"); // Default to BTC (only working option)
+  const [crypto, setCrypto] = useState<string>("btc");
+  const [network, setNetwork] = useState<string>("");
   const [amount, setAmount] = useState("");
-  const [rates, setRates] = useState<ExchangeRates>({ BTC: 0, USDT: 0, USDC: 0 });
+  const [nairaAmount, setNairaAmount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [loadingRates, setLoadingRates] = useState(true);
+  const [loadingCryptos, setLoadingCryptos] = useState(true);
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [depositInfo, setDepositInfo] = useState<DepositInfo | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
-  const [dailyLimit, setDailyLimit] = useState({ used: 0, remaining: 1000000 });
   const [copied, setCopied] = useState(false);
+  const [availableCryptos, setAvailableCryptos] = useState<CryptoOption[]>([]);
+  const [cryptoSearchOpen, setCryptoSearchOpen] = useState(false);
+  const [cryptoSearchQuery, setCryptoSearchQuery] = useState("");
+  const [minAmount, setMinAmount] = useState<number>(0);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Fetch exchange rates
+  // Popular cryptocurrencies for quick access
+  const popularCryptos = ["btc", "eth", "usdt", "usdc", "bnb", "ltc", "trx", "xrp"];
+
+  // Fetch available cryptocurrencies from NowPayments
   useEffect(() => {
-    fetchRates();
+    fetchAvailableCryptos();
   }, []);
 
   // Countdown timer for deposit expiry
@@ -81,110 +91,116 @@ export default function CryptoExchange() {
     return () => clearInterval(interval);
   }, [depositInfo]);
 
-  const fetchRates = async (skipLoadingState = false) => {
-    try {
-      if (!skipLoadingState) {
-        setLoadingRates(true);
-      }
-
-      const { data, error } = await supabase
-        .from('crypto_exchange_rates')
-        .select('crypto_type, market_rate, manual_rate, use_manual, markup_percentage, last_updated');
-
-      if (error) throw error;
-
-      const ratesMap: ExchangeRates = { BTC: 0, USDT: 0, USDC: 0 };
-      
-      data?.forEach((rate: any) => {
-        const baseRate = rate.use_manual ? rate.manual_rate : rate.market_rate;
-        const markup = rate.markup_percentage / 100;
-        ratesMap[rate.crypto_type as CryptoType] = baseRate * (1 + markup);
-      });
-
-      setRates(ratesMap);
-    } catch (error) {
-      console.error('Error fetching rates:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load exchange rates",
-        variant: "destructive",
-      });
-    } finally {
-      if (!skipLoadingState) {
-        setLoadingRates(false);
-      }
+  // Get price estimate when amount changes
+  useEffect(() => {
+    if (!amount || parseFloat(amount) <= 0) {
+      setNairaAmount(0);
+      return;
     }
-  };
 
-  const updateLiveRates = async () => {
+    const debounce = setTimeout(() => {
+      fetchPriceEstimate();
+    }, 500);
+
+    return () => clearTimeout(debounce);
+  }, [amount, crypto]);
+
+  // Fetch minimum amount when crypto changes
+  useEffect(() => {
+    if (crypto) {
+      fetchMinimumAmount();
+    }
+  }, [crypto]);
+
+  const fetchAvailableCryptos = async () => {
     try {
-      setLoadingRates(true);
-      
-      // Call Edge Function to update rates from CoinGecko
-      const { data, error } = await supabase.functions.invoke('update-crypto-rates', {
-        method: 'POST',
-      });
+      setLoadingCryptos(true);
 
-      if (error) throw error;
+      // Fetch all available cryptos from NowPayments API
+      const { data, error } = await supabase.functions.invoke('get-available-cryptos');
+
+      if (error) {
+        throw error;
+      }
 
       if (!data.success) {
-        throw new Error(data.error || 'Failed to update rates');
+        throw new Error(data.error || 'Failed to fetch cryptocurrencies');
       }
 
-      // Refresh rates from database (skip loading state since we're already showing it)
-      await fetchRates(true);
+      console.log(`✅ Loaded ${data.count} cryptocurrencies from NowPayments`);
+      setAvailableCryptos(data.cryptocurrencies);
 
-      toast({
-        title: "Rates Updated! 🔄",
-        description: `BTC: ₦${data.rates.BTC.toLocaleString()}`,
-      });
     } catch (error: any) {
-      console.error('Error updating rates:', error);
+      console.error('Error fetching cryptocurrencies:', error);
+      
       toast({
-        title: "Update Failed",
-        description: error.message || "Could not fetch live rates",
+        title: "Error Loading Cryptocurrencies",
+        description: "Could not load available cryptos. Please refresh.",
+        variant: "destructive",
+      });
+      
+      // Don't set fallback - force user to refresh so they get real data
+      setAvailableCryptos([]);
+    } finally {
+      setLoadingCryptos(false);
+    }
+  };
+
+  const fetchMinimumAmount = async () => {
+    try {
+      // Set reasonable defaults based on crypto type
+      if (crypto === 'btc') setMinAmount(0.0001);
+      else if (['eth', 'bnb', 'ltc'].includes(crypto)) setMinAmount(0.001);
+      else setMinAmount(1);
+    } catch (error: any) {
+      console.error('Error fetching minimum amount:', error);
+      setMinAmount(1);
+    }
+  };
+
+  const fetchPriceEstimate = async () => {
+    try {
+      setLoadingEstimate(true);
+
+      const cryptoAmt = parseFloat(amount);
+      if (!cryptoAmt || cryptoAmt <= 0) return;
+
+      // Call Edge Function to get real-time rates from NowPayments
+      const { data, error } = await supabase.functions.invoke('update-crypto-rates', {
+        body: {
+          crypto_amount: cryptoAmt,
+          crypto_currency: crypto,
+        },
+      });
+
+      if (error) {
+        console.error('Error fetching live rate:', error);
+        // Fallback to approximate calculation
+        throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get estimate');
+      }
+
+      setNairaAmount(data.ngn_amount);
+      console.log(`Live rate: ${cryptoAmt} ${crypto.toUpperCase()} = ₦${data.ngn_amount.toLocaleString()}`);
+
+    } catch (error: any) {
+      console.error('Error fetching price estimate:', error);
+      
+      // No fallback rates - show error to user
+      setNairaAmount(0);
+      
+      toast({
+        title: "Rate Unavailable",
+        description: "Could not fetch live rate. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setLoadingRates(false);
+      setLoadingEstimate(false);
     }
   };
-
-  // Fetch daily limit
-  useEffect(() => {
-    // TESTING: Temporarily disabled
-    // fetchDailyLimit();
-  }, []);
-
-  const fetchDailyLimit = async () => {
-    // TESTING: Temporarily disabled
-    return;
-    /*
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const today = new Date().toISOString().split('T')[0];
-      const { data, error } = await supabase
-        .from('user_daily_limits')
-        .select('total_sold_today')
-        .eq('user_id', user.id)
-        .eq('date', today)
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error;
-
-      const used = data?.total_sold_today || 0;
-      setDailyLimit({ used, remaining: 1000000 - used });
-    } catch (error) {
-      console.error('Error fetching daily limit:', error);
-    }
-    */
-  };
-
-  const ngnAmount = amount && rates[crypto] 
-    ? (parseFloat(amount) * rates[crypto]).toFixed(2) 
-    : "0.00";
 
   const handleSell = async () => {
     const cryptoAmount = parseFloat(amount);
@@ -199,12 +215,19 @@ export default function CryptoExchange() {
       return;
     }
 
-    // Check daily limit
-    const ngnValue = parseFloat(ngnAmount);
-    if (ngnValue > dailyLimit.remaining) {
+    if (cryptoAmount < minAmount) {
       toast({
-        title: "Daily Limit Exceeded",
-        description: `You can only sell ₦${dailyLimit.remaining.toLocaleString()} more today. Limit resets at midnight.`,
+        title: "Amount Too Low",
+        description: `Minimum amount is ${minAmount} ${crypto.toUpperCase()}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!nairaAmount || nairaAmount <= 0) {
+      toast({
+        title: "Invalid Conversion",
+        description: "Could not calculate Naira amount. Please try again.",
         variant: "destructive",
       });
       return;
@@ -213,56 +236,114 @@ export default function CryptoExchange() {
     setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      // Determine chain based on crypto type
-      const chain: ChainType = crypto === "BTC" 
-        ? "btc" 
-        : "tron"; // Default to TRON for stablecoins (cheapest)
-
-      // Use service role key to bypass JWT verification
-      const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-      const headers: Record<string, string> = {};
-      if (serviceRoleKey) {
-        headers['Authorization'] = `Bearer ${serviceRoleKey}`;
-      }
-
-      // Call Edge Function to create sell order
-      const { data, error } = await supabase.functions.invoke('create-crypto-sell-order', {
-        headers,
-        body: {
-          cryptoType: crypto,
-          cryptoAmount: cryptoAmount,
-          chain: chain,
-          userId: user.id, // Pass user ID since we're bypassing JWT
-        },
+      // Get fresh user data from Supabase (not cached session)
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      console.log('🔐 Auth check:', {
+        hasUser: !!user,
+        userId: user?.id,
+        userEmail: user?.email,
+        authError: authError,
       });
 
-      if (error) throw error;
+      if (authError || !user) {
+        console.error('❌ Not authenticated:', { authError, hasUser: !!user });
+        
+        // Try to refresh the session
+        console.log('🔄 Attempting to refresh session...');
+        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError || !session) {
+          console.error('❌ Session refresh failed:', refreshError);
+          throw new Error("Your session expired. Please log out and log back in.");
+        }
+        
+        console.log('✅ Session refreshed, retrying...');
+        // Retry getting user after refresh
+        const { data: { user: refreshedUser }, error: retryError } = await supabase.auth.getUser();
+        
+        if (retryError || !refreshedUser) {
+          console.error('❌ Still not authenticated after refresh:', retryError);
+          throw new Error("Authentication failed. Please log out and log back in.");
+        }
+        
+        console.log('✅ User authenticated after refresh:', refreshedUser.id);
+      } else {
+        console.log('✅ User authenticated, calling Edge Function...');
+      }
+
+      // Get session token for explicit authorization
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        console.error('❌ No access token found in session');
+        throw new Error("Session error. Please log out and log back in.");
+      }
+
+      console.log('✅ Got access token, length:', session.access_token.length);
+
+      // Call Edge Function to create sell order with explicit auth
+      // Using fetch directly to debug 401 errors
+      const response = await fetch('https://dssvvswvqnxanyzfhixf.supabase.co/functions/v1/create-crypto-sell-order', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          crypto_type: crypto.toUpperCase(),
+          crypto_amount: cryptoAmount,
+          naira_amount: nairaAmount,
+          network: network && network !== 'auto' ? network : undefined,
+        }),
+      });
+
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('❌ Failed to parse response JSON:', responseText);
+        throw new Error(`Server returned non-JSON response: ${response.status} ${response.statusText}`);
+      }
+
+      if (!response.ok) {
+        console.error('❌ Edge function HTTP error:', response.status, response.statusText);
+        console.error('❌ Error body:', data);
+        throw new Error(data.error || data.error_details || `HTTP Error: ${response.status}`);
+      }
+
+      console.log('✅ Edge function response:', data);
 
       if (!data.success) {
-        throw new Error(data.error || 'Failed to create sell order');
+        console.error('❌ Backend error:', data);
+        const errorMsg = data.error_details || data.error || 'Failed to create sell order';
+        throw new Error(errorMsg);
       }
+
+      const payment = data.payment_details;
 
       // Set deposit info and open modal
       setDepositInfo({
-        transactionId: data.transaction.id,
-        cryptoType: crypto,
+        transactionId: data.transaction_id,
+        cryptoType: crypto.toUpperCase(),
         cryptoAmount: cryptoAmount,
-        nairaAmount: parseFloat(ngnAmount),
-        depositAddress: data.transaction.depositAddress,
-        expiresAt: data.transaction.expiresAt,
-        chain: chain,
+        nairaAmount: nairaAmount,
+        depositAddress: payment.pay_address,
+        expiresAt: payment.expiration_date,
+        network: payment.network || network,
+        memo: payment.payin_extra_id,
+        smartContract: payment.smart_contract,
       });
 
       // Calculate initial time remaining
-      const expiresAt = new Date(data.transaction.expiresAt).getTime();
+      const expiresAt = new Date(payment.expiration_date).getTime();
       const now = Date.now();
       setTimeRemaining(Math.max(0, Math.floor((expiresAt - now) / 1000)));
 
       setShowDepositModal(true);
       setAmount(""); // Clear input
+      setNairaAmount(0);
 
       toast({
         title: "Order Created! 📋",
@@ -310,63 +391,68 @@ export default function CryptoExchange() {
     }
   };
 
+  const copyMemo = async () => {
+    if (!depositInfo?.memo) return;
+
+    try {
+      await navigator.clipboard.writeText(depositInfo.memo);
+      toast({
+        title: "Memo Copied! ✅",
+        description: "Memo/Tag copied to clipboard",
+      });
+    } catch (error) {
+      toast({
+        title: "Copy Failed",
+        description: "Please copy the memo manually",
+        variant: "destructive",
+      });
+    }
+  };
+
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getExplorerUrl = (chain: ChainType, hash: string): string => {
-    const explorers: Record<ChainType, string> = {
-      btc: `https://mempool.space/tx/${hash}`,
-      tron: `https://tronscan.org/#/transaction/${hash}`,
-      ethereum: `https://etherscan.io/tx/${hash}`,
-      polygon: `https://polygonscan.com/tx/${hash}`,
-      bsc: `https://bscscan.com/tx/${hash}`,
-    };
-    return explorers[chain];
-  };
-
-  const getNetworkName = (chain: ChainType): string => {
-    const names: Record<ChainType, string> = {
-      btc: "Bitcoin",
-      tron: "TRON (TRC20)",
-      ethereum: "Ethereum (ERC20)",
-      polygon: "Polygon",
-      bsc: "BSC (BEP20)",
-    };
-    return names[chain];
-  };
+  const selectedCrypto = availableCryptos.find(c => c.ticker === crypto);
+  const filteredCryptos = availableCryptos.filter(c => 
+    c.ticker.toLowerCase().includes(cryptoSearchQuery.toLowerCase()) ||
+    c.name.toLowerCase().includes(cryptoSearchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       {/* Navigation */}
       <nav className="border-b bg-gradient-to-r from-primary to-primary/90 shadow-lg sticky top-0 z-10">
-        <div className="container mx-auto px-6 py-5 flex justify-between items-center">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-5 flex justify-between items-center">
           <Button
             variant="ghost"
             onClick={() => navigate('/dashboard')}
-            className="gap-2 text-white hover:bg-white/20 hover:text-white font-medium"
+            className="gap-1 sm:gap-2 text-white hover:bg-white/20 hover:text-white font-medium text-sm sm:text-base"
           >
-            ← Back to Dashboard
+            ← <span className="hidden sm:inline">Back to Dashboard</span><span className="sm:hidden">Back</span>
           </Button>
-          <div className="flex items-center gap-3">
-            <Bitcoin className="w-7 h-7 text-white" />
-            <h1 className="text-2xl font-bold text-white">Sell Cryptocurrency</h1>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Bitcoin className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white">Sell Crypto</h1>
           </div>
           <div className="w-40" /> {/* Spacer for centering */}
         </div>
       </nav>
 
       {/* Main Content */}
-      <div className="container mx-auto p-6 max-w-2xl">
+      <div className="container mx-auto p-4 sm:p-6 max-w-2xl">
         {/* Hero Section */}
-        <div className="text-center mb-8 pt-4">
-          <h2 className="text-3xl font-bold text-foreground mb-2">
-            Convert Crypto to Cash
-          </h2>
-          <p className="text-muted-foreground">
-            Send us your Bitcoin, USDT, or USDC and receive Naira instantly
+        <div className="text-center mb-6 sm:mb-8 pt-2 sm:pt-4">
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Zap className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">
+              200+ Cryptocurrencies
+            </h2>
+          </div>
+          <p className="text-sm sm:text-base text-muted-foreground px-4">
+            Powered by NowPayments • Live rates • Instant conversion
           </p>
         </div>
 
@@ -377,66 +463,120 @@ export default function CryptoExchange() {
               Sell Cryptocurrency
             </CardTitle>
             <CardDescription>
-              Convert your crypto to Naira and receive it in your crypto balance
+              Convert your crypto to Naira and receive it in your balance
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 pt-6">
             {/* Crypto Selection */}
             <div className="space-y-2">
               <Label htmlFor="crypto-select" className="text-base font-medium">
                 Select Cryptocurrency
               </Label>
-              <Select value={crypto} onValueChange={(v) => setCrypto(v as CryptoType)}>
-                <SelectTrigger id="crypto-select" className="h-12">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="BTC" className="cursor-pointer">
-                    <div className="flex items-center gap-3 py-1">
-                      <Bitcoin className="w-5 h-5 text-orange-500" />
-                      <div>
-                        <div className="font-medium">Bitcoin (BTC)</div>
-                        <div className="text-xs text-muted-foreground">Lightning Network</div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="USDT" disabled className="cursor-not-allowed opacity-50">
-                    <div className="flex items-center gap-3 py-1">
-                      <DollarSign className="w-5 h-5 text-green-500" />
-                      <div>
-                        <div className="font-medium flex items-center gap-2">
-                          Tether (USDT)
-                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Coming Soon</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">TRC20 - Waiting on API clarification</div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="USDC" disabled className="cursor-not-allowed opacity-50">
-                    <div className="flex items-center gap-3 py-1">
-                      <DollarSign className="w-5 h-5 text-blue-500" />
-                      <div>
-                        <div className="font-medium flex items-center gap-2">
-                          USD Coin (USDC)
-                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Coming Soon</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">Multiple networks - Waiting on API clarification</div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
               
-              {/* Stablecoin Notice */}
-              {(crypto === 'USDT' || crypto === 'USDC') && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-xs text-blue-800">
-                    ℹ️ <strong>USDT/USDC support is temporarily disabled</strong> during system upgrade. 
-                    Bitcoin is fully operational and ready to use.
-                  </p>
-                </div>
-              )}
+              <Popover open={cryptoSearchOpen} onOpenChange={setCryptoSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={cryptoSearchOpen}
+                    className="w-full justify-between h-12"
+                    disabled={loadingCryptos}
+                  >
+                    {loadingCryptos ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading cryptocurrencies...
+                      </span>
+                    ) : selectedCrypto ? (
+                      <span className="flex items-center gap-2">
+                        <Bitcoin className="w-5 h-5" />
+                        {selectedCrypto.name}
+                      </span>
+                    ) : (
+                      "Select cryptocurrency..."
+                    )}
+                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[400px] p-0">
+                  <Command>
+                    <CommandInput 
+                      placeholder="Search cryptocurrency..." 
+                      value={cryptoSearchQuery}
+                      onValueChange={setCryptoSearchQuery}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No cryptocurrency found.</CommandEmpty>
+                      <CommandGroup heading="Popular">
+                        {filteredCryptos
+                          .filter(c => popularCryptos.includes(c.ticker))
+                          .map((c) => (
+                            <CommandItem
+                              key={c.ticker}
+                              value={c.ticker}
+                              onSelect={(value) => {
+                                setCrypto(value);
+                                setCryptoSearchOpen(false);
+                                setCryptoSearchQuery("");
+                              }}
+                            >
+                              <Bitcoin className="mr-2 h-4 w-4" />
+                              <span className="font-medium">{c.name}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">({c.ticker.toUpperCase()})</span>
+                            </CommandItem>
+                          ))}
+                      </CommandGroup>
+                      <CommandGroup heading="All Cryptocurrencies">
+                        {filteredCryptos
+                          .filter(c => !popularCryptos.includes(c.ticker))
+                          .map((c) => (
+                            <CommandItem
+                              key={c.ticker}
+                              value={c.ticker}
+                              onSelect={(value) => {
+                                setCrypto(value);
+                                setCryptoSearchOpen(false);
+                                setCryptoSearchQuery("");
+                              }}
+                            >
+                              <Bitcoin className="mr-2 h-4 w-4" />
+                              <span className="font-medium">{c.name}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">({c.ticker.toUpperCase()})</span>
+                            </CommandItem>
+                          ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Choose from 200+ supported cryptocurrencies
+              </p>
             </div>
+
+            {/* Network Selection (Optional) */}
+            {crypto && ['usdt', 'usdc', 'busd'].includes(crypto) && (
+              <div className="space-y-2">
+                <Label htmlFor="network-select" className="text-base font-medium">
+                  Network (Optional)
+                </Label>
+                <Select value={network} onValueChange={setNetwork}>
+                  <SelectTrigger id="network-select" className="h-12">
+                    <SelectValue placeholder="Auto-detect best network" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto-detect</SelectItem>
+                    <SelectItem value="trc20">TRON (TRC20)</SelectItem>
+                    <SelectItem value="erc20">Ethereum (ERC20)</SelectItem>
+                    <SelectItem value="bep20">BSC (BEP20)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Leave as auto-detect for cheapest fees
+                </p>
+              </div>
+            )}
 
             {/* Amount Input */}
             <div className="space-y-2">
@@ -450,47 +590,38 @@ export default function CryptoExchange() {
                   placeholder="0.00"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  step={crypto === "BTC" ? "0.00000001" : "0.01"}
+                  step={['btc', 'eth', 'bnb'].includes(crypto) ? "0.00000001" : "0.01"}
                   min="0"
-                  className="h-14 text-lg pr-16"
+                  className="h-14 text-lg pr-20"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-medium uppercase">
                   {crypto}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {crypto === "BTC" ? "Minimum: 0.0001 BTC" : "Minimum: 1 USDT/USDC"}
-              </p>
+              {minAmount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Minimum: {minAmount} {crypto.toUpperCase()}
+                </p>
+              )}
             </div>
 
-            {/* Rate Preview Card */}
-            {loadingRates ? (
+            {/* Price Preview Card */}
+            {loadingEstimate ? (
               <Card className="bg-muted">
                 <CardContent className="pt-6 flex items-center justify-center">
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  <span className="text-muted-foreground">Loading rates...</span>
+                  <span className="text-muted-foreground">Calculating price...</span>
                 </CardContent>
               </Card>
-            ) : (
+            ) : nairaAmount > 0 ? (
               <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
                 <CardContent className="pt-6">
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Exchange Rate:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-lg">
-                          1 {crypto} = ₦{rates[crypto]?.toLocaleString()}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={updateLiveRates}
-                          disabled={loadingRates}
-                          className="h-7 px-2"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${loadingRates ? 'animate-spin' : ''}`} />
-                        </Button>
-                      </div>
+                      <span className="text-sm text-muted-foreground">Live Rate:</span>
+                      <span className="text-sm font-medium text-green-700">
+                        Updated from NowPayments ✓
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Markup:</span>
@@ -500,30 +631,19 @@ export default function CryptoExchange() {
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-base">You'll Receive:</span>
                         <span className="text-3xl font-bold text-green-700">
-                          ₦{parseFloat(ngnAmount).toLocaleString()}
+                          ₦{nairaAmount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            )}
-
-            {/* Daily Limit Info */}
-            {dailyLimit.used > 0 && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5" />
-                  <div className="flex-1 text-sm">
-                    <p className="font-medium text-blue-900">Daily Limit</p>
-                    <p className="text-blue-700 mt-1">
-                      Used: ₦{dailyLimit.used.toLocaleString()} / ₦1,000,000
-                      <br />
-                      Remaining: ₦{dailyLimit.remaining.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
+            ) : (
+              <Card className="bg-muted/50 border-dashed">
+                <CardContent className="pt-6 text-center text-muted-foreground">
+                  <p className="text-sm">Enter amount to see price estimate</p>
+                </CardContent>
+              </Card>
             )}
 
             {/* Sell Button */}
@@ -531,22 +651,17 @@ export default function CryptoExchange() {
               onClick={handleSell}
               className="w-full h-14 text-lg"
               size="lg"
-              disabled={loading || loadingRates || !amount || parseFloat(amount) <= 0 || crypto !== 'BTC'}
+              disabled={loading || loadingCryptos || loadingEstimate || !amount || parseFloat(amount) <= 0 || nairaAmount <= 0}
             >
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   Creating Order...
                 </>
-              ) : crypto !== 'BTC' ? (
-                <>
-                  <AlertCircle className="w-5 h-5 mr-2" />
-                  {crypto} Temporarily Unavailable
-                </>
               ) : (
                 <>
                   <TrendingDown className="w-5 h-5 mr-2" />
-                  Sell {crypto}
+                  Sell {crypto.toUpperCase()}
                 </>
               )}
             </Button>
@@ -555,11 +670,15 @@ export default function CryptoExchange() {
             <div className="pt-4 border-t space-y-2">
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
-                Transaction time: 5-15 minutes after blockchain confirmation
+                Transaction time: 5-20 minutes after blockchain confirmation
               </p>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                Funds added to your crypto balance automatically
+                Funds added to your balance automatically
+              </p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5" />
+                Fixed rate locked for 20 minutes
               </p>
             </div>
           </CardContent>
@@ -568,7 +687,7 @@ export default function CryptoExchange() {
 
       {/* Deposit Instructions Modal */}
       <Dialog open={showDepositModal} onOpenChange={setShowDepositModal}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">
               Send {depositInfo?.cryptoType} to Complete Sale
@@ -583,7 +702,10 @@ export default function CryptoExchange() {
             <div className="flex justify-center p-4 bg-white rounded-lg border-2 border-dashed">
               {depositInfo && (
                 <QRCode 
-                  value={depositInfo.depositAddress} 
+                  value={depositInfo.memo 
+                    ? `${depositInfo.cryptoType.toLowerCase()}:${depositInfo.depositAddress}?dt=${depositInfo.memo}`
+                    : depositInfo.depositAddress
+                  } 
                   size={200}
                   level="M"
                 />
@@ -594,22 +716,6 @@ export default function CryptoExchange() {
             <div className="space-y-2">
               <Label className="text-sm font-medium">Deposit Address</Label>
               
-              {/* Network Warning - PROMINENT */}
-              <div className="p-3 bg-red-50 border-2 border-red-400 rounded-lg mb-3">
-                <p className="text-sm font-bold text-red-900 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5" />
-                  CRITICAL: Use {depositInfo && getNetworkName(depositInfo.chain)} Network ONLY!
-                </p>
-                <p className="text-xs text-red-800 mt-2">
-                  {depositInfo?.chain === 'tron' 
-                    ? '⚠️ Do NOT send from Bitcoin, Ethereum, or other networks. This is a TRON address (starts with T). Sending from wrong network = PERMANENT LOSS.'
-                    : depositInfo?.chain === 'btc'
-                    ? '⚠️ Do NOT send from TRON, Ethereum, or other networks. This is a Bitcoin Lightning address. Sending from wrong network = PERMANENT LOSS.'
-                    : '⚠️ Use the correct network only. Wrong network = PERMANENT LOSS of funds.'
-                  }
-                </p>
-              </div>
-
               <div className="flex gap-2">
                 <Input
                   value={depositInfo?.depositAddress || ""}
@@ -630,8 +736,64 @@ export default function CryptoExchange() {
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Network: {depositInfo && getNetworkName(depositInfo.chain)}
+              
+              {depositInfo?.network && (
+                <p className="text-xs text-muted-foreground">
+                  Network: {depositInfo.network.toUpperCase()}
+                </p>
+              )}
+
+              {depositInfo?.smartContract && (
+                <p className="text-xs text-muted-foreground font-mono">
+                  Contract: {depositInfo.smartContract.substring(0, 10)}...{depositInfo.smartContract.substring(depositInfo.smartContract.length - 8)}
+                </p>
+              )}
+            </div>
+
+            {/* Memo/Tag (for XRP, XLM, EOS, etc.) */}
+            {depositInfo?.memo && (
+              <div className="space-y-2">
+                <div className="p-3 bg-yellow-50 border-2 border-yellow-400 rounded-lg">
+                  <p className="text-sm font-bold text-yellow-900 flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-5 h-5" />
+                    IMPORTANT: Memo/Tag Required!
+                  </p>
+                  <Label className="text-xs text-yellow-800">
+                    You MUST include this memo/tag in your transaction:
+                  </Label>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      value={depositInfo.memo}
+                      readOnly
+                      className="font-mono text-sm bg-white"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={copyMemo}
+                      className="flex-shrink-0"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-yellow-800 mt-2">
+                    ⚠️ Missing memo = PERMANENT LOSS of funds!
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Network Warning */}
+            <div className="p-3 bg-red-50 border-2 border-red-400 rounded-lg">
+              <p className="text-sm font-bold text-red-900 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                CRITICAL: Use Correct Network!
+              </p>
+              <p className="text-xs text-red-800 mt-2">
+                Network: <strong>{depositInfo?.network?.toUpperCase() || 'CHECK YOUR WALLET'}</strong>
+                <br />
+                ⚠️ Sending from wrong network = PERMANENT LOSS of funds
               </p>
             </div>
 
@@ -660,21 +822,13 @@ export default function CryptoExchange() {
             <div className="space-y-2 p-4 bg-orange-50 border border-orange-200 rounded-lg">
               <p className="text-sm font-semibold text-orange-900">⚠️ Important Instructions:</p>
               <ul className="text-xs text-orange-800 space-y-1 list-disc list-inside">
-                <li>Send <strong>exactly {depositInfo?.cryptoAmount} {depositInfo?.cryptoType}</strong> (not more, not less)</li>
-                <li>Use <strong>{depositInfo && getNetworkName(depositInfo.chain)}</strong> network in your wallet app</li>
-                <li>
-                  {depositInfo?.chain === 'tron' && (
-                    <>Your wallet MUST show "<strong>TRC-20</strong>" or "<strong>TRON</strong>" when selecting network</>
-                  )}
-                  {depositInfo?.chain === 'btc' && (
-                    <>Your wallet MUST show "<strong>Bitcoin</strong>" or "<strong>BTC Lightning</strong>" when selecting network</>
-                  )}
-                  {depositInfo?.chain !== 'tron' && depositInfo?.chain !== 'btc' && (
-                    <>Select the correct network in your wallet</>
-                  )}
-                </li>
-                <li>Funds will be credited after 3 blockchain confirmations (~5-15 minutes)</li>
-                <li>Wrong network = <strong className="text-red-700">PERMANENT LOSS</strong> of your crypto</li>
+                <li>Send <strong>exactly {depositInfo?.cryptoAmount} {depositInfo?.cryptoType}</strong></li>
+                <li>Use <strong>{depositInfo?.network?.toUpperCase() || 'correct'}</strong> network</li>
+                {depositInfo?.memo && (
+                  <li className="text-red-700 font-bold">Include memo/tag: {depositInfo.memo}</li>
+                )}
+                <li>Funds credited after 3-6 confirmations (~5-20 minutes)</li>
+                <li>Wrong network/missing memo = <strong className="text-red-700">PERMANENT LOSS</strong></li>
               </ul>
             </div>
 

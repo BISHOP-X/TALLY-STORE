@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Wallet, TrendingDown, Loader2, AlertCircle, CheckCircle2, Building2, Info } from "lucide-react";
+import { Wallet, TrendingDown, Loader2, AlertCircle, CheckCircle2, Building2, Info, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
@@ -24,11 +24,11 @@ interface BankAccount {
 
 const NIGERIAN_BANKS = [
   { code: "058", name: "GTBank" },
-  { code: "033", name: "United Bank for Africa" },
+  { code: "033", name: "United Bank for Africa (UBA)" },
   { code: "044", name: "Access Bank" },
   { code: "011", name: "First Bank of Nigeria" },
   { code: "057", name: "Zenith Bank" },
-  { code: "214", name: "First City Monument Bank" },
+  { code: "214", name: "First City Monument Bank (FCMB)" },
   { code: "221", name: "Stanbic IBTC Bank" },
   { code: "232", name: "Sterling Bank" },
   { code: "035", name: "Wema Bank" },
@@ -41,7 +41,18 @@ const NIGERIAN_BANKS = [
   { code: "101", name: "Providus Bank" },
   { code: "309", name: "Globus Bank" },
   { code: "102", name: "Titan Trust Bank" },
-];
+  { code: "070", name: "Fidelity Bank" },
+  { code: "068", name: "Standard Chartered Bank" },
+  { code: "039", name: "Stanbic Mobile" },
+  { code: "100", name: "Suntrust Bank" },
+  { code: "090175", name: "Rubies Microfinance Bank" },
+  { code: "090267", name: "Kuda Microfinance Bank" },
+  { code: "50211", name: "Kuda Bank" },
+  { code: "100004", name: "Opay" },
+  { code: "100002", name: "PalmPay" },
+  { code: "090110", name: "VFD Microfinance Bank" },
+  { code: "090097", name: "Ekondo Microfinance Bank" },
+].sort((a, b) => a.name.localeCompare(b.name));
 
 export default function CryptoWithdrawal() {
   const [cryptoBalance, setCryptoBalance] = useState<number>(0);
@@ -49,9 +60,11 @@ export default function CryptoWithdrawal() {
   const [bankCode, setBankCode] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
+  const [narration, setNarration] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(true);
   const [validatingAccount, setValidatingAccount] = useState(false);
+  const [accountValidated, setAccountValidated] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -96,32 +109,48 @@ export default function CryptoWithdrawal() {
       validateAccount();
     } else {
       setAccountName("");
+      setAccountValidated(false);
     }
   }, [bankCode, accountNumber]);
 
   const validateAccount = async () => {
     setValidatingAccount(true);
     setAccountName("");
+    setAccountValidated(false);
 
     try {
-      // In production, this would call SageCloud API to resolve account
-      // For now, simulate validation
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock account name (in production, this comes from API)
-      const mockName = "JOHN DOE EXAMPLE";
-      setAccountName(mockName);
-      
-      toast({
-        title: "Account Verified ✓",
-        description: `${mockName}`,
+      // Call Edge Function to validate account via SageCloud
+      const { data, error } = await supabase.functions.invoke('validate-bank-account', {
+        body: {
+          bank_code: bankCode,
+          account_number: accountNumber,
+        },
       });
-    } catch (error) {
+
+      if (error) throw error;
+
+      if (data.success && data.account_name) {
+        setAccountName(data.account_name);
+        setAccountValidated(true);
+        
+        toast({
+          title: "Account Verified ✓",
+          description: data.account_name,
+        });
+      } else {
+        throw new Error(data.error || 'Could not verify account');
+      }
+    } catch (error: any) {
+      console.error('Account validation error:', error);
+      
       toast({
         title: "Validation Failed",
-        description: "Could not verify account details",
+        description: error.message || "Could not verify account details. Please check and try again.",
         variant: "destructive",
       });
+      
+      setAccountName("");
+      setAccountValidated(false);
     } finally {
       setValidatingAccount(false);
     }
@@ -129,9 +158,8 @@ export default function CryptoWithdrawal() {
 
   const withdrawAmount = parseFloat(amount) || 0;
   const feePercentage = 2;
-  const feeAmount = (withdrawAmount * feePercentage) / 100;
+  const feeAmount = Math.ceil((withdrawAmount * feePercentage) / 100); // Round up fee
   const netAmount = withdrawAmount - feeAmount;
-  const requiresApproval = withdrawAmount >= 500000;
 
   const handleWithdraw = async () => {
     // Validation
@@ -156,7 +184,7 @@ export default function CryptoWithdrawal() {
     if (withdrawAmount > cryptoBalance) {
       toast({
         title: "Insufficient Balance",
-        description: `You only have ₦${cryptoBalance.toLocaleString()} available`,
+        description: `You only have ₦${cryptoBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })} available`,
         variant: "destructive",
       });
       return;
@@ -165,7 +193,16 @@ export default function CryptoWithdrawal() {
     if (!bankCode || !accountNumber || !accountName) {
       toast({
         title: "Incomplete Details",
-        description: "Please fill in all bank details",
+        description: "Please fill in all bank details and verify your account",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!accountValidated) {
+      toast({
+        title: "Account Not Verified",
+        description: "Please wait for account validation to complete",
         variant: "destructive",
       });
       return;
@@ -192,10 +229,11 @@ export default function CryptoWithdrawal() {
       const { data, error } = await supabase.functions.invoke('create-withdrawal-request', {
         body: {
           amount: withdrawAmount,
-          bankCode: bankCode,
-          accountNumber: accountNumber,
-          accountName: accountName,
-          bankName: bankName,
+          bank_code: bankCode,
+          account_number: accountNumber,
+          account_name: accountName,
+          bank_name: bankName,
+          narration: narration || `Withdrawal to ${accountName}`,
         },
       });
 
@@ -206,30 +244,26 @@ export default function CryptoWithdrawal() {
       }
 
       // Show success message
-      if (requiresApproval) {
-        toast({
-          title: "Withdrawal Pending Approval 📋",
-          description: `Your withdrawal of ₦${withdrawAmount.toLocaleString()} requires admin approval. You'll be notified once approved.`,
-        });
-      } else {
-        toast({
-          title: "Withdrawal Initiated! 🚀",
-          description: `₦${netAmount.toLocaleString()} will be sent to your account shortly.`,
-        });
-      }
+      toast({
+        title: "Withdrawal Initiated! 🚀",
+        description: `₦${netAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })} will be sent to your account shortly.`,
+        duration: 5000,
+      });
 
       // Clear form
       setAmount("");
       setAccountNumber("");
       setAccountName("");
       setBankCode("");
+      setNarration("");
+      setAccountValidated(false);
       
       // Refresh balance
       await fetchBalance();
 
-      // Navigate to orders page after 2 seconds
+      // Navigate to crypto history page after 2 seconds
       setTimeout(() => {
-        navigate('/orders');
+        navigate('/crypto-history');
       }, 2000);
 
     } catch (error: any) {
@@ -247,20 +281,20 @@ export default function CryptoWithdrawal() {
   const handleMaxAmount = () => {
     // Set to max withdrawable (balance or 2M limit, whichever is lower)
     const maxWithdrawable = Math.min(cryptoBalance, 2000000);
-    setAmount(maxWithdrawable.toString());
+    setAmount(maxWithdrawable.toFixed(2));
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       {/* Navigation */}
       <nav className="border-b bg-gradient-to-r from-primary to-primary/90 shadow-lg sticky top-0 z-10">
-        <div className="container mx-auto px-6 py-5 flex justify-between items-center">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-5 flex justify-between items-center">
           <Button
             variant="ghost"
             onClick={() => navigate('/dashboard')}
-            className="gap-2 text-white hover:bg-white/20 hover:text-white font-medium"
+            className="gap-1 sm:gap-2 text-white hover:bg-white/20 hover:text-white font-medium text-sm sm:text-base"
           >
-            ← Back to Dashboard
+            ← <span className="hidden sm:inline">Back to Dashboard</span><span className="sm:hidden">Back</span>
           </Button>
           <div className="flex items-center gap-3">
             <Wallet className="w-7 h-7 text-white" />
@@ -271,14 +305,14 @@ export default function CryptoWithdrawal() {
       </nav>
 
       {/* Main Content */}
-      <div className="container mx-auto p-6 max-w-2xl">
+      <div className="container mx-auto p-4 sm:p-6 max-w-2xl">
         {/* Hero Section */}
-        <div className="text-center mb-8 pt-4">
+        <div className="text-center mb-6 sm:mb-8 pt-2 sm:pt-4">
           <h2 className="text-3xl font-bold text-foreground mb-2">
             Cash Out to Your Bank
           </h2>
           <p className="text-muted-foreground">
-            Transfer your crypto balance directly to your Nigerian bank account
+            Powered by SageCloud • Transfer your balance directly to your Nigerian bank account
           </p>
         </div>
 
@@ -286,18 +320,31 @@ export default function CryptoWithdrawal() {
         <Card className="mb-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-sm text-green-700 mb-1">Available Crypto Balance</p>
+              <p className="text-sm text-green-700 mb-1">Available Balance</p>
               {loadingBalance ? (
-                <div className="text-2xl font-bold text-green-900">Loading...</div>
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-green-700" />
+                  <span className="text-xl font-bold text-green-900">Loading...</span>
+                </div>
               ) : (
                 <div className="text-4xl font-bold text-green-900">
                   ₦{cryptoBalance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               )}
-              {cryptoBalance === 0 && (
-                <p className="text-xs text-green-700 mt-2">
-                  Sell crypto to receive balance first
-                </p>
+              {cryptoBalance === 0 && !loadingBalance && (
+                <div className="mt-3">
+                  <p className="text-xs text-green-700 mb-2">
+                    No balance available
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate('/crypto-exchange')}
+                    className="border-green-600 text-green-700 hover:bg-green-100"
+                  >
+                    Sell Crypto First
+                  </Button>
+                </div>
               )}
             </div>
           </CardContent>
@@ -369,6 +416,9 @@ export default function CryptoWithdrawal() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Supports all Nigerian banks including Opay, PalmPay, Kuda, etc.
+              </p>
             </div>
 
             {/* Account Number */}
@@ -382,21 +432,49 @@ export default function CryptoWithdrawal() {
                 placeholder="0123456789"
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                className="h-12 text-lg"
+                className="h-12 text-lg font-mono"
                 maxLength={10}
               />
               {validatingAccount && (
-                <div className="flex items-center gap-2 text-sm text-blue-600">
+                <div className="flex items-center gap-2 text-sm text-blue-600 p-3 bg-blue-50 rounded-lg border border-blue-200">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Verifying account...
+                  <span>Verifying account with SageCloud...</span>
                 </div>
               )}
-              {accountName && (
-                <div className="flex items-center gap-2 text-sm text-green-700 font-medium">
-                  <CheckCircle2 className="w-4 h-4" />
-                  {accountName}
+              {accountValidated && accountName && (
+                <div className="flex items-center gap-2 text-sm text-green-700 font-medium p-3 bg-green-50 rounded-lg border border-green-300">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <div className="flex-1">
+                    <div className="font-semibold">{accountName}</div>
+                    <div className="text-xs text-green-600">Account verified successfully</div>
+                  </div>
                 </div>
               )}
+              {!validatingAccount && !accountValidated && accountNumber.length === 10 && bankCode && (
+                <div className="flex items-center gap-2 text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Account validation failed. Please check your details.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Narration (Optional) */}
+            <div className="space-y-2">
+              <Label htmlFor="narration-input" className="text-base font-medium">
+                Narration (Optional)
+              </Label>
+              <Input
+                id="narration-input"
+                type="text"
+                placeholder="e.g., Withdrawal for personal use"
+                value={narration}
+                onChange={(e) => setNarration(e.target.value.slice(0, 50))}
+                className="h-12"
+                maxLength={50}
+              />
+              <p className="text-xs text-muted-foreground">
+                This will appear on your bank statement (max 50 characters)
+              </p>
             </div>
 
             {/* Fee Preview Card */}
@@ -406,17 +484,17 @@ export default function CryptoWithdrawal() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">Withdrawal Amount:</span>
-                      <span className="font-semibold">₦{withdrawAmount.toLocaleString()}</span>
+                      <span className="font-semibold">₦{withdrawAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">Processing Fee (2%):</span>
-                      <span className="font-semibold text-red-600">-₦{feeAmount.toLocaleString()}</span>
+                      <span className="font-semibold text-red-600">-₦{feeAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="border-t border-blue-200 pt-3">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-base">You'll Receive:</span>
                         <span className="text-3xl font-bold text-green-700">
-                          ₦{netAmount.toLocaleString()}
+                          ₦{netAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -425,21 +503,19 @@ export default function CryptoWithdrawal() {
               </Card>
             )}
 
-            {/* Approval Warning */}
-            {requiresApproval && (
-              <div className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-yellow-900 text-sm">Admin Approval Required</p>
-                    <p className="text-xs text-yellow-800 mt-1">
-                      Withdrawals of ₦500,000 and above require admin approval for security. 
-                      You'll receive a notification once approved (usually within 24 hours).
-                    </p>
-                  </div>
+            {/* Security Notice */}
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-semibold text-blue-900 text-sm">Secure Transfer</p>
+                  <p className="text-xs text-blue-800 mt-1">
+                    All withdrawals are processed through SageCloud's secure payment gateway. 
+                    Your balance will be deducted immediately and refunded automatically if the transfer fails.
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Withdraw Button */}
             <Button
@@ -453,6 +529,7 @@ export default function CryptoWithdrawal() {
                 withdrawAmount < 1000 ||
                 withdrawAmount > cryptoBalance ||
                 !bankCode ||
+                !accountValidated ||
                 !accountName ||
                 accountNumber.length !== 10
               }
@@ -460,12 +537,12 @@ export default function CryptoWithdrawal() {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Processing...
+                  Processing Withdrawal...
                 </>
               ) : (
                 <>
                   <TrendingDown className="w-5 h-5 mr-2" />
-                  Request Withdrawal
+                  Withdraw ₦{netAmount.toLocaleString('en-NG', { minimumFractionDigits: 0 })}
                 </>
               )}
             </Button>
@@ -474,11 +551,15 @@ export default function CryptoWithdrawal() {
             <div className="pt-4 border-t space-y-2">
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Info className="w-3.5 h-3.5" />
-                Processing time: 5-30 minutes for approved withdrawals
+                Processing time: 5-30 minutes (instant for most banks)
               </p>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                Secure bank transfer via SageCloud payment gateway
+                Your balance is deducted immediately and refunded if transfer fails
+              </p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" />
+                Powered by SageCloud secure payment gateway
               </p>
             </div>
           </CardContent>

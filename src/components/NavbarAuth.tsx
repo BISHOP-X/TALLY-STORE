@@ -149,10 +149,17 @@ export default function Navbar() {
                           Wallet
                         </Link>
                       )}
-                      <Link to="/crypto-exchange" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                        <Bitcoin className="h-4 w-4" />
-                        Crypto Exchange
-                      </Link>
+                      {isAdmin && (
+                        <>
+                          <Link to="/crypto-exchange" className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                            <Bitcoin className="h-4 w-4" />
+                            Crypto Exchange
+                          </Link>
+                          <Link to="/bills" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                            Bills Payment
+                          </Link>
+                        </>
+                      )}
                       
                       {/* Download App in dropdown */}
                       {!isInstalled && (canInstall || true) && (
@@ -160,7 +167,7 @@ export default function Navbar() {
                           <div className="border-t border-gray-200 dark:border-gray-600 my-2"></div>
                           <button 
                             onClick={handleDownloadClick} 
-                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-primary flex items-center gap-2"
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-primary flex items-center gap-2"
                           >
                             <Download className="h-4 w-4" />
                             Download App
@@ -300,12 +307,22 @@ export default function Navbar() {
                       </div>
                     )}
                     
-                    <Link to="/crypto-exchange" onClick={() => setIsMobileMenuOpen(false)}>
-                      <Button variant="ghost" className="w-full justify-start gap-2">
-                        <Bitcoin className="h-4 w-4" />
-                        Crypto Exchange
-                      </Button>
-                    </Link>
+                    {isAdmin && (
+                      <>
+                        <Link to="/crypto-exchange" onClick={() => setIsMobileMenuOpen(false)}>
+                          <Button variant="ghost" className="w-full justify-start gap-2">
+                            <Bitcoin className="h-4 w-4" />
+                            Crypto Exchange
+                          </Button>
+                        </Link>
+                        
+                        <Link to="/bills" onClick={() => setIsMobileMenuOpen(false)}>
+                          <Button variant="ghost" className="w-full justify-start gap-2">
+                            Bills Payment
+                          </Button>
+                        </Link>
+                      </>
+                    )}
                     
                     {/* Download App Button - Only show if not installed */}
                     {!isInstalled && (canInstall || true) && (

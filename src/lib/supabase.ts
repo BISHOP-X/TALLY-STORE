@@ -815,24 +815,109 @@ export async function getUserWalletBalance(userId: string): Promise<number> {
 }
 
 // Update user's wallet balance (add amount)
-export async function updateUserWalletBalance(userId: string, amountToAdd: number): Promise<boolean> {
+export async function updateUserWalletBalance(
+  userId: string,
+  amountToAdd: number,
+  reference?: string,
+  ercasReference?: string
+): Promise<boolean> {
   try {
-    // Get current balance
-    const currentBalance = await getUserWalletBalance(userId)
-    const newBalance = currentBalance + amountToAdd
+    // If a reference is provided, ensure we haven't processed it already
+    if (reference) {
+      const { data: existingTx, error: existingErr } = await supabase
+        .from('transactions')
+        .select('id')
+        .or(`reference.eq.${reference},ercas_reference.eq.${ercasReference || ''}`)
+        .limit(1)
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ wallet_balance: newBalance })
-      .eq('id', userId)
+      if (existingErr) {
+        console.error('❌ Error checking existing transaction for idempotency:', existingErr)
+      }
 
-    if (error) {
-      console.error('❌ Error updating wallet balance:', error)
-      throw error
+      if (existingTx && (existingTx as any[]).length > 0) {
+        console.log('⏭️ Transaction already processed, skipping wallet update:', reference)
+        return true
+      }
     }
 
-    console.log(`✅ Wallet updated: ${userId} +₦${amountToAdd} (New balance: ₦${newBalance})`)
-    return true
+    // Retry loop to avoid race conditions: update only when balance matches the read value
+    const maxAttempts = 5
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // CRITICAL: If this is a retry (attempt > 0) and we have a reference, 
+      // check if the transaction was recorded by another concurrent process while we were failing.
+      if (reference && attempt > 0) {
+        const { data: retryCheckTx } = await supabase
+          .from('transactions')
+          .select('id')
+          .or(`reference.eq.${reference},ercas_reference.eq.${ercasReference || ''}`)
+          .limit(1)
+        
+        if (retryCheckTx && (retryCheckTx as any[]).length > 0) {
+          console.log('⏭️ Transaction found during retry check, skipping wallet update:', reference)
+          return true
+        }
+      }
+
+      const currentBalance = await getUserWalletBalance(userId)
+      const newBalance = currentBalance + amountToAdd
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+        .match({ id: userId, wallet_balance: currentBalance })
+        .select()
+        .single()
+
+      if (error) {
+        // If it's the last attempt, throw; otherwise retry
+        if (attempt === maxAttempts - 1) {
+          console.error('❌ Error updating wallet balance after retries:', error)
+          throw error
+        }
+        console.warn('⚠️ Transient error updating wallet balance, retrying...', { attempt, error })
+        await new Promise((r) => setTimeout(r, 200 * (attempt + 1)))
+        continue
+      }
+
+      if (!data) {
+        // No rows updated (likely due to concurrent modification) — retry
+        console.log('🔁 Wallet update conflict detected, retrying...', { attempt })
+        await new Promise((r) => setTimeout(r, 150 * (attempt + 1)))
+        continue
+      }
+
+      // Successfully updated balance — record transaction if reference provided
+      if (reference) {
+        try {
+          const { error: txError } = await supabase
+            .from('transactions')
+            .insert([{
+              user_id: userId,
+              type: 'topup',
+              amount: amountToAdd,
+              status: 'completed',
+              balance_after: newBalance,
+              description: `Wallet top-up via Ercas Pay`,
+              reference,
+              ercas_reference: ercasReference
+            }])
+
+          if (txError) {
+            console.error('❌ Failed to record top-up transaction after wallet update:', txError)
+          } else {
+            console.log('✅ Top-up transaction recorded during wallet update:', reference)
+          }
+        } catch (txErr) {
+          console.error('❌ Exception while recording top-up transaction:', txErr)
+        }
+      }
+
+      console.log(`✅ Wallet updated: ${userId} +₦${amountToAdd} (New balance: ₦${newBalance})`)
+      return true
+    }
+
+    console.error('❌ Failed to update wallet after max retries')
+    return false
   } catch (error) {
     console.error('❌ Failed to update wallet balance:', error)
     return false
@@ -1355,7 +1440,7 @@ export async function recordTopUpTransaction(
       type: 'topup' as const,
       amount: amount,
       status: 'completed', // Add status field to match purchase transactions
-      balance_after: currentBalance, // Add this field to match purchase transactions
+      balance_after: currentBalance + amount, // balance after top-up
       description: `Wallet top-up via Ercas Pay`, // Add description
       reference: reference,
       ercas_reference: ercasReference
