@@ -524,6 +524,25 @@ export async function getIndividualAccounts(productGroupId?: string): Promise<In
   }
 }
 
+// Get total count of individual accounts (for admin dashboard stats)
+export async function getIndividualAccountsCount(): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('individual_accounts')
+      .select('*', { count: 'exact', head: true })
+
+    if (error) {
+      console.error('❌ Error counting individual accounts:', error)
+      return 0
+    }
+
+    return count || 0
+  } catch (error) {
+    console.error('❌ Failed to count individual accounts:', error)
+    return 0
+  }
+}
+
 export async function deleteIndividualAccount(id: string): Promise<boolean> {
   try {
     // Get the account to know which product group to update
@@ -1582,20 +1601,49 @@ export async function getUserCount(): Promise<number> {
 // Get admin sales statistics from orders table
 export async function getAdminSalesStats(): Promise<{ totalSales: number; totalRevenue: number }> {
   try {
-    const { data: orders, error } = await supabase
+    // Get total count of completed orders using exact count (bypasses 1000 row limit)
+    const { count: totalSales, error: countError } = await supabase
       .from('orders')
-      .select('amount, status')
+      .select('*', { count: 'exact', head: true })
       .eq('status', 'completed')
 
-    if (error) {
-      console.error('Error fetching sales stats:', error)
+    if (countError) {
+      console.error('Error fetching sales count:', countError)
       return { totalSales: 0, totalRevenue: 0 }
     }
 
-    const totalSales = orders?.length || 0
-    const totalRevenue = orders?.reduce((sum, order) => sum + (order.amount || 0), 0) || 0
+    // For revenue, we need to fetch amounts in batches to handle >1000 orders
+    // Supabase doesn't support SUM aggregation directly, so we paginate
+    let totalRevenue = 0
+    const batchSize = 1000
+    let offset = 0
+    let hasMore = true
 
-    return { totalSales, totalRevenue }
+    while (hasMore) {
+      const { data: orders, error: revenueError } = await supabase
+        .from('orders')
+        .select('amount')
+        .eq('status', 'completed')
+        .range(offset, offset + batchSize - 1)
+
+      if (revenueError) {
+        console.error('Error fetching revenue batch:', revenueError)
+        break
+      }
+
+      if (!orders || orders.length === 0) {
+        hasMore = false
+      } else {
+        totalRevenue += orders.reduce((sum, order) => sum + (order.amount || 0), 0)
+        offset += batchSize
+        // If we got fewer than batchSize, we've reached the end
+        if (orders.length < batchSize) {
+          hasMore = false
+        }
+      }
+    }
+
+    return { totalSales: totalSales || 0, totalRevenue }
   } catch (error) {
     console.error('Error getting admin sales stats:', error)
     return { totalSales: 0, totalRevenue: 0 }

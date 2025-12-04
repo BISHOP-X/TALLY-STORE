@@ -27,6 +27,7 @@ import {
   getCategories, 
   getAllProductGroups, 
   getIndividualAccounts,
+  getIndividualAccountsCount,
   createCategory, 
   updateCategory, 
   deleteCategory,
@@ -93,6 +94,7 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
   const [individualAccounts, setIndividualAccounts] = useState<IndividualAccount[]>([])
+  const [individualAccountsCount, setIndividualAccountsCount] = useState<number>(0)
   const [userCount, setUserCount] = useState<number>(0)
   const [salesStats, setSalesStats] = useState({ totalSales: 0, totalRevenue: 0 })
   const [loading, setLoading] = useState(true)
@@ -149,10 +151,11 @@ export default function AdminPage() {
       setLoading(true)
       setError(null)
 
-      const [categoriesData, productGroupsData, accountsData, userCountData, salesStatsData] = await Promise.all([
+      const [categoriesData, productGroupsData, accountsData, accountsCountData, userCountData, salesStatsData] = await Promise.all([
         getCategories(),
         getAllProductGroups(),
         getIndividualAccounts(),
+        getIndividualAccountsCount(),
         getUserCount(),
         getAdminSalesStats()
       ])
@@ -160,13 +163,14 @@ export default function AdminPage() {
       setCategories(categoriesData)
       setProductGroups(productGroupsData)
       setIndividualAccounts(accountsData)
+      setIndividualAccountsCount(accountsCountData)
       setUserCount(userCountData)
       setSalesStats(salesStatsData)
 
       console.log('✅ Admin data loaded:', {
         categories: categoriesData.length,
         productGroups: productGroupsData.length,
-        accounts: accountsData.length,
+        accounts: accountsCountData,
         users: userCountData,
         sales: salesStatsData.totalSales,
         revenue: salesStatsData.totalRevenue
@@ -483,7 +487,7 @@ export default function AdminPage() {
   // Calculate stats from real data
   const stats = {
     totalUsers: userCount,
-    totalProducts: individualAccounts.length,
+    totalProducts: individualAccountsCount,
     totalSales: salesStats.totalSales,
     revenue: salesStats.totalRevenue,
     pendingOrders: 0, // Add order tracking later
@@ -1472,7 +1476,7 @@ export default function AdminPage() {
                 <CardHeader>
                   <CardTitle>Product Management</CardTitle>
                   <p className="text-muted-foreground">
-                    View and manage all products in your inventory ({individualAccounts.length} total accounts)
+                    View and manage all products in your inventory ({individualAccountsCount.toLocaleString()} total accounts)
                   </p>
                 </CardHeader>
                 <CardContent>
