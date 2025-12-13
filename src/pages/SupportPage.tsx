@@ -127,7 +127,7 @@ export default function SupportPage() {
               </p>
               <Button 
                 variant="outline" 
-                className="w-full bg-blue-50 border-blue-200 hover:bg-blue-100" 
+                className="w-full" 
                 onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
               >
                 @Tallystore1
