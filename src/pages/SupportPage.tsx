@@ -85,17 +85,17 @@ export default function SupportPage() {
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           <Card className="text-center relative">
             <CardContent className="pt-6">
-              <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <MessageCircle className="h-12 w-12 text-blue-500 mx-auto mb-4" />
               <h3 className="font-semibold mb-2">Telegram Support</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Join our Telegram support group for quick updates
+                Contact us on Telegram for quick support
               </p>
               <Button 
                 className="w-full" 
                 variant="outline"
-                onClick={() => window.open('https://t.me/Tallystoreorg', '_blank')}
+                onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
               >
-                Join Telegram
+                @Tallystore1
               </Button>
               <div className="absolute top-2 right-2">
                 <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
@@ -120,21 +120,21 @@ export default function SupportPage() {
 
           <Card className="text-center">
             <CardContent className="pt-6">
-              <Phone className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">WhatsApp Support</h3>
+              <MessageCircle className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">Direct Message</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Contact us on WhatsApp for immediate assistance
+                Message us directly on Telegram for immediate assistance
               </p>
               <Button 
                 variant="outline" 
-                className="w-full bg-green-50 border-green-200 hover:bg-green-100" 
-                onClick={() => window.open('https://wa.me/2349024595121', '_blank')}
+                className="w-full bg-blue-50 border-blue-200 hover:bg-blue-100" 
+                onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
               >
-                +234 902 459 5121
+                @Tallystore1
               </Button>
               <div className="mt-2">
-                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                  WhatsApp Only
+                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                  Fast Response
                 </span>
               </div>
             </CardContent>
@@ -289,7 +289,7 @@ export default function SupportPage() {
             <Alert>
               <AlertDescription className="text-center">
                 <strong>Urgent Account Issues?</strong> If you're experiencing critical problems with a purchased account, 
-                contact us immediately at <strong>tallystoreorg@gmail.com</strong> or WhatsApp us at <strong>+234 902 459 5121</strong> (WhatsApp only).
+                contact us immediately at <strong>tallystoreorg@gmail.com</strong> or message us on Telegram at <strong>@Tallystore1</strong>.
               </AlertDescription>
             </Alert>
           </CardContent>

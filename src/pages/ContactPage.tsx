@@ -172,28 +172,19 @@ const ContactPage = () => {
                 </div>
 
                 <div className="flex items-center space-x-3">
-                  <div className="bg-gray-100 dark:bg-gray-700/30 rounded-full w-10 h-10 flex items-center justify-center">
-                    <span className="text-gray-600 dark:text-gray-400">💬</span>
+                  <div className="bg-blue-100 dark:bg-blue-900/30 rounded-full w-10 h-10 flex items-center justify-center">
+                    <span className="text-blue-600 dark:text-blue-400">💬</span>
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">Telegram Support</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">@Tallystore1</p>
                     <Button 
                       variant="outline" 
                       className="mt-2"
-                      onClick={() => window.open('https://t.me/Tallystoreorg', '_blank')}
+                      onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
                     >
-                      Join Telegram Group
+                      Message on Telegram
                     </Button>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                  <div className="bg-green-100 dark:bg-green-900/30 rounded-full w-10 h-10 flex items-center justify-center">
-                    <span className="text-green-600 dark:text-green-400">📱</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">WhatsApp Support</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">+234 902 459 5121 (WhatsApp only)</p>
                   </div>
                 </div>
 
@@ -325,7 +316,7 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you offer phone support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    We offer WhatsApp support at +234 902 459 5121 (WhatsApp only). For email support, use tallystoreorg@gmail.com.
+                    We offer Telegram support at @Tallystore1. For email support, use tallystoreorg@gmail.com.
                   </p>
                 </div>
               </div>
@@ -341,14 +332,14 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Can I request a callback?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Traditional phone calls are not available. Please contact us via WhatsApp at +234 902 459 5121 or email at tallystoreorg@gmail.com.
+                    Traditional phone calls are not available. Please contact us via Telegram at @Tallystore1 or email at tallystoreorg@gmail.com.
                   </p>
                 </div>
                 
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you have Telegram support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Yes! Join our Telegram support group for quick updates and assistance at https://t.me/Tallystoreorg
+                    Yes! Contact us on Telegram at @Tallystore1 for quick updates and assistance.
                   </p>
                 </div>
               </div>

@@ -493,16 +493,16 @@ export default function WebServicesPage() {
           
           <CardContent>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="flex flex-col items-center text-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                <Phone className="h-8 w-8 text-green-600" />
+              <div className="flex flex-col items-center text-center gap-3 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                <MessageCircle className="h-8 w-8 text-blue-600" />
                 <div>
-                  <p className="font-semibold text-green-700 dark:text-green-400 mb-1">WhatsApp (Fastest)</p>
-                  <p className="text-sm font-mono">09067679407</p>
+                  <p className="font-semibold text-blue-700 dark:text-blue-400 mb-1">Telegram (Fastest)</p>
+                  <p className="text-sm font-mono">@BISHOP_XXX</p>
                   <Button 
                     variant="default" 
                     size="sm"
-                    className="mt-3 bg-green-600 hover:bg-green-700"
-                    onClick={() => window.open('https://wa.link/3ophik', '_blank')}
+                    className="mt-3 bg-blue-600 hover:bg-blue-700"
+                    onClick={() => window.open('https://t.me/BISHOP_XXX', '_blank')}
                   >
                     Chat Now
                   </Button>
@@ -526,7 +526,7 @@ export default function WebServicesPage() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => window.open('https://t.me/Tallystoreorg', '_blank')}
+                    onClick={() => window.open('https://t.me/BISHOP_XXX', '_blank')}
                   >
                     Join Channel
                   </Button>

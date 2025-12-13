@@ -141,10 +141,10 @@ export default function EmailConfirmation() {
                 <div className="text-center">
                   <Button
                     variant="outline"
-                    onClick={() => window.open('https://wa.me/2348123456789', '_blank')}
+                    onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
                     className="w-full"
                   >
-                    Contact Support via WhatsApp
+                    Contact Support via Telegram
                   </Button>
                 </div>
               )}

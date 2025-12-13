@@ -161,7 +161,7 @@ This project is proprietary and confidential. All rights reserved.
 
 For support and inquiries:
 - 📧 Email: tallystoreorg@gmail.com
-- 💬 Telegram: https://t.me/Tallystoreorg
+- 💬 Telegram: https://t.me/Tallystore1
 - 🐛 Issues: Create an issue in this repository
 
 ---
