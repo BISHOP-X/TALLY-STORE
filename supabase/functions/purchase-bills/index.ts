@@ -1,11 +1,53 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { createSageCloudClient } from '../_shared/sagecloud-client.ts';
+import { createSageCloudClient, type BalanceCheckResult, SageCloudClient } from '../_shared/sagecloud-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+/**
+ * Log admin alert for low SageCloud balance
+ * In production, this could trigger email/SMS/Slack notifications
+ */
+async function logAdminAlert(
+  supabaseAdmin: any,
+  alertType: 'low_balance' | 'critical_balance' | 'insufficient_balance',
+  balanceInfo: BalanceCheckResult,
+  context: { transaction_type: string; user_id: string; reference?: string }
+) {
+  const thresholds = SageCloudClient.getThresholds();
+  
+  const alertMessage = alertType === 'critical_balance'
+    ? `🚨 CRITICAL: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below critical threshold (₦${thresholds.CRITICAL_BALANCE_THRESHOLD.toLocaleString()})`
+    : alertType === 'low_balance'
+    ? `⚠️ WARNING: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below warning threshold (₦${thresholds.LOW_BALANCE_THRESHOLD.toLocaleString()})`
+    : `❌ FAILED: Insufficient SageCloud balance. Needed: ₦${balanceInfo.requestedAmount.toLocaleString()}, Available: ₦${balanceInfo.currentBalance.toLocaleString()}, Shortfall: ₦${balanceInfo.shortfall.toLocaleString()}`;
+
+  console.error(`[ADMIN ALERT] ${alertMessage}`);
+  console.error(`[ADMIN ALERT] Context: ${JSON.stringify(context)}`);
+
+  // Log to admin_alerts table for dashboard visibility
+  try {
+    await supabaseAdmin
+      .from('admin_alerts')
+      .insert({
+        alert_type: alertType,
+        severity: alertType === 'critical_balance' ? 'critical' : alertType === 'low_balance' ? 'warning' : 'error',
+        message: alertMessage,
+        context: {
+          ...context,
+          balance_info: balanceInfo,
+          thresholds,
+        },
+        acknowledged: false,
+      });
+  } catch (dbError) {
+    // Don't fail the transaction if alert logging fails
+    console.error('[ADMIN ALERT] Failed to log to database:', dbError);
+  }
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -14,6 +56,11 @@ serve(async (req) => {
   }
 
   try {
+    // Kill switch - can disable all bill purchases instantly via env var
+    if (Deno.env.get('BILLS_ENABLED') === 'false') {
+      throw new Error('Bills payment is temporarily disabled for maintenance. Please try again later.');
+    }
+
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -34,22 +81,30 @@ serve(async (req) => {
       }
     );
 
-    // Get authenticated user
+    // Get authenticated user - pass token directly like get-data-plans
     const {
       data: { user },
       error: userError,
-    } = await supabaseClient.auth.getUser();
+    } = await supabaseClient.auth.getUser(authHeader.replace('Bearer ', ''));
 
     if (userError || !user) {
       throw new Error('Unauthorized');
     }
 
-    // Parse request body
-    const { transaction_type, amount, service_provider, phone, data_plan_code } = await req.json();
+    // Parse request body - includes payment_source and idempotency_key
+    const { transaction_type, amount, service_provider, phone, data_plan_code, payment_source = 'wallet', idempotency_key } = await req.json();
+
+    // Normalize provider to uppercase
+    const normalizedProvider = service_provider?.toUpperCase();
 
     // Validate required fields
-    if (!transaction_type || !amount || !service_provider || !phone) {
+    if (!transaction_type || !amount || !normalizedProvider || !phone) {
       throw new Error('Missing required fields: transaction_type, amount, service_provider, phone');
+    }
+
+    // Validate idempotency key (required to prevent double-charges)
+    if (!idempotency_key || typeof idempotency_key !== 'string' || idempotency_key.length < 10) {
+      throw new Error('Valid idempotency_key is required');
     }
 
     // Validate transaction type
@@ -57,10 +112,46 @@ serve(async (req) => {
       throw new Error('Invalid transaction_type. Must be "airtime" or "data"');
     }
 
+    // Validate payment source
+    if (!['wallet', 'crypto'].includes(payment_source)) {
+      throw new Error('Invalid payment_source. Must be "wallet" or "crypto"');
+    }
+
     // Validate service provider
     const validProviders = ['MTN', 'GLO', 'AIRTEL', '9MOBILE'];
-    if (!validProviders.includes(service_provider.toUpperCase())) {
+    if (!validProviders.includes(normalizedProvider)) {
       throw new Error(`Invalid service_provider. Must be one of: ${validProviders.join(', ')}`);
+    }
+
+    // Idempotency check - prevent double-charges
+    const { data: existingTransaction } = await supabaseClient
+      .from('bills_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('idempotency_key', idempotency_key)
+      .single();
+
+    if (existingTransaction) {
+      console.log(`⚠️ Idempotency hit: returning existing transaction ${existingTransaction.id}`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          transaction_id: existingTransaction.id,
+          reference: existingTransaction.reference,
+          status: existingTransaction.status,
+          transaction_type: existingTransaction.transaction_type,
+          amount: existingTransaction.amount,
+          service_provider: existingTransaction.service_provider,
+          beneficiary_phone: existingTransaction.beneficiary_phone,
+          payment_source: existingTransaction.payment_source,
+          message: 'Transaction already processed',
+          idempotency_hit: true,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
     }
 
     // Validate amount
@@ -74,10 +165,14 @@ serve(async (req) => {
       throw new Error('data_plan_code is required for data purchases');
     }
 
-    // Check user's wallet balance
+    // Determine which balance column to use
+    const balanceColumn = payment_source === 'wallet' ? 'wallet_balance' : 'crypto_balance';
+    const balanceDisplayName = payment_source === 'wallet' ? 'TallyStore' : 'Crypto';
+
+    // Check user's balance (dynamic column)
     const { data: userData, error: userFetchError } = await supabaseClient
       .from('profiles')
-      .select('wallet_balance')
+      .select(balanceColumn)
       .eq('id', user.id)
       .single();
 
@@ -85,9 +180,9 @@ serve(async (req) => {
       throw new Error('Failed to fetch user balance');
     }
 
-    const currentBalance = parseFloat(userData.wallet_balance || '0');
+    const currentBalance = parseFloat(userData?.[balanceColumn] || '0');
     if (currentBalance < purchaseAmount) {
-      throw new Error(`Insufficient balance. Available: ₦${currentBalance.toLocaleString()}, Required: ₦${purchaseAmount.toLocaleString()}`);
+      throw new Error(`Insufficient ${balanceDisplayName} balance. Available: ₦${currentBalance.toLocaleString()}, Required: ₦${purchaseAmount.toLocaleString()}`);
     }
 
     // Initialize SageCloud client
@@ -96,18 +191,45 @@ serve(async (req) => {
       secretKey: Deno.env.get('SAGECLOUD_SECRET_KEY') ?? '',
     });
 
-    // Check SageCloud balance
+    // Initialize admin client for alerts (uses service role key)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    // Check SageCloud balance with detailed info for admin alerts
     console.log('Checking SageCloud balance...');
-    const hasBalance = await sageCloudClient.hasBalance(purchaseAmount);
+    const balanceCheck = await sageCloudClient.checkBalanceWithDetails(purchaseAmount);
     
-    if (!hasBalance) {
-      throw new Error('Service temporarily unavailable. Please try again later.');
+    // Log balance status for monitoring
+    console.log(`SageCloud balance check: Current=₦${balanceCheck.currentBalance.toLocaleString()}, Required=₦${balanceCheck.requestedAmount.toLocaleString()}, HasBalance=${balanceCheck.hasBalance}`);
+    
+    // Trigger admin alerts based on balance thresholds
+    if (balanceCheck.isCriticalBalance) {
+      await logAdminAlert(supabaseAdmin, 'critical_balance', balanceCheck, {
+        transaction_type,
+        user_id: user.id,
+      });
+    } else if (balanceCheck.isLowBalance) {
+      await logAdminAlert(supabaseAdmin, 'low_balance', balanceCheck, {
+        transaction_type,
+        user_id: user.id,
+      });
+    }
+    
+    // If insufficient balance, log alert and return user-friendly error
+    if (!balanceCheck.hasBalance) {
+      await logAdminAlert(supabaseAdmin, 'insufficient_balance', balanceCheck, {
+        transaction_type,
+        user_id: user.id,
+      });
+      throw new Error('Insufficient SageCloud balance. Please contact support.');
     }
 
     // Generate unique reference
     const reference = `TALLY-${transaction_type.toUpperCase()}-${Date.now()}-${user.id.substring(0, 8)}`;
 
-    // Create bills transaction record (pending status)
+    // Create bills transaction record (pending status) - includes payment_source and idempotency_key
     const { data: billRecord, error: dbError } = await supabaseClient
       .from('bills_transactions')
       .insert({
@@ -116,9 +238,11 @@ serve(async (req) => {
         transaction_type,
         amount: purchaseAmount,
         status: 'pending',
-        service_provider: service_provider.toUpperCase(),
+        service_provider: normalizedProvider,
         service_code: data_plan_code || null,
         beneficiary_phone: phone,
+        payment_source: payment_source,
+        idempotency_key: idempotency_key,
       })
       .select()
       .single();
@@ -128,7 +252,7 @@ serve(async (req) => {
       throw new Error(`Failed to create transaction record: ${dbError.message}`);
     }
 
-    // Deduct from user's wallet balance with optimistic locking
+    // Deduct from user's balance with optimistic locking (dynamic column)
     let balanceDeducted = false;
     let actualCurrentBalance = currentBalance;
     
@@ -136,11 +260,11 @@ serve(async (req) => {
       // Re-fetch balance to ensure we have latest value
       const { data: freshUserData } = await supabaseClient
         .from('profiles')
-        .select('wallet_balance')
+        .select(balanceColumn)
         .eq('id', user.id)
         .single();
       
-      actualCurrentBalance = parseFloat(freshUserData?.wallet_balance || '0');
+      actualCurrentBalance = parseFloat(freshUserData?.[balanceColumn] || '0');
       
       // Re-check balance is sufficient
       if (actualCurrentBalance < purchaseAmount) {
@@ -149,14 +273,14 @@ serve(async (req) => {
           .from('bills_transactions')
           .delete()
           .eq('id', billRecord.id);
-        throw new Error(`Insufficient balance. Available: ₦${actualCurrentBalance.toLocaleString()}, Required: ₦${purchaseAmount.toLocaleString()}`);
+        throw new Error(`Insufficient ${balanceDisplayName} balance. Available: ₦${actualCurrentBalance.toLocaleString()}, Required: ₦${purchaseAmount.toLocaleString()}`);
       }
       
       // Optimistic lock: only update if balance matches what we read
       const { data: updateData, error: balanceError } = await supabaseClient
         .from('profiles')
-        .update({ wallet_balance: actualCurrentBalance - purchaseAmount })
-        .match({ id: user.id, wallet_balance: actualCurrentBalance })
+        .update({ [balanceColumn]: actualCurrentBalance - purchaseAmount })
+        .match({ id: user.id, [balanceColumn]: actualCurrentBalance })
         .select()
         .single();
 
@@ -168,7 +292,7 @@ serve(async (req) => {
 
       if (updateData) {
         balanceDeducted = true;
-        console.log(`✅ Deducted ${purchaseAmount} from user ${user.id} wallet`);
+        console.log(`✅ Deducted ${purchaseAmount} from user ${user.id} ${balanceColumn}`);
       } else {
         console.warn(`🔁 No rows updated on attempt ${attempt + 1}, retrying...`);
         await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
@@ -192,11 +316,11 @@ serve(async (req) => {
       if (transaction_type === 'airtime') {
         // Purchase airtime
         console.log('Processing airtime purchase...');
-        const service = `${service_provider.toUpperCase()}VTU`; // e.g., MTNVTU, GLOVTU
+        const service = `${normalizedProvider}VTU`; // e.g., MTNVTU, GLOVTU
         
         purchaseResponse = await sageCloudClient.purchaseAirtime({
           reference,
-          network: service_provider.toUpperCase() as 'MTN' | 'GLO' | 'AIRTEL' | '9MOBILE',
+          network: normalizedProvider as 'MTN' | 'GLO' | 'AIRTEL' | '9MOBILE',
           service,
           phone,
           amount: purchaseAmount.toString(),
@@ -205,15 +329,15 @@ serve(async (req) => {
       } else {
         // Purchase data
         console.log('Processing data purchase...');
-        const dataType = `${service_provider.toUpperCase()}DATA`; // e.g., MTNDATA, GLODATA
+        const dataType = `${normalizedProvider}DATA`; // e.g., MTNDATA, GLODATA
         
         purchaseResponse = await sageCloudClient.purchaseData({
           reference,
           type: dataType,
           code: data_plan_code!,
-          network: service_provider.toUpperCase() as 'MTN' | 'GLO' | 'AIRTEL' | '9MOBILE',
+          network: normalizedProvider as 'MTN' | 'GLO' | 'AIRTEL' | '9MOBILE',
           phone,
-          provider: service_provider.toUpperCase(),
+          provider: normalizedProvider,
         });
       }
 
@@ -250,28 +374,28 @@ serve(async (req) => {
         })
         .eq('id', billRecord.id);
 
-      // Refund user's wallet balance with optimistic locking
+      // Refund user's balance with optimistic locking (same column that was deducted)
       let refunded = false;
       for (let attempt = 0; attempt < 5 && !refunded; attempt++) {
         const { data: currentUserData } = await supabaseClient
           .from('profiles')
-          .select('wallet_balance')
+          .select(balanceColumn)
           .eq('id', user.id)
           .single();
         
-        const currentBal = parseFloat(currentUserData?.wallet_balance || '0');
+        const currentBal = parseFloat(currentUserData?.[balanceColumn] || '0');
         const refundedBalance = currentBal + purchaseAmount;
         
         const { data: refundData } = await supabaseClient
           .from('profiles')
-          .update({ wallet_balance: refundedBalance })
-          .match({ id: user.id, wallet_balance: currentBal })
+          .update({ [balanceColumn]: refundedBalance })
+          .match({ id: user.id, [balanceColumn]: currentBal })
           .select()
           .single();
         
         if (refundData) {
           refunded = true;
-          console.log(`✅ Refunded ${purchaseAmount} to user ${user.id} wallet`);
+          console.log(`✅ Refunded ${purchaseAmount} to user ${user.id} ${balanceColumn}`);
         } else {
           await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
         }
@@ -289,8 +413,9 @@ serve(async (req) => {
         status: finalStatus,
         transaction_type,
         amount: purchaseAmount,
-        service_provider: service_provider.toUpperCase(),
+        service_provider: normalizedProvider,
         beneficiary_phone: phone,
+        payment_source: payment_source,
         message: finalStatus === 'successful' 
           ? `${transaction_type === 'airtime' ? 'Airtime' : 'Data'} purchase successful` 
           : `${transaction_type === 'airtime' ? 'Airtime' : 'Data'} purchase is being processed`,

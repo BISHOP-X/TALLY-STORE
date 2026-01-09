@@ -116,6 +116,20 @@ interface RequeryResponse {
   data?: any;
 }
 
+// Result from balance check with detailed info for alerting
+export interface BalanceCheckResult {
+  hasBalance: boolean;
+  currentBalance: number;
+  requestedAmount: number;
+  shortfall: number;
+  isLowBalance: boolean; // true if balance < LOW_BALANCE_THRESHOLD
+  isCriticalBalance: boolean; // true if balance < CRITICAL_BALANCE_THRESHOLD
+}
+
+// Thresholds for balance alerts (in NGN)
+const LOW_BALANCE_THRESHOLD = 50000; // ₦50,000 - warn admin
+const CRITICAL_BALANCE_THRESHOLD = 10000; // ₦10,000 - critical alert
+
 export class SageCloudClient {
   private config: SageCloudConfig;
   private authToken: string | null = null;
@@ -254,11 +268,11 @@ export class SageCloudClient {
 
   /**
    * Check if balance is sufficient for transaction
+   * @deprecated Use checkBalanceWithDetails for comprehensive checking
    */
   async hasBalance(amount: number): Promise<boolean> {
-    const balance = await this.getBalance();
-    const availableBalance = parseFloat(balance.general_wallet.balance);
-    return availableBalance >= amount;
+    const result = await this.checkBalanceWithDetails(amount);
+    return result.hasBalance;
   }
 
   /**
@@ -268,6 +282,40 @@ export class SageCloudClient {
     const balance = await this.getBalance();
     return parseFloat(balance.general_wallet.balance);
   }
+
+  /**
+   * Comprehensive balance check with detailed info for alerting
+   * Returns detailed info about balance status for admin alerts
+   */
+  async checkBalanceWithDetails(amount: number): Promise<BalanceCheckResult> {
+    const balance = await this.getBalance();
+    const currentBalance = parseFloat(balance.general_wallet.balance);
+    const shortfall = Math.max(0, amount - currentBalance);
+    
+    return {
+      hasBalance: currentBalance >= amount,
+      currentBalance,
+      requestedAmount: amount,
+      shortfall,
+      isLowBalance: currentBalance < LOW_BALANCE_THRESHOLD,
+      isCriticalBalance: currentBalance < CRITICAL_BALANCE_THRESHOLD,
+    };
+  }
+
+  /**
+   * Get balance thresholds for external use
+   */
+  static getThresholds() {
+    return {
+      LOW_BALANCE_THRESHOLD,
+      CRITICAL_BALANCE_THRESHOLD,
+    };
+  }
+}
+
+// Export singleton instance creator
+export function createSageCloudClient(config: SageCloudConfig): SageCloudClient {
+  return new SageCloudClient(config);
 }
 
 // Export singleton instance creator

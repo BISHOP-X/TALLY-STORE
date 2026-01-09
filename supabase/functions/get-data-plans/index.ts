@@ -45,6 +45,9 @@ serve(async (req) => {
       throw new Error('Provider is required (MTN, GLO, AIRTEL, 9MOBILE)');
     }
 
+    // Normalize provider to uppercase
+    const normalizedProvider = provider.toUpperCase();
+
     // Map provider to SageCloud format
     const providerMap: Record<string, string> = {
       'MTN': 'MTNDATA',
@@ -53,9 +56,9 @@ serve(async (req) => {
       '9MOBILE': '9MOBILEDATA',
     };
 
-    const sageProvider = providerMap[provider];
+    const sageProvider = providerMap[normalizedProvider];
     if (!sageProvider) {
-      throw new Error('Invalid provider');
+      throw new Error('Invalid provider. Must be one of: MTN, GLO, AIRTEL, 9MOBILE');
     }
 
     // Initialize SageCloud client
@@ -97,19 +100,18 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error fetching data plans:', error);
     
-    // Log detailed error for debugging
-    const errorDetails = {
+    // Log detailed error for server-side debugging only
+    console.error('Detailed error:', JSON.stringify({
       message: error.message,
       stack: error.stack,
       name: error.name,
-    };
-    console.error('Detailed error:', JSON.stringify(errorDetails));
+    }));
     
     return new Response(
       JSON.stringify({ 
         success: false, 
         error: error.message || 'Failed to fetch data plans',
-        details: errorDetails,
+        // Don't expose stack traces to client
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

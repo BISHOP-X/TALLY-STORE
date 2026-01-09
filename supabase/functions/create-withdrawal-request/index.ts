@@ -1,11 +1,53 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { createSageCloudClient } from '../_shared/sagecloud-client.ts';
+import { createSageCloudClient, type BalanceCheckResult, SageCloudClient } from '../_shared/sagecloud-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+/**
+ * Log admin alert for low SageCloud balance
+ * In production, this could trigger email/SMS/Slack notifications
+ */
+async function logAdminAlert(
+  supabaseAdmin: any,
+  alertType: 'low_balance' | 'critical_balance' | 'insufficient_balance',
+  balanceInfo: BalanceCheckResult,
+  context: { transaction_type: string; user_id: string; reference?: string }
+) {
+  const thresholds = SageCloudClient.getThresholds();
+  
+  const alertMessage = alertType === 'critical_balance'
+    ? `🚨 CRITICAL: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below critical threshold (₦${thresholds.CRITICAL_BALANCE_THRESHOLD.toLocaleString()})`
+    : alertType === 'low_balance'
+    ? `⚠️ WARNING: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below warning threshold (₦${thresholds.LOW_BALANCE_THRESHOLD.toLocaleString()})`
+    : `❌ FAILED: Insufficient SageCloud balance. Needed: ₦${balanceInfo.requestedAmount.toLocaleString()}, Available: ₦${balanceInfo.currentBalance.toLocaleString()}, Shortfall: ₦${balanceInfo.shortfall.toLocaleString()}`;
+
+  console.error(`[ADMIN ALERT] ${alertMessage}`);
+  console.error(`[ADMIN ALERT] Context: ${JSON.stringify(context)}`);
+
+  // Log to admin_alerts table for dashboard visibility
+  try {
+    await supabaseAdmin
+      .from('admin_alerts')
+      .insert({
+        alert_type: alertType,
+        severity: alertType === 'critical_balance' ? 'critical' : alertType === 'low_balance' ? 'warning' : 'error',
+        message: alertMessage,
+        context: {
+          ...context,
+          balance_info: balanceInfo,
+          thresholds,
+        },
+        acknowledged: false,
+      });
+  } catch (dbError) {
+    // Don't fail the transaction if alert logging fails
+    console.error('[ADMIN ALERT] Failed to log to database:', dbError);
+  }
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -14,6 +56,10 @@ serve(async (req) => {
   }
 
   try {
+    // Kill switch - can disable all withdrawals instantly via env var
+    if (Deno.env.get('WITHDRAWALS_ENABLED') === 'false') {
+      throw new Error('Withdrawals are temporarily disabled for maintenance. Please try again later.');
+    }
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -80,6 +126,12 @@ serve(async (req) => {
       secretKey: Deno.env.get('SAGECLOUD_SECRET_KEY') ?? '',
     });
 
+    // Initialize admin client for alerts (uses service role key)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
     // Step 1: Validate bank account (verify account name)
     console.log('Validating bank account...');
     let validatedAccountName = account_name;
@@ -99,11 +151,32 @@ serve(async (req) => {
       // Continue with user-provided name if validation fails
     }
 
-    // Step 2: Check SageCloud balance
+    // Step 2: Check SageCloud balance with detailed info for admin alerts
     console.log('Checking SageCloud balance...');
-    const hasBalance = await sageCloudClient.hasBalance(withdrawalAmount);
+    const balanceCheck = await sageCloudClient.checkBalanceWithDetails(withdrawalAmount);
     
-    if (!hasBalance) {
+    // Log balance status for monitoring
+    console.log(`SageCloud balance check: Current=₦${balanceCheck.currentBalance.toLocaleString()}, Required=₦${balanceCheck.requestedAmount.toLocaleString()}, HasBalance=${balanceCheck.hasBalance}`);
+    
+    // Trigger admin alerts based on balance thresholds
+    if (balanceCheck.isCriticalBalance) {
+      await logAdminAlert(supabaseAdmin, 'critical_balance', balanceCheck, {
+        transaction_type: 'withdrawal',
+        user_id: user.id,
+      });
+    } else if (balanceCheck.isLowBalance) {
+      await logAdminAlert(supabaseAdmin, 'low_balance', balanceCheck, {
+        transaction_type: 'withdrawal',
+        user_id: user.id,
+      });
+    }
+    
+    // If insufficient balance, log alert and return user-friendly error
+    if (!balanceCheck.hasBalance) {
+      await logAdminAlert(supabaseAdmin, 'insufficient_balance', balanceCheck, {
+        transaction_type: 'withdrawal',
+        user_id: user.id,
+      });
       throw new Error('Insufficient SageCloud balance. Please contact support.');
     }
 

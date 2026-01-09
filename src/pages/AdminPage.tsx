@@ -19,10 +19,12 @@ import {
   DollarSign,
   Loader2,
   Search,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
+import AdminAlerts from '@/components/AdminAlerts'
 import { 
   getCategories, 
   getAllProductGroups, 
@@ -1302,6 +1304,11 @@ export default function AdminPage() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Admin Alerts Section */}
+          <div className="mb-8">
+            <AdminAlerts />
           </div>
 
           {/* Main Content */}

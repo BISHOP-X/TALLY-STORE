@@ -30,7 +30,8 @@ import {
   Clock,
   XCircle,
   Wallet,
-  TrendingDown
+  TrendingDown,
+  Bitcoin
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -66,7 +67,9 @@ const SERVICE_PROVIDERS = [
 
 export default function BillsPayment() {
   const [activeTab, setActiveTab] = useState<'airtime' | 'data'>('airtime');
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [cryptoBalance, setCryptoBalance] = useState<number>(0);
+  const [paymentSource, setPaymentSource] = useState<'wallet' | 'crypto'>('wallet');
   const [provider, setProvider] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
@@ -96,13 +99,14 @@ export default function BillsPayment() {
 
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('wallet_balance')
+        .select('wallet_balance, crypto_balance')
         .eq('id', user.id)
         .single();
 
       if (error) throw error;
 
-      setCryptoBalance(profile?.wallet_balance || 0);
+      setWalletBalance(profile?.wallet_balance || 0);
+      setCryptoBalance(profile?.crypto_balance || 0);
     } catch (error) {
       console.error('Error fetching balance:', error);
       toast({
@@ -114,6 +118,9 @@ export default function BillsPayment() {
       setLoadingBalance(false);
     }
   };
+
+  // Get the currently selected balance
+  const selectedBalance = paymentSource === 'wallet' ? walletBalance : cryptoBalance;
 
   const fetchTransactionHistory = async () => {
     try {
@@ -227,16 +234,19 @@ export default function BillsPayment() {
       return;
     }
 
-    if (purchaseAmount > cryptoBalance) {
+    if (purchaseAmount > selectedBalance) {
       toast({
         title: "Insufficient Balance",
-        description: `You need ₦${purchaseAmount.toLocaleString()} but only have ₦${cryptoBalance.toLocaleString()}`,
+        description: `You need ₦${purchaseAmount.toLocaleString()} but only have ₦${selectedBalance.toLocaleString()} in your ${paymentSource === 'wallet' ? 'TallyStore' : 'Crypto'} balance`,
         variant: "destructive",
       });
       return;
     }
 
     setLoading(true);
+
+    // Generate unique idempotency key for this purchase attempt
+    const idempotencyKey = `${Date.now()}-${crypto.randomUUID()}`;
 
     try {
       const requestBody = {
@@ -245,6 +255,8 @@ export default function BillsPayment() {
         service_provider: provider,
         phone: phone,
         data_plan_code: activeTab === 'data' ? selectedPlan : null,
+        payment_source: paymentSource,
+        idempotency_key: idempotencyKey,
       };
       
       console.log('Sending purchase request:', requestBody);
@@ -367,34 +379,101 @@ export default function BillsPayment() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Purchase Form */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Balance Display Card */}
-            <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+            {/* Balance Selection Card */}
+            <Card className="border-2">
               <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Wallet className="w-8 h-8 text-green-700" />
-                    <div>
-                      <p className="text-sm text-green-700">Available Balance</p>
-                      {loadingBalance ? (
-                        <p className="text-2xl font-bold text-green-900">Loading...</p>
-                      ) : (
-                        <p className="text-2xl font-bold text-green-900">
-                          ₦{cryptoBalance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                      )}
+                <p className="text-sm font-medium text-muted-foreground mb-4">Pay with</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* TallyStore Wallet Option */}
+                  <div
+                    onClick={() => setPaymentSource('wallet')}
+                    className={`cursor-pointer p-4 rounded-lg border-2 transition-all ${
+                      paymentSource === 'wallet'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-950'
+                        : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`p-2 rounded-full ${paymentSource === 'wallet' ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                        <Wallet className={`w-5 h-5 ${paymentSource === 'wallet' ? 'text-white' : 'text-gray-600 dark:text-gray-400'}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">TallyStore Balance</p>
+                        <p className="text-xs text-muted-foreground">From card/bank top-up</p>
+                      </div>
                     </div>
+                    {loadingBalance ? (
+                      <p className="text-lg font-bold">Loading...</p>
+                    ) : (
+                      <p className={`text-xl font-bold ${paymentSource === 'wallet' ? 'text-green-700 dark:text-green-400' : 'text-foreground'}`}>
+                        ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
                   </div>
-                  {cryptoBalance === 0 && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => navigate('/wallet')}
-                      className="border-green-600 text-green-700 hover:bg-green-100"
-                    >
-                      Add Funds
-                    </Button>
-                  )}
+
+                  {/* Crypto Balance Option */}
+                  <div
+                    onClick={() => setPaymentSource('crypto')}
+                    className={`cursor-pointer p-4 rounded-lg border-2 transition-all ${
+                      paymentSource === 'crypto'
+                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-950'
+                        : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`p-2 rounded-full ${paymentSource === 'crypto' ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                        <Bitcoin className={`w-5 h-5 ${paymentSource === 'crypto' ? 'text-white' : 'text-gray-600 dark:text-gray-400'}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">Crypto Balance</p>
+                        <p className="text-xs text-muted-foreground">From crypto deposits</p>
+                      </div>
+                    </div>
+                    {loadingBalance ? (
+                      <p className="text-lg font-bold">Loading...</p>
+                    ) : (
+                      <p className={`text-xl font-bold ${paymentSource === 'crypto' ? 'text-orange-700 dark:text-orange-400' : 'text-foreground'}`}>
+                        ₦{cryptoBalance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </div>
                 </div>
+                
+                {/* Selected Balance Indicator */}
+                <div className={`mt-4 p-3 rounded-lg flex items-center justify-between ${
+                  paymentSource === 'wallet' 
+                    ? 'bg-green-100 dark:bg-green-900/30' 
+                    : 'bg-orange-100 dark:bg-orange-900/30'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {paymentSource === 'wallet' ? (
+                      <Wallet className="w-5 h-5 text-green-700 dark:text-green-400" />
+                    ) : (
+                      <Bitcoin className="w-5 h-5 text-orange-700 dark:text-orange-400" />
+                    )}
+                    <span className="text-sm font-medium">
+                      Paying with {paymentSource === 'wallet' ? 'TallyStore' : 'Crypto'} Balance
+                    </span>
+                  </div>
+                  <span className={`text-lg font-bold ${
+                    paymentSource === 'wallet' 
+                      ? 'text-green-700 dark:text-green-400' 
+                      : 'text-orange-700 dark:text-orange-400'
+                  }`}>
+                    ₦{selectedBalance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {selectedBalance === 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(paymentSource === 'wallet' ? '/wallet' : '/crypto-exchange')}
+                    className="mt-3 w-full"
+                  >
+                    {paymentSource === 'wallet' ? 'Top Up Wallet' : 'Deposit Crypto'}
+                  </Button>
+                )}
               </CardContent>
             </Card>
 
@@ -576,7 +655,7 @@ export default function BillsPayment() {
                         phone.length !== 11 ||
                         !amount ||
                         parseFloat(amount) < 50 ||
-                        parseFloat(amount) > cryptoBalance ||
+                        parseFloat(amount) > selectedBalance ||
                         (activeTab === 'data' && !selectedPlan)
                       }
                     >
