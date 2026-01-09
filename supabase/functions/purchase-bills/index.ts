@@ -1,15 +1,27 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { createSageCloudClient, type BalanceCheckResult, SageCloudClient } from '../_shared/sagecloud-client.ts';
+import { createSageCloudClient } from '../_shared/sagecloud-client.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Thresholds for balance alerts (in NGN)
+const LOW_BALANCE_THRESHOLD = 50000;
+const CRITICAL_BALANCE_THRESHOLD = 10000;
+
+interface BalanceCheckResult {
+  hasBalance: boolean;
+  currentBalance: number;
+  requestedAmount: number;
+  shortfall: number;
+  isLowBalance: boolean;
+  isCriticalBalance: boolean;
+}
+
 /**
  * Log admin alert for low SageCloud balance
- * In production, this could trigger email/SMS/Slack notifications
  */
 async function logAdminAlert(
   supabaseAdmin: any,
@@ -17,12 +29,10 @@ async function logAdminAlert(
   balanceInfo: BalanceCheckResult,
   context: { transaction_type: string; user_id: string; reference?: string }
 ) {
-  const thresholds = SageCloudClient.getThresholds();
-  
   const alertMessage = alertType === 'critical_balance'
-    ? `🚨 CRITICAL: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below critical threshold (₦${thresholds.CRITICAL_BALANCE_THRESHOLD.toLocaleString()})`
+    ? `🚨 CRITICAL: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below critical threshold (₦${CRITICAL_BALANCE_THRESHOLD.toLocaleString()})`
     : alertType === 'low_balance'
-    ? `⚠️ WARNING: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below warning threshold (₦${thresholds.LOW_BALANCE_THRESHOLD.toLocaleString()})`
+    ? `⚠️ WARNING: SageCloud balance (₦${balanceInfo.currentBalance.toLocaleString()}) is below warning threshold (₦${LOW_BALANCE_THRESHOLD.toLocaleString()})`
     : `❌ FAILED: Insufficient SageCloud balance. Needed: ₦${balanceInfo.requestedAmount.toLocaleString()}, Available: ₦${balanceInfo.currentBalance.toLocaleString()}, Shortfall: ₦${balanceInfo.shortfall.toLocaleString()}`;
 
   console.error(`[ADMIN ALERT] ${alertMessage}`);
@@ -39,7 +49,6 @@ async function logAdminAlert(
         context: {
           ...context,
           balance_info: balanceInfo,
-          thresholds,
         },
         acknowledged: false,
       });
@@ -197,9 +206,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    // Check SageCloud balance with detailed info for admin alerts
+    // Check SageCloud balance
     console.log('Checking SageCloud balance...');
-    const balanceCheck = await sageCloudClient.checkBalanceWithDetails(purchaseAmount);
+    const sageCloudBalance = await sageCloudClient.getBalanceAmount();
+    const balanceCheck: BalanceCheckResult = {
+      hasBalance: sageCloudBalance >= purchaseAmount,
+      currentBalance: sageCloudBalance,
+      requestedAmount: purchaseAmount,
+      shortfall: Math.max(0, purchaseAmount - sageCloudBalance),
+      isLowBalance: sageCloudBalance < LOW_BALANCE_THRESHOLD,
+      isCriticalBalance: sageCloudBalance < CRITICAL_BALANCE_THRESHOLD,
+    };
     
     // Log balance status for monitoring
     console.log(`SageCloud balance check: Current=₦${balanceCheck.currentBalance.toLocaleString()}, Required=₦${balanceCheck.requestedAmount.toLocaleString()}, HasBalance=${balanceCheck.hasBalance}`);

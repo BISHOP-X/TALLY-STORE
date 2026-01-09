@@ -317,8 +317,3 @@ export class SageCloudClient {
 export function createSageCloudClient(config: SageCloudConfig): SageCloudClient {
   return new SageCloudClient(config);
 }
-
-// Export singleton instance creator
-export function createSageCloudClient(config: SageCloudConfig): SageCloudClient {
-  return new SageCloudClient(config);
-}
