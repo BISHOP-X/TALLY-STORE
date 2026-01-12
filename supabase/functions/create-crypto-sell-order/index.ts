@@ -157,17 +157,18 @@ serve(async (req) => {
         undefined, // currency_to - use default from store settings
         'usd' // Get USD equivalent
       );
-      minAmount = minAmountResponse.min_amount;
-      const minUsdEquivalent = minAmountResponse.fiat_equivalent || 0;
-      console.log(`✅ Minimum for ${crypto_type}: ${minAmount} (≈$${minUsdEquivalent.toFixed(2)} USD)`);
+      // Add 15% buffer to account for NowPayments fees and conversion slippage
+      minAmount = minAmountResponse.min_amount * 1.15;
+      const minUsdEquivalent = (minAmountResponse.fiat_equivalent || 0) * 1.15;
+      console.log(`✅ Minimum for ${crypto_type}: ${minAmountResponse.min_amount} + 15% buffer = ${minAmount.toFixed(6)} (≈$${minUsdEquivalent.toFixed(2)} USD)`);
       
-      // Check if amount is below minimum
+      // Check if amount is below minimum (with buffer)
       if (parseFloat(crypto_amount) < minAmount) {
         return new Response(
           JSON.stringify({
             success: false,
-            error: `Amount too small. Minimum for ${crypto_type.toUpperCase()} is ${minAmount} ${crypto_type.toUpperCase()} (≈$${minUsdEquivalent.toFixed(2)} USD)`,
-            error_details: `You entered ${crypto_amount} ${crypto_type.toUpperCase()}, but minimum is ${minAmount}`,
+            error: `Amount too small. Minimum for ${crypto_type.toUpperCase()} is ${minAmount.toFixed(2)} ${crypto_type.toUpperCase()} (≈$${minUsdEquivalent.toFixed(2)} USD)`,
+            error_details: `You entered ${crypto_amount} ${crypto_type.toUpperCase()}, but minimum is ${minAmount.toFixed(2)} (includes processing buffer)`,
             min_amount: minAmount,
             min_usd_equivalent: minUsdEquivalent,
           }),
