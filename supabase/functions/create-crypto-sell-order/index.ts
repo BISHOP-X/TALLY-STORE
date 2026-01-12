@@ -148,6 +148,40 @@ serve(async (req) => {
       password: Deno.env.get('NOWPAYMENTS_PASSWORD'),
     });
 
+    // Check minimum payment amount for this crypto
+    console.log(`📊 Checking minimum amount for ${crypto_type}...`);
+    let minAmount: number;
+    try {
+      const minAmountResponse = await nowPaymentsClient.getMinimumPaymentAmount(
+        crypto_type.toLowerCase(),
+        undefined, // currency_to - use default from store settings
+        'usd' // Get USD equivalent
+      );
+      minAmount = minAmountResponse.min_amount;
+      const minUsdEquivalent = minAmountResponse.fiat_equivalent || 0;
+      console.log(`✅ Minimum for ${crypto_type}: ${minAmount} (≈$${minUsdEquivalent.toFixed(2)} USD)`);
+      
+      // Check if amount is below minimum
+      if (parseFloat(crypto_amount) < minAmount) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Amount too small. Minimum for ${crypto_type.toUpperCase()} is ${minAmount} ${crypto_type.toUpperCase()} (≈$${minUsdEquivalent.toFixed(2)} USD)`,
+            error_details: `You entered ${crypto_amount} ${crypto_type.toUpperCase()}, but minimum is ${minAmount}`,
+            min_amount: minAmount,
+            min_usd_equivalent: minUsdEquivalent,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          }
+        );
+      }
+    } catch (minAmountError: any) {
+      console.warn('⚠️ Could not fetch minimum amount, proceeding anyway:', minAmountError.message);
+      // Don't block the transaction, NowPayments will reject if too small
+    }
+
     // Generate unique order reference
     const orderReference = `TALLY-${Date.now()}-${user.id.substring(0, 8)}`;
 

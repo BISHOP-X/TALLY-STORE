@@ -1,5 +1,6 @@
 // Edge Function: get-available-cryptos
 // Fetches all available cryptocurrencies from NowPayments API
+// Also supports fetching minimum amount for a specific crypto via ?currency=xxx
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createNowPaymentsClient } from '../_shared/nowpayments-client.ts';
@@ -15,8 +16,6 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🔄 Fetching available cryptocurrencies from NowPayments...');
-
     // Initialize NowPayments client
     const nowpaymentsApiKey = Deno.env.get('NOWPAYMENTS_API_KEY');
     if (!nowpaymentsApiKey) {
@@ -26,6 +25,37 @@ serve(async (req) => {
     const nowpayments = createNowPaymentsClient({
       apiKey: nowpaymentsApiKey,
     });
+
+    // Check if requesting minimum amount for specific currency
+    const url = new URL(req.url);
+    const currency = url.searchParams.get('currency');
+    
+    if (currency) {
+      // Get minimum amount for specific currency
+      console.log(`📊 Fetching minimum amount for ${currency}...`);
+      const minAmountResponse = await nowpayments.getMinimumPaymentAmount(
+        currency.toLowerCase(),
+        undefined,
+        'usd'
+      );
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          currency: currency.toUpperCase(),
+          min_amount: minAmountResponse.min_amount,
+          fiat_equivalent_usd: minAmountResponse.fiat_equivalent || null,
+          timestamp: new Date().toISOString(),
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Default: Get all available currencies
+    console.log('🔄 Fetching available cryptocurrencies from NowPayments...');
 
     // Get available currencies
     const result = await nowpayments.getAvailableCurrencies();
