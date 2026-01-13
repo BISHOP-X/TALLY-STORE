@@ -148,85 +148,68 @@ serve(async (req) => {
       password: Deno.env.get('NOWPAYMENTS_PASSWORD'),
     });
 
-    // Check minimum payment amount for this crypto
-    // NowPayments has TWO minimums:
-    // 1. Input minimum (pay_amount) - the crypto amount sent
-    // 2. Output minimum (amountTo) - the USD equivalent after fees
-    // We need to ensure BOTH are met, so we use a generous buffer
-    console.log(`📊 Checking minimum amount for ${crypto_type}...`);
+    // ============================================================
+    // MINIMUM AMOUNT VALIDATION
+    // ============================================================
+    // Business decision: $20 USD minimum for ALL crypto transactions
+    // This ensures NowPayments can process with rate-locking enabled
+    // Review monthly - if volume is low, consider floating rate approach
+    // ============================================================
     
-    // Set a hard minimum USD value of $15 to ensure NowPayments output minimum is met
-    const MINIMUM_USD_VALUE = 15;
-    let minAmount: number;
-    let minUsdEquivalent: number;
+    const MINIMUM_USD = 20;
+    
+    console.log(`📊 Validating minimum amount for ${crypto_type}...`);
+    
+    // Get crypto-to-USD rate to calculate minimum in crypto terms
+    let minCryptoAmount: number;
+    let cryptoToUsdRate: number;
     
     try {
       const minAmountResponse = await nowPaymentsClient.getMinimumPaymentAmount(
         crypto_type.toLowerCase(),
-        undefined, // currency_to - use default from store settings
-        'usd' // Get USD equivalent
+        undefined,
+        'usd'
       );
       
-      // NowPayments input minimum with 50% buffer for fees and slippage
-      const inputMinWithBuffer = minAmountResponse.min_amount * 1.5;
-      const inputMinUsd = (minAmountResponse.fiat_equivalent || minAmountResponse.min_amount) * 1.5;
+      // Calculate rate: how much USD is 1 unit of this crypto worth?
+      cryptoToUsdRate = minAmountResponse.fiat_equivalent / minAmountResponse.min_amount;
       
-      // Calculate minimum based on $15 USD floor (accounting for 5% markup removal)
-      // When we send to NowPayments, we divide naira_amount by (usdToNgn * 1.05)
-      // So to get $15 output, we need at least $15 * 1.05 = $15.75 input
-      const usdFloorMinCrypto = (MINIMUM_USD_VALUE * 1.05) / (minAmountResponse.fiat_equivalent / minAmountResponse.min_amount || 1);
+      // Calculate how much crypto equals $20 USD
+      minCryptoAmount = MINIMUM_USD / cryptoToUsdRate;
       
-      // Use the HIGHER of the two minimums
-      if (usdFloorMinCrypto > inputMinWithBuffer) {
-        minAmount = usdFloorMinCrypto;
-        minUsdEquivalent = MINIMUM_USD_VALUE * 1.05;
-        console.log(`✅ Using USD floor minimum: ${minAmount.toFixed(2)} ${crypto_type} (≈$${minUsdEquivalent.toFixed(2)} USD)`);
-      } else {
-        minAmount = inputMinWithBuffer;
-        minUsdEquivalent = inputMinUsd;
-        console.log(`✅ Using API minimum with buffer: ${minAmount.toFixed(2)} ${crypto_type} (≈$${minUsdEquivalent.toFixed(2)} USD)`);
-      }
+      console.log(`✅ ${crypto_type.toUpperCase()}: 1 = $${cryptoToUsdRate.toFixed(4)} USD | Minimum: ${minCryptoAmount.toFixed(4)} ${crypto_type.toUpperCase()} (≈$${MINIMUM_USD} USD)`);
       
-      console.log(`📊 API min: ${minAmountResponse.min_amount}, With 50% buffer: ${inputMinWithBuffer.toFixed(2)}, USD floor min: ${usdFloorMinCrypto.toFixed(2)}, Final min: ${minAmount.toFixed(2)}`);
-      
-      // Check if amount is below minimum
-      if (parseFloat(crypto_amount) < minAmount) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: `Amount too small. Minimum for ${crypto_type.toUpperCase()} is ${minAmount.toFixed(2)} ${crypto_type.toUpperCase()} (≈$${minUsdEquivalent.toFixed(2)} USD)`,
-            error_details: `You entered ${crypto_amount} ${crypto_type.toUpperCase()}, but minimum is ${minAmount.toFixed(2)} to ensure successful processing`,
-            min_amount: minAmount,
-            min_usd_equivalent: minUsdEquivalent,
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 400,
-          }
-        );
-      }
-    } catch (minAmountError: any) {
-      console.warn('⚠️ Could not fetch minimum amount:', minAmountError.message);
-      // Fall back to hard-coded USD minimum
-      minAmount = MINIMUM_USD_VALUE; // Assume 1:1 for stablecoins
-      minUsdEquivalent = MINIMUM_USD_VALUE;
-      
-      if (parseFloat(crypto_amount) < minAmount) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: `Amount too small. Minimum is approximately $${MINIMUM_USD_VALUE} USD worth of crypto`,
-            error_details: `You entered ${crypto_amount} ${crypto_type.toUpperCase()}, but minimum is ~$${MINIMUM_USD_VALUE} USD`,
-            min_amount: minAmount,
-            min_usd_equivalent: minUsdEquivalent,
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 400,
-          }
-        );
-      }
+    } catch (error: any) {
+      console.warn('⚠️ Could not fetch rate, using 1:1 assumption:', error.message);
+      // Fallback for stablecoins or API errors - assume 1:1 with USD
+      cryptoToUsdRate = 1;
+      minCryptoAmount = MINIMUM_USD;
     }
+    
+    // Validate user input against minimum
+    const userAmount = parseFloat(crypto_amount);
+    const userAmountUsd = userAmount * cryptoToUsdRate;
+    
+    if (userAmountUsd < MINIMUM_USD) {
+      console.log(`❌ Amount too small: ${userAmount} ${crypto_type.toUpperCase()} = $${userAmountUsd.toFixed(2)} USD (min: $${MINIMUM_USD})`);
+      
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Minimum transaction is $${MINIMUM_USD} USD`,
+          error_details: `You entered ${userAmount} ${crypto_type.toUpperCase()} (≈$${userAmountUsd.toFixed(2)} USD). Minimum is ${minCryptoAmount.toFixed(2)} ${crypto_type.toUpperCase()} (≈$${MINIMUM_USD} USD)`,
+          min_amount: minCryptoAmount,
+          min_usd: MINIMUM_USD,
+          your_amount_usd: userAmountUsd,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
+    
+    console.log(`✅ Amount validated: ${userAmount} ${crypto_type.toUpperCase()} = $${userAmountUsd.toFixed(2)} USD (min: $${MINIMUM_USD})`)
 
     // Generate unique order reference
     const orderReference = `TALLY-${Date.now()}-${user.id.substring(0, 8)}`;
