@@ -89,22 +89,24 @@ serve(async (req) => {
       }
     );
 
-    // Get authenticated user
+    // Get authenticated user - explicitly pass token
+    const token = authHeader.replace(/^Bearer /i, '');
     const {
       data: { user },
       error: userError,
-    } = await supabaseClient.auth.getUser();
+    } = await supabaseClient.auth.getUser(token);
 
     if (userError || !user) {
+      console.error('Auth error:', userError);
       throw new Error('Unauthorized');
     }
 
     // Parse request body
-    const { amount, bank_code, account_number, account_name, narration } = await req.json();
+    const { amount, bank_code, bank_name, account_number, account_name, narration } = await req.json();
 
     // Validate required fields
-    if (!amount || !bank_code || !account_number || !account_name) {
-      throw new Error('Missing required fields: amount, bank_code, account_number, account_name');
+    if (!amount || !bank_code || !bank_name || !account_number || !account_name) {
+      throw new Error('Missing required fields: amount, bank_code, bank_name, account_number, account_name');
     }
 
     // Validate amount
@@ -194,11 +196,16 @@ serve(async (req) => {
         transaction_type: 'withdrawal',
         user_id: user.id,
       });
-      throw new Error('Insufficient SageCloud balance. Please contact support.');
+      throw new Error('SERVICE_UNAVAILABLE: We\'re experiencing a temporary issue on our end. Please try again in a few minutes. If the problem persists, contact our support team.');
     }
 
     // Generate unique reference
     const reference = `TALLY-WD-${Date.now()}-${user.id.substring(0, 8)}`;
+
+    // Calculate fee (2% of withdrawal amount)
+    const feePercentage = 2;
+    const feeAmount = Math.ceil((withdrawalAmount * feePercentage) / 100);
+    const netAmount = withdrawalAmount - feeAmount;
 
     // Step 3: Create withdrawal record (pending status)
     const { data: withdrawalRecord, error: dbError } = await supabaseClient
@@ -206,7 +213,10 @@ serve(async (req) => {
       .insert({
         user_id: user.id,
         amount: withdrawalAmount,
+        fee: feeAmount,
+        net_amount: netAmount,
         bank_code,
+        bank_name,
         account_number,
         account_name: validatedAccountName,
         status: 'pending',
@@ -377,7 +387,25 @@ serve(async (req) => {
     );
   } catch (error: unknown) {
     console.error('Error in create-withdrawal-request:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+    let errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+    let statusCode = 400;
+    
+    // Handle SERVICE_UNAVAILABLE errors (our internal issues like low balance)
+    if (errorMessage.startsWith('SERVICE_UNAVAILABLE:')) {
+      errorMessage = errorMessage.replace('SERVICE_UNAVAILABLE: ', '');
+      statusCode = 503; // Service Unavailable
+    }
+    // Handle SageCloud API errors with professional message
+    else if (errorMessage.includes('SageCloud API error') || errorMessage.includes('SageCloud authentication failed')) {
+      console.error('SageCloud API Error (hidden from user):', errorMessage);
+      errorMessage = 'We\'re experiencing a temporary service disruption. Please try again later. If this continues, contact support.';
+      statusCode = 503;
+    }
+    // Handle transfer failures with professional message
+    else if (errorMessage.includes('Transfer failed')) {
+      console.error('Transfer Error (hidden from user):', errorMessage);
+      errorMessage = 'Your withdrawal could not be processed at this time. Your balance has been restored. Please try again later.';
+    }
     
     return new Response(
       JSON.stringify({
@@ -386,7 +414,7 @@ serve(async (req) => {
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: statusCode,
       }
     );
   }

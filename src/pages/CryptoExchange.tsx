@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Bitcoin, TrendingDown, Copy, ExternalLink, Loader2, AlertCircle, CheckCircle2, Clock, Search, Zap } from "lucide-react";
+import { Bitcoin, TrendingDown, Copy, ExternalLink, Loader2, AlertCircle, CheckCircle2, Clock, Search, Zap, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
@@ -437,7 +437,14 @@ export default function CryptoExchange() {
             <Bitcoin className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
             <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white">Sell Crypto</h1>
           </div>
-          <div className="w-40" /> {/* Spacer for centering */}
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/crypto-history')}
+            className="gap-1 sm:gap-2 text-white hover:bg-white/20 hover:text-white font-medium text-sm sm:text-base"
+          >
+            <History className="w-4 h-4" />
+            <span className="hidden sm:inline">Transaction History</span><span className="sm:hidden">History</span>
+          </Button>
         </div>
       </nav>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bitcoin, TrendingUp, ArrowRightLeft, Loader2, AlertCircle } from "lucide-react";
+import { Bitcoin, TrendingUp, ArrowRightLeft, Loader2, AlertCircle, History as HistoryIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
@@ -255,6 +255,17 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
                 </Button>
               </>
             )}
+          </div>
+
+          {/* View Transaction History Link */}
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => navigate('/crypto-history')}
+              className="text-xs text-orange-100 hover:text-white underline underline-offset-2 flex items-center gap-1"
+            >
+              <HistoryIcon className="w-3 h-3" />
+              View Transaction History
+            </button>
           </div>
 
           {/* Info Footer */}

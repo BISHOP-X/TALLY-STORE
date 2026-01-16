@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Wallet, TrendingDown, Loader2, AlertCircle, CheckCircle2, Building2, Info, Shield } from "lucide-react";
+import { Wallet, TrendingDown, Loader2, AlertCircle, CheckCircle2, Building2, Info, Shield, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
@@ -237,7 +237,18 @@ export default function CryptoWithdrawal() {
         },
       });
 
-      if (error) throw error;
+      // Handle FunctionsHttpError - extract message from response body
+      if (error) {
+        // Try to get the error message from the response context
+        let errorMessage = error.message || 'An unexpected error occurred';
+        
+        // If it's a FunctionsHttpError, the data might contain the actual error
+        if (data?.error) {
+          errorMessage = data.error;
+        }
+        
+        throw new Error(errorMessage);
+      }
 
       if (!data.success) {
         throw new Error(data.error || 'Failed to create withdrawal request');
@@ -268,9 +279,18 @@ export default function CryptoWithdrawal() {
 
     } catch (error: any) {
       console.error('Error creating withdrawal:', error);
+      
+      // Extract user-friendly message
+      let userMessage = error.message || "Please try again";
+      
+      // If it's a generic Supabase error, provide a friendlier message
+      if (userMessage.includes('non-2xx status code') || userMessage.includes('FunctionsHttpError')) {
+        userMessage = "We're experiencing a temporary issue. Please try again in a few minutes.";
+      }
+      
       toast({
         title: "Withdrawal Failed",
-        description: error.message || "Please try again",
+        description: userMessage,
         variant: "destructive",
       });
     } finally {
@@ -300,7 +320,14 @@ export default function CryptoWithdrawal() {
             <Wallet className="w-7 h-7 text-white" />
             <h1 className="text-2xl font-bold text-white">Withdraw to Bank</h1>
           </div>
-          <div className="w-40" /> {/* Spacer for centering */}
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/crypto-history')}
+            className="gap-1 sm:gap-2 text-white hover:bg-white/20 hover:text-white font-medium text-sm sm:text-base"
+          >
+            <History className="w-4 h-4" />
+            <span className="hidden sm:inline">Transaction History</span><span className="sm:hidden">History</span>
+          </Button>
         </div>
       </nav>
 
