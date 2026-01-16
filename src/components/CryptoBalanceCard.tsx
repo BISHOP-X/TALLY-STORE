@@ -247,8 +247,7 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
                 </Button>
                 <Button 
                   onClick={() => navigate('/crypto-withdrawal')}
-                  variant="outline"
-                  className="flex-1 border-2 border-white text-white hover:bg-white/20 hover:text-white font-semibold"
+                  className="flex-1 bg-white/10 hover:bg-white border-2 border-white/50 hover:border-white text-white hover:text-orange-600 font-semibold backdrop-blur-sm transition-all"
                   disabled={loading}
                 >
                   <TrendingUp className="w-4 h-4 mr-2" />

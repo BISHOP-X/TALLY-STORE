@@ -6,6 +6,41 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-nowpayments-sig',
 };
 
+// Verify IPN signature as per NowPayments docs
+// https://documenter.getpostman.com/view/7907941/S1a32n38#ipn-callbacks
+async function verifyIPNSignature(payload: any, receivedSignature: string, secret: string): Promise<boolean> {
+  try {
+    // Sort all parameters alphabetically (top-level only)
+    const sortedPayload: Record<string, any> = {};
+    Object.keys(payload).sort().forEach(key => {
+      sortedPayload[key] = payload[key];
+    });
+    
+    // Convert to string
+    const payloadString = JSON.stringify(sortedPayload);
+    
+    // Sign with HMAC SHA-512
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-512' },
+      false,
+      ['sign']
+    );
+    
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payloadString));
+    const computedSignature = Array.from(new Uint8Array(signatureBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    return computedSignature === receivedSignature;
+  } catch (error) {
+    console.error('Signature verification error:', error);
+    return false;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -13,15 +48,32 @@ serve(async (req) => {
   }
 
   try {
+    // Get raw body and signature for verification
+    const rawBody = await req.text();
+    const signature = req.headers.get('x-nowpayments-sig');
+    const payload = JSON.parse(rawBody);
+    
+    console.log('NowPayments webhook received:', JSON.stringify(payload, null, 2));
+    
+    // Verify signature if IPN secret is configured
+    const ipnSecret = Deno.env.get('NOWPAYMENTS_IPN_SECRET');
+    if (ipnSecret && signature) {
+      const isValid = await verifyIPNSignature(payload, signature, ipnSecret);
+      if (!isValid) {
+        console.error('❌ Invalid IPN signature - rejecting request');
+        return new Response(
+          JSON.stringify({ error: 'Invalid signature' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+      console.log('✅ IPN signature verified');
+    }
+    
     // Initialize Supabase admin client (no user auth required for webhooks)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', // Use service role for admin access
     );
-
-    // Parse webhook payload
-    const payload = await req.json();
-    console.log('NowPayments webhook received:', JSON.stringify(payload, null, 2));
 
     // Extract payment details from webhook
     const {
@@ -131,67 +183,87 @@ serve(async (req) => {
       const amountToCredit = actually_paid || pay_amount || 0;
       
       if (amountToCredit > 0) {
-        // IDEMPOTENCY CHECK: Only credit if this transaction hasn't been credited before
-        // We check if status was already 'completed' before this webhook call
-        if (existingTransaction.status === 'completed') {
-          console.log(`⏭️ Transaction ${existingTransaction.id} already completed, skipping balance credit`);
+        // BULLETPROOF IDEMPOTENCY: Check credited_at field
+        // If credited_at is set, this transaction was ALREADY credited - NEVER credit again
+        if (existingTransaction.credited_at) {
+          console.log(`🛑 BLOCKED: Transaction ${existingTransaction.id} was already credited at ${existingTransaction.credited_at}`);
+          shouldCreditUser = false;
         } else {
-          // Re-fetch transaction status to ensure no race condition (another webhook might have just finished)
+          // Double-check by re-fetching (race condition protection)
           const { data: freshTx } = await supabaseAdmin
             .from('crypto_transactions')
-            .select('status')
+            .select('credited_at')
             .eq('id', existingTransaction.id)
             .single();
-            
-          if (freshTx && freshTx.status === 'completed') {
-             console.log(`⏭️ Transaction ${existingTransaction.id} was just completed by another process, skipping credit`);
-             // We still want to update the transaction details below if needed, but skip credit
-             shouldCreditUser = false;
+          
+          if (freshTx?.credited_at) {
+            console.log(`🛑 BLOCKED: Transaction ${existingTransaction.id} was just credited by another process at ${freshTx.credited_at}`);
+            shouldCreditUser = false;
           } else {
-            // Get user's current balance with retry loop for optimistic locking
-            const creditAmount = parseFloat(existingTransaction.naira_amount);
-            let credited = false;
+            // ATOMIC: Set credited_at FIRST, then credit balance
+            // This ensures we mark it as credited before touching the balance
+            const creditTimestamp = new Date().toISOString();
             
-            for (let attempt = 0; attempt < 5 && !credited; attempt++) {
-              const { data: userData, error: userError } = await supabaseAdmin
-                .from('profiles')
-                .select('crypto_balance')
-                .eq('id', existingTransaction.user_id)
+            const { error: markCreditedError } = await supabaseAdmin
+              .from('crypto_transactions')
+              .update({ credited_at: creditTimestamp })
+              .eq('id', existingTransaction.id)
+              .is('credited_at', null); // Only update if NOT already credited
+            
+            if (markCreditedError) {
+              console.error(`❌ Failed to mark transaction as credited:`, markCreditedError);
+              shouldCreditUser = false;
+            } else {
+              // Verify we actually set credited_at (another process might have beat us)
+              const { data: verifyTx } = await supabaseAdmin
+                .from('crypto_transactions')
+                .select('credited_at')
+                .eq('id', existingTransaction.id)
                 .single();
-
-              if (userError) {
-                console.error('Failed to fetch user:', userError);
-                break;
-              }
-
-              const currentBalance = parseFloat(userData.crypto_balance || '0');
-              const newBalance = currentBalance + creditAmount;
-
-              // Optimistic lock: only update if balance matches what we read
-              const { data: updateData, error: balanceError } = await supabaseAdmin
-                .from('profiles')
-                .update({ crypto_balance: newBalance })
-                .match({ id: existingTransaction.user_id, crypto_balance: currentBalance })
-                .select()
-                .single();
-
-              if (balanceError) {
-                console.warn(`⚠️ Balance update conflict on attempt ${attempt + 1}, retrying...`);
-                await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
-                continue;
-              }
-
-              if (updateData) {
-                console.log(`✅ Credited ${creditAmount} NGN to user ${existingTransaction.user_id} (new balance: ${newBalance})`);
-                credited = true;
+              
+              // Compare timestamps properly (handle format differences between JS ISO and Postgres)
+              const ourTime = new Date(creditTimestamp).getTime();
+              const dbTime = verifyTx?.credited_at ? new Date(verifyTx.credited_at).getTime() : 0;
+              const timeDiff = Math.abs(ourTime - dbTime);
+              
+              // If timestamps differ by more than 1 second, another process beat us
+              if (timeDiff > 1000) {
+                console.log(`🛑 BLOCKED: Another process credited this transaction first (time diff: ${timeDiff}ms)`);
+                shouldCreditUser = false;
               } else {
-                console.warn(`🔁 No rows updated on attempt ${attempt + 1}, retrying...`);
-                await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
-              }
-            }
+                console.log(`✅ We set credited_at successfully, proceeding to credit balance`);
+                // NOW it's safe to credit the balance
+                const creditAmount = parseFloat(existingTransaction.naira_amount);
+                
+                const { data: userData, error: userError } = await supabaseAdmin
+                  .from('profiles')
+                  .select('crypto_balance')
+                  .eq('id', existingTransaction.user_id)
+                  .single();
 
-            if (!credited) {
-              console.error('❌ Failed to credit user balance after max retries');
+                if (userError) {
+                  console.error('Failed to fetch user:', userError);
+                } else {
+                  const currentBalance = parseFloat(userData.crypto_balance || '0');
+                  const newBalance = currentBalance + creditAmount;
+
+                  const { error: balanceError } = await supabaseAdmin
+                    .from('profiles')
+                    .update({ crypto_balance: newBalance })
+                    .eq('id', existingTransaction.user_id);
+
+                  if (balanceError) {
+                    console.error(`❌ Balance update failed:`, balanceError);
+                    // Rollback credited_at since we couldn't credit
+                    await supabaseAdmin
+                      .from('crypto_transactions')
+                      .update({ credited_at: null })
+                      .eq('id', existingTransaction.id);
+                  } else {
+                    console.log(`✅ Credited ${creditAmount} NGN to user ${existingTransaction.user_id} (new balance: ${newBalance})`);
+                  }
+                }
+              }
             }
           }
         }
