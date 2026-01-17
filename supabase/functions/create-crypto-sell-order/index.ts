@@ -250,7 +250,7 @@ serve(async (req) => {
         order_description: `Crypto sell order - ${crypto_amount} ${crypto_type}`,
         ipn_callback_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/nowpayments-webhook`,
         is_fixed_rate: true, // Lock rate for 20 minutes
-        is_fee_paid_by_user: false, // We absorb the fees
+        is_fee_paid_by_user: true, // User pays the NowPayments processing fee (prevents "partially_paid" status)
       });
       console.log('✅ NowPayments payment created:', payment.payment_id);
     } catch (nowpaymentsError: any) {

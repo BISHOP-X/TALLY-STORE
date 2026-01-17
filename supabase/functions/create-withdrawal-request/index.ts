@@ -162,14 +162,21 @@ serve(async (req) => {
       // Continue with user-provided name if validation fails
     }
 
-    // Step 2: Check SageCloud balance
+    // Calculate fee BEFORE checking SageCloud balance (we only need netAmount from SageCloud)
+    const feePercentage = 2;
+    const feeAmount = Math.ceil((withdrawalAmount * feePercentage) / 100);
+    const netAmount = withdrawalAmount - feeAmount;
+    
+    console.log(`Fee calculation: Gross=₦${withdrawalAmount}, Fee=₦${feeAmount} (${feePercentage}%), Net=₦${netAmount}`);
+
+    // Step 2: Check SageCloud balance (only need netAmount since fee stays as our profit)
     console.log('Checking SageCloud balance...');
     const sageCloudBalance = await sageCloudClient.getBalanceAmount();
     const balanceCheck: BalanceCheckResult = {
-      hasBalance: sageCloudBalance >= withdrawalAmount,
+      hasBalance: sageCloudBalance >= netAmount, // Only need netAmount from SageCloud!
       currentBalance: sageCloudBalance,
-      requestedAmount: withdrawalAmount,
-      shortfall: Math.max(0, withdrawalAmount - sageCloudBalance),
+      requestedAmount: netAmount, // The actual amount we'll send
+      shortfall: Math.max(0, netAmount - sageCloudBalance),
       isLowBalance: sageCloudBalance < LOW_BALANCE_THRESHOLD,
       isCriticalBalance: sageCloudBalance < CRITICAL_BALANCE_THRESHOLD,
     };
@@ -201,11 +208,6 @@ serve(async (req) => {
 
     // Generate unique reference
     const reference = `TALLY-WD-${Date.now()}-${user.id.substring(0, 8)}`;
-
-    // Calculate fee (2% of withdrawal amount)
-    const feePercentage = 2;
-    const feeAmount = Math.ceil((withdrawalAmount * feePercentage) / 100);
-    const netAmount = withdrawalAmount - feeAmount;
 
     // Step 3: Create withdrawal record (pending status)
     const { data: withdrawalRecord, error: dbError } = await supabaseClient
@@ -294,12 +296,13 @@ serve(async (req) => {
     
     try {
       console.log('Processing SageCloud transfer...');
+      console.log(`Sending net amount: ₦${netAmount} (original: ₦${withdrawalAmount}, fee: ₦${feeAmount})`);
       transferResponse = await sageCloudClient.transfer({
         reference,
         bank_code,
         account_number,
         account_name: validatedAccountName,
-        amount: withdrawalAmount,
+        amount: netAmount, // Send NET amount (after fee deduction) - fee stays as your profit
         narration: narration || `Withdrawal to ${validatedAccountName}`,
       });
 
