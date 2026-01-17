@@ -146,7 +146,7 @@ const App = () => (
               <Route 
                 path="/crypto-exchange" 
                 element={
-                  <ProtectedRoute requireRole="admin">
+                  <ProtectedRoute requireRole="user">
                     <CryptoExchange />
                   </ProtectedRoute>
                 } 
@@ -154,7 +154,7 @@ const App = () => (
               <Route 
                 path="/bills" 
                 element={
-                  <ProtectedRoute requireRole="admin">
+                  <ProtectedRoute requireRole="user">
                     <BillsPayment />
                   </ProtectedRoute>
                 } 
@@ -162,7 +162,7 @@ const App = () => (
               <Route 
                 path="/crypto-withdrawal" 
                 element={
-                  <ProtectedRoute requireRole="admin">
+                  <ProtectedRoute requireRole="user">
                     <CryptoWithdrawal />
                   </ProtectedRoute>
                 } 
@@ -170,7 +170,7 @@ const App = () => (
               <Route 
                 path="/crypto-history" 
                 element={
-                  <ProtectedRoute requireRole="admin">
+                  <ProtectedRoute requireRole="user">
                     <CryptoHistory />
                   </ProtectedRoute>
                 } 
