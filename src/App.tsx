@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from '@/contexts/SimpleAuth'
 import { ProtectedRoute, PublicRoute } from '@/components/SimpleProtectedRoute'
 import InstallPromptBanner from '@/components/InstallPromptBanner'
+import AnnouncementBanner from '@/components/AnnouncementBanner'
 
 // Pages
 import Index from "./pages/Index";
@@ -50,6 +51,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <AnnouncementBanner />
         <InstallPromptBanner />
           <AuthProvider>
             <Routes>

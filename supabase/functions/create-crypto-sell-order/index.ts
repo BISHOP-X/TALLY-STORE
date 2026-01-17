@@ -319,7 +319,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-transaction_id: transaction.id,
+        transaction_id: transaction.id,
         payment_details: {
           payment_id: payment.payment_id,
           pay_address: payment.pay_address,

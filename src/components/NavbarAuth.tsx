@@ -8,14 +8,39 @@ import InstallAppDialog from '@/components/InstallAppDialog'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { useToast } from '@/hooks/use-toast'
 
+const ANNOUNCEMENT_STORAGE_KEY = 'announcement-banner-dismissed';
+
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showInstallDialog, setShowInstallDialog] = useState(false)
+  const [announcementVisible, setAnnouncementVisible] = useState(true)
   const { user, signOut, isAdmin, walletBalance } = useAuth()
   const { canInstall, isInstalled, isAndroid, isIOS, installApp } = usePWAInstall()
   const { toast } = useToast()
   const navigate = useNavigate()
+
+  // Check if announcement banner is visible
+  useEffect(() => {
+    const checkAnnouncementState = () => {
+      const dismissed = localStorage.getItem(ANNOUNCEMENT_STORAGE_KEY) === 'true';
+      setAnnouncementVisible(!dismissed);
+    };
+    
+    // Check initially
+    checkAnnouncementState();
+    
+    // Listen for storage changes (when banner is dismissed)
+    window.addEventListener('storage', checkAnnouncementState);
+    
+    // Also check periodically in case dismissed on same tab
+    const interval = setInterval(checkAnnouncementState, 500);
+    
+    return () => {
+      window.removeEventListener('storage', checkAnnouncementState);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Mock data for display - now using actual user data from context
   const mockProfile = {
@@ -71,13 +96,17 @@ export default function Navbar() {
   }
 
   return (
-    <nav 
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled 
-          ? "bg-white/90 dark:bg-gray-900/90 backdrop-blur-md shadow-lg border-b border-gray-200/50 dark:border-gray-700/50" 
-          : "bg-transparent"
-      }`}
-    >
+    <>
+      {/* Spacer to push content below fixed navbar + announcement banner */}
+      <div className={`${announcementVisible ? 'h-[calc(32px+72px)]' : 'h-[72px]'}`} />
+      
+      <nav 
+        className={`fixed ${announcementVisible ? 'top-8' : 'top-0'} left-0 right-0 z-50 transition-all duration-300 ${
+          isScrolled 
+            ? "bg-white/90 dark:bg-gray-900/90 backdrop-blur-md shadow-lg border-b border-gray-200/50 dark:border-gray-700/50" 
+            : "bg-transparent"
+        }`}
+      >
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
@@ -381,5 +410,6 @@ export default function Navbar() {
         onOpenChange={setShowInstallDialog}
       />
     </nav>
+    </>
   )
 }

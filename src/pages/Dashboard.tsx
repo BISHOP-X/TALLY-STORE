@@ -1,33 +1,29 @@
-import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Wallet, ShoppingBag, Download, Settings } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { CryptoBalanceCard } from '@/components/CryptoBalanceCard'
+import NavbarAuth from '@/components/NavbarAuth'
 
 export default function Dashboard() {
-  const { user, walletBalance, signOut } = useAuth()
-  const navigate = useNavigate()
+  const { user, walletBalance } = useAuth()
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
-      {/* Navigation */}
-      <nav className="border-b bg-white dark:bg-gray-900 shadow-sm">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-primary">TallyStore</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Welcome back, {user?.email?.split('@')[0] || 'User'}!
-            </p>
-          </div>
-          <Button onClick={signOut} variant="outline">
-            Sign Out
-          </Button>
-        </div>
-      </nav>
+      {/* Full Navigation */}
+      <NavbarAuth />
 
       {/* Dashboard Content */}
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto px-6 py-6">
+        {/* Welcome Message - Compact */}
+        <div className="mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+            👋 Welcome back, {user?.email?.split('@')[0] || 'User'}!
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Here's your account overview</p>
+        </div>
+
         {/* Balance Cards - Side by Side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* TallyStore Wallet Balance Card */}
