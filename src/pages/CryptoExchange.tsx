@@ -324,10 +324,12 @@ export default function CryptoExchange() {
       const payment = data.payment_details;
 
       // Set deposit info and open modal
+      // IMPORTANT: Use payment.pay_amount from NowPayments (includes their fee) 
+      // NOT the user's input cryptoAmount
       setDepositInfo({
         transactionId: data.transaction_id,
         cryptoType: crypto.toUpperCase(),
-        cryptoAmount: cryptoAmount,
+        cryptoAmount: payment.pay_amount, // Use NowPayments' calculated amount (includes fee)
         nairaAmount: nairaAmount,
         depositAddress: payment.pay_address,
         expiresAt: payment.expiration_date,
