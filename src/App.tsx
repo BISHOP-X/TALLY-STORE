@@ -35,6 +35,7 @@ import CryptoExchange from '@/pages/CryptoExchange'
 import CryptoWithdrawal from '@/pages/CryptoWithdrawal'
 import CryptoHistory from '@/pages/CryptoHistory'
 import BillsPayment from "./pages/BillsPayment";
+import SocialBoostPage from "./pages/SocialBoostPage";
 import GetIP from "./pages/GetIP";
 import NotFound from "./pages/NotFound";
 
@@ -182,6 +183,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireRole="admin">
                     <GetIP />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/social-boost" 
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <SocialBoostPage />
                   </ProtectedRoute>
                 } 
               />
