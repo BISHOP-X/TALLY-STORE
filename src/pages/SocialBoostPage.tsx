@@ -147,6 +147,7 @@ export default function SocialBoostPage() {
   const [orders, setOrders] = useState<SmmOrder[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [loadingWallet, setLoadingWallet] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null);
 
@@ -246,6 +247,18 @@ export default function SocialBoostPage() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // Fetch wallet balance on mount
+  useEffect(() => {
+    const loadWallet = async () => {
+      setLoadingWallet(true);
+      await refreshWalletBalance();
+      setLoadingWallet(false);
+    };
+    if (user) {
+      loadWallet();
+    }
+  }, [user, refreshWalletBalance]);
 
   const requiredFields = useMemo(() => {
     if (!selectedService) return ['link', 'quantity'];
@@ -449,9 +462,13 @@ export default function SocialBoostPage() {
                       <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">TallyStore Wallet</p>
                     </div>
                   </div>
-                  <p className="text-lg sm:text-xl md:text-2xl font-bold text-green-700 dark:text-green-400 shrink-0">₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 0 })}</p>
+                  {loadingWallet ? (
+                    <div className="h-7 sm:h-8 w-24 sm:w-32 bg-muted animate-pulse rounded" />
+                  ) : (
+                    <p className="text-lg sm:text-xl md:text-2xl font-bold text-green-700 dark:text-green-400 shrink-0">₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 0 })}</p>
+                  )}
                 </div>
-                {walletBalance < 1000 && <Button size="sm" variant="outline" onClick={() => navigate('/wallet')} className="mt-2 sm:mt-3 w-full text-xs sm:text-sm h-8 sm:h-9">Top Up Wallet</Button>}
+                {!loadingWallet && walletBalance < 1000 && <Button size="sm" variant="outline" onClick={() => navigate('/wallet')} className="mt-2 sm:mt-3 w-full text-xs sm:text-sm h-8 sm:h-9">Top Up Wallet</Button>}
               </CardContent>
             </Card>
 
