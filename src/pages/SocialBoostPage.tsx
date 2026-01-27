@@ -87,14 +87,23 @@ const getServiceIcon = (name: string) => {
   return Zap;
 };
 
+// Robust URL patterns - accepting various subdomains and short links
 const URL_PATTERNS: Record<string, RegExp> = {
-  instagram: /^https?:\/\/(www\.)?instagram\.com\/(p\/|reel\/|stories\/|tv\/)?[\w.-]+\/?/i,
-  tiktok: /^https?:\/\/(www\.)?(tiktok\.com|vm\.tiktok\.com)\/@?[\w.-]+/i,
-  youtube: /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/(watch\?v=|shorts\/|channel\/|@)?[\w.-]+/i,
-  facebook: /^https?:\/\/(www\.)?(facebook\.com|fb\.com|fb\.watch)\/[\w.-]+/i,
-  twitter: /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/[\w.-]+/i,
-  telegram: /^https?:\/\/(www\.)?(t\.me|telegram\.me)\/[\w.-]+/i,
-  spotify: /^https?:\/\/(open\.)?spotify\.com\/(track|album|artist|playlist)\/[\w.-]+/i,
+  instagram: /^https?:\/\/([a-z0-9-]+\.)?instagram\.com\/.+/i,
+  tiktok: /^https?:\/\/([a-z0-9-]+\.)?(tiktok\.com)\/.+/i,
+  youtube: /^https?:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be)\/.*/i,
+  facebook: /^https?:\/\/([a-z0-9-]+\.)?(facebook\.com|fb\.com|fb\.watch|fb\.me)\/.*/i,
+  twitter: /^https?:\/\/([a-z0-9-]+\.)?(twitter\.com|x\.com|t\.co)\/.+/i,
+  telegram: /^https?:\/\/([a-z0-9-]+\.)?(t\.me|telegram\.me|telegram\.org)\/.+/i,
+  spotify: /^https?:\/\/([a-z0-9-]+\.)?spotify\.com\/.+/i,
+  threads: /^https?:\/\/([a-z0-9-]+\.)?threads\.net\/.+/i,
+  linkedin: /^https?:\/\/([a-z0-9-]+\.)?linkedin\.com\/.+/i,
+  pinterest: /^https?:\/\/([a-z0-9-]+\.)?(pinterest\.com|pin\.it)\/.*/i,
+  snapchat: /^https?:\/\/([a-z0-9-]+\.)?(snapchat\.com|t\.snapchat\.com)\/.+/i,
+  twitch: /^https?:\/\/([a-z0-9-]+\.)?twitch\.tv\/.+/i,
+  discord: /^https?:\/\/([a-z0-9-]+\.)?(discord\.gg|discord\.com)\/.+/i,
+  soundcloud: /^https?:\/\/([a-z0-9-]+\.)?soundcloud\.com\/.+/i,
+  reddit: /^https?:\/\/([a-z0-9-]+\.)?reddit\.com\/.+/i,
 };
 
 interface SmmService {
