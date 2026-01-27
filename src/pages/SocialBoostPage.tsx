@@ -87,23 +87,52 @@ const getServiceIcon = (name: string) => {
   return Zap;
 };
 
-// Robust URL patterns - accepting various subdomains and short links
+// Robust URL patterns - accepting valid variations for each platform
 const URL_PATTERNS: Record<string, RegExp> = {
-  instagram: /^https?:\/\/([a-z0-9-]+\.)?instagram\.com\/.+/i,
-  tiktok: /^https?:\/\/([a-z0-9-]+\.)?(tiktok\.com)\/.+/i,
-  youtube: /^https?:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be)\/.*/i,
-  facebook: /^https?:\/\/([a-z0-9-]+\.)?(facebook\.com|fb\.com|fb\.watch|fb\.me)\/.*/i,
-  twitter: /^https?:\/\/([a-z0-9-]+\.)?(twitter\.com|x\.com|t\.co)\/.+/i,
-  telegram: /^https?:\/\/([a-z0-9-]+\.)?(t\.me|telegram\.me|telegram\.org)\/.+/i,
-  spotify: /^https?:\/\/([a-z0-9-]+\.)?spotify\.com\/.+/i,
-  threads: /^https?:\/\/([a-z0-9-]+\.)?threads\.net\/.+/i,
-  linkedin: /^https?:\/\/([a-z0-9-]+\.)?linkedin\.com\/.+/i,
-  pinterest: /^https?:\/\/([a-z0-9-]+\.)?(pinterest\.com|pin\.it)\/.*/i,
-  snapchat: /^https?:\/\/([a-z0-9-]+\.)?(snapchat\.com|t\.snapchat\.com)\/.+/i,
-  twitch: /^https?:\/\/([a-z0-9-]+\.)?twitch\.tv\/.+/i,
-  discord: /^https?:\/\/([a-z0-9-]+\.)?(discord\.gg|discord\.com)\/.+/i,
-  soundcloud: /^https?:\/\/([a-z0-9-]+\.)?soundcloud\.com\/.+/i,
-  reddit: /^https?:\/\/([a-z0-9-]+\.)?reddit\.com\/.+/i,
+  // Instagram: www/m + paths like /p/, /reel/, /stories/, /tv/, @username, usernames
+  instagram: /^https?:\/\/(www\.|m\.)?instagram\.com\/(p|reel|reels|stories|tv|s|explore|accounts|direct)\/[\w.-]+\/?.*$|^https?:\/\/(www\.|m\.)?instagram\.com\/[\w.-]+\/?$/i,
+  
+  // TikTok: www/m/vm/vt subdomains, @user/video paths OR short links
+  tiktok: /^https?:\/\/(www\.|m\.|vm\.|vt\.)?tiktok\.com\/((@[\w.-]+\/(video|photo|live)\/\d+)|(@[\w.-]+)|[\w-]+)\/?.*$/i,
+  
+  // YouTube: youtube.com, youtu.be, m.youtube - watch, shorts, channel, @user, playlists
+  youtube: /^https?:\/\/(www\.|m\.|music\.)?youtube\.com\/(watch\?v=[\w-]+|shorts\/[\w-]+|channel\/[\w-]+|c\/[\w-]+|user\/[\w-]+|playlist\?list=[\w-]+|@[\w.-]+|embed\/[\w-]+|live\/[\w-]+).*$|^https?:\/\/youtu\.be\/[\w-]+.*$/i,
+  
+  // Facebook: fb.com, facebook.com, fb.watch, fb.me - posts, videos, profiles, pages, groups, stories
+  facebook: /^https?:\/\/(www\.|m\.|web\.|l\.)?(facebook\.com|fb\.com)\/([\w.-]+\/(posts|videos|photos|reels)\/[\w.-]+|[\w.-]+\/?\??.*|story\.php\?.*|watch\/?\?v=\d+|groups\/[\w.-]+|events\/\d+|share\/.+).*$|^https?:\/\/(fb\.watch|fb\.me)\/[\w.-]+.*$/i,
+  
+  // Twitter/X: twitter.com, x.com - tweets, profiles, status
+  twitter: /^https?:\/\/(www\.|mobile\.)?(twitter\.com|x\.com)\/([\w]+\/status\/\d+|[\w]+|i\/web\/status\/\d+|hashtag\/[\w]+).*$|^https?:\/\/t\.co\/[\w]+$/i,
+  
+  // Telegram: t.me, telegram.me - channels, groups, usernames, messages
+  telegram: /^https?:\/\/(www\.)?(t\.me|telegram\.me|telegram\.org)\/([\w]+|s\/[\w]+|c\/[\d-]+\/\d+|joinchat\/[\w-]+|addstickers\/[\w]+|\+[\w]+).*$/i,
+  
+  // Spotify: open.spotify.com - tracks, albums, artists, playlists, podcasts, episodes
+  spotify: /^https?:\/\/(open\.)?spotify\.com\/(track|album|artist|playlist|user|show|episode|intl-[\w]+)\/[\w]+.*$/i,
+  
+  // Threads: threads.net - posts and profiles
+  threads: /^https?:\/\/(www\.)?threads\.net\/(@[\w.-]+|t\/[\w]+|[\w.-]+\/post\/[\w]+).*$/i,
+  
+  // LinkedIn: linkedin.com - posts, profiles, company pages
+  linkedin: /^https?:\/\/(www\.)?linkedin\.com\/(in|company|posts|pulse|feed|groups)\/[\w.-]+.*$/i,
+  
+  // Pinterest: pinterest.com, pin.it - pins, boards, profiles
+  pinterest: /^https?:\/\/(www\.|[\w]+\.)?pinterest\.com\/(pin\/[\d]+|[\w.-]+).*$|^https?:\/\/pin\.it\/[\w]+$/i,
+  
+  // Snapchat: snapchat.com - profiles, stories, spotlight
+  snapchat: /^https?:\/\/(www\.|story\.|t\.)?snapchat\.com\/(add|spotlight|discover|stories)\/[\w.-]+.*$|^https?:\/\/(www\.)?snapchat\.com\/[\w.-]+$/i,
+  
+  // Twitch: twitch.tv - channels, videos, clips
+  twitch: /^https?:\/\/(www\.|m\.)?twitch\.tv\/(videos\/\d+|[\w]+\/clip\/[\w-]+|[\w]+).*$/i,
+  
+  // Discord: discord.gg, discord.com - invites, channels
+  discord: /^https?:\/\/(www\.)?(discord\.gg|discord\.com\/invite)\/[\w-]+.*$|^https?:\/\/(www\.)?discord\.com\/channels\/\d+\/\d+.*$/i,
+  
+  // SoundCloud: soundcloud.com - tracks, playlists, profiles
+  soundcloud: /^https?:\/\/(www\.|m\.|on\.)?soundcloud\.com\/[\w.-]+(\/[\w.-]+)?.*$/i,
+  
+  // Reddit: reddit.com - posts, subreddits, profiles
+  reddit: /^https?:\/\/(www\.|old\.|new\.)?reddit\.com\/(r\/[\w]+|u\/[\w]+|user\/[\w]+|comments\/[\w]+).*$/i,
 };
 
 interface SmmService {
