@@ -46,6 +46,39 @@ const PLATFORMS = [
   { id: 'spotify', name: 'Spotify', shortName: 'SP', icon: Star, color: 'text-green-500', placeholder: 'https://open.spotify.com/track/...', example: 'Track, Album, or Artist URL' },
 ];
 
+// Country code to flag emoji mapping
+const COUNTRY_FLAGS: Record<string, string> = {
+  'AR': '🇦🇷', 'BR': '🇧🇷', 'US': '🇺🇸', 'UK': '🇬🇧', 'GB': '🇬🇧',
+  'DE': '🇩🇪', 'FR': '🇫🇷', 'ES': '🇪🇸', 'IT': '🇮🇹', 'PT': '🇵🇹',
+  'MX': '🇲🇽', 'CA': '🇨🇦', 'AU': '🇦🇺', 'IN': '🇮🇳', 'JP': '🇯🇵',
+  'KR': '🇰🇷', 'CN': '🇨🇳', 'RU': '🇷🇺', 'TR': '🇹🇷', 'SA': '🇸🇦',
+  'AE': '🇦🇪', 'EG': '🇪🇬', 'NG': '🇳🇬', 'ZA': '🇿🇦', 'KE': '🇰🇪',
+  'PH': '🇵🇭', 'ID': '🇮🇩', 'MY': '🇲🇾', 'SG': '🇸🇬', 'TH': '🇹🇭',
+  'VN': '🇻🇳', 'PK': '🇵🇰', 'BD': '🇧🇩', 'PL': '🇵🇱', 'NL': '🇳🇱',
+  'BE': '🇧🇪', 'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'FI': '🇫🇮',
+  'CL': '🇨🇱', 'CO': '🇨🇴', 'PE': '🇵🇪', 'VE': '🇻🇪', 'EC': '🇪🇨',
+  'IL': '🇮🇱', 'GR': '🇬🇷', 'CZ': '🇨🇿', 'HU': '🇭🇺', 'RO': '🇷🇴',
+  'UA': '🇺🇦', 'AT': '🇦🇹', 'CH': '🇨🇭', 'IE': '🇮🇪', 'NZ': '🇳🇿',
+};
+
+// Convert country codes in service names to flag emojis
+// Service names come like: "🇦🇷ARTikTok Argentina Views" or "🇧🇷BRTikTok Brazil Views"
+// We want: "🇦🇷TikTok Argentina Views" or "🇧🇷TikTok Brazil Views"
+const formatServiceName = (name: string): string => {
+  let formatted = name;
+  
+  // Remove country code that comes right after flag emoji or at start
+  // Handles: "🇦🇷ARTikTok" → "🇦🇷TikTok" and "ARTikTok" → "🇦🇷TikTok"
+  for (const [code, flag] of Object.entries(COUNTRY_FLAGS)) {
+    // Remove code after flag: "🇦🇷AR" → "🇦🇷"
+    formatted = formatted.replace(new RegExp(`${flag}\\s*${code}`, 'gi'), flag);
+    // Replace code at very start with flag: "ARTikTok" → "🇦🇷TikTok"
+    formatted = formatted.replace(new RegExp(`^${code}(?=[A-Z])`, 'g'), flag);
+  }
+  
+  return formatted;
+};
+
 // Get placeholder based on service platform
 const getPlaceholderForPlatform = (platform: string | undefined): { placeholder: string; example: string } => {
   const found = PLATFORMS.find(p => p.id === platform?.toLowerCase());
@@ -153,18 +186,21 @@ interface SmmService {
 
 interface SmmOrder {
   id: string;
-  service_id: number;
-  service_name: string;
+  service_id: string;
   link: string;
   quantity: number;
   amount_ngn: number;
   status: string;
-  panel_order_id: number | null;
-  panel_charge: number | null;
-  panel_start_count: number | null;
-  panel_remains: number | null;
+  external_order_id: number | null;
+  start_count: number | null;
+  remains: number | null;
   created_at: string;
   updated_at: string;
+  // Joined from smm_services
+  smm_services?: {
+    name: string;
+    platform: string;
+  };
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -265,7 +301,12 @@ export default function SocialBoostPage() {
     try {
       const { data, error } = await supabase
         .from('smm_orders')
-        .select('*')
+        .select(`
+          id, service_id, link, quantity, amount_ngn, status,
+          external_order_id, start_count, remains,
+          created_at, updated_at,
+          smm_services ( name, platform )
+        `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -413,18 +454,40 @@ export default function SocialBoostPage() {
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('smm-create-order', { body: payload });
-      if (error) throw error;
-      if (data.success) {
-        toast({ title: 'Order Placed! 🎉', description: `Order #${data.orderId} submitted.` });
+      
+      // Handle edge function errors - extract the actual error message
+      if (error) {
+        // Try to get detailed error from FunctionsHttpError
+        let errorMessage = error.message;
+        if (error.context?.body) {
+          try {
+            const errorBody = typeof error.context.body === 'string' 
+              ? JSON.parse(error.context.body) 
+              : error.context.body;
+            if (errorBody?.error) errorMessage = errorBody.error;
+          } catch { /* ignore parse errors */ }
+        }
+        throw new Error(errorMessage);
+      }
+      
+      if (data?.success) {
+        toast({ title: 'Order Placed! 🎉', description: `Order #${data.data?.reference || data.orderId} submitted.` });
         setSelectedService(null); setLink(''); setQuantity(''); setSearchQuery('');
         setComments(''); setUsernames(''); setUsername(''); setHashtags('');
         setHashtag(''); setKeywords(''); setAnswerNumber(''); setGroups('');
         await Promise.all([fetchOrders(), refreshWalletBalance()]);
         setActiveTab('history');
-      } else throw new Error(data.error || 'Failed to place order');
-    } catch (err) {
+      } else {
+        throw new Error(data?.error || 'Failed to place order');
+      }
+    } catch (err: unknown) {
       console.error('Order error:', err);
-      toast({ variant: 'destructive', title: 'Order Failed', description: err instanceof Error ? err.message : 'Failed to place order.' });
+      // Check if error has JSON body with more details
+      let errorMessage = 'Failed to place order.';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      toast({ variant: 'destructive', title: 'Order Failed', description: errorMessage });
     } finally {
       setSubmitting(false);
     }
@@ -437,10 +500,11 @@ export default function SocialBoostPage() {
     }
     setCheckingStatus(orderId);
     try {
-      const { data, error } = await supabase.functions.invoke('smm-check-status', { body: { orderId } });
+      const { data, error } = await supabase.functions.invoke('smm-check-status', { body: { order_id: orderId } });
       if (error) throw error;
       if (data.success) {
-        toast({ title: 'Status Updated', description: `Status: ${data.status}` });
+        const status = data.data?.status || data.status || 'Unknown';
+        toast({ title: 'Status Updated', description: `Status: ${status}` });
         await fetchOrders();
       } else throw new Error(data.error);
     } catch (err) {
@@ -595,7 +659,7 @@ export default function SocialBoostPage() {
                                       <ServiceIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <p className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight">{service.name}</p>
+                                      <p className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight">{formatServiceName(service.name)}</p>
                                       <div className="flex items-center gap-1.5 mt-0.5 sm:mt-1">
                                         <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 h-4 sm:h-5">{service.platform || 'Other'}</Badge>
                                         <span className="text-[10px] sm:text-xs text-muted-foreground">
@@ -628,7 +692,7 @@ export default function SocialBoostPage() {
                         </CardHeader>
                         <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-4 md:p-6 pt-0 sm:pt-0">
                           <div className="p-2 sm:p-3 bg-background rounded-lg">
-                            <p className="font-medium text-xs sm:text-sm line-clamp-2">{selectedService.name}</p>
+                            <p className="font-medium text-xs sm:text-sm line-clamp-2">{formatServiceName(selectedService.name)}</p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{selectedService.category}</p>
                           </div>
 
@@ -832,22 +896,22 @@ export default function SocialBoostPage() {
                             <CardContent className="p-2.5 sm:p-3 md:p-4">
                               <div className="flex items-start justify-between gap-2 mb-2 sm:mb-3">
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-xs sm:text-sm line-clamp-1">{order.service_name}</p>
-                                  <a href={order.link} target="_blank" rel="noopener noreferrer" className="text-[10px] sm:text-xs text-primary hover:underline flex items-center gap-1 mt-0.5">
+                                  <p className="font-medium text-xs sm:text-sm line-clamp-1">{formatServiceName(order.smm_services?.name || 'Service')}</p>
+                                  {order.link && <a href={order.link} target="_blank" rel="noopener noreferrer" className="text-[10px] sm:text-xs text-primary hover:underline flex items-center gap-1 mt-0.5">
                                     <ExternalLink className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" /><span className="truncate">{order.link}</span>
-                                  </a>
+                                  </a>}
                                 </div>
                                 {getStatusBadge(order.status)}
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] sm:text-xs text-muted-foreground">
-                                <div><span className="block">Quantity</span><span className="font-medium text-foreground">{order.quantity.toLocaleString()}</span></div>
-                                <div><span className="block">Amount</span><span className="font-medium text-foreground">₦{order.amount_ngn.toLocaleString()}</span></div>
-                                {order.panel_start_count !== null && <div className="hidden sm:block"><span className="block">Start</span><span className="font-medium text-foreground">{order.panel_start_count.toLocaleString()}</span></div>}
-                                {order.panel_remains !== null && <div className="hidden sm:block"><span className="block">Remains</span><span className="font-medium text-foreground">{order.panel_remains.toLocaleString()}</span></div>}
+                                <div><span className="block">Quantity</span><span className="font-medium text-foreground">{(order.quantity ?? 0).toLocaleString()}</span></div>
+                                <div><span className="block">Amount</span><span className="font-medium text-foreground">₦{(order.amount_ngn ?? 0).toLocaleString()}</span></div>
+                                {order.start_count != null && <div className="hidden sm:block"><span className="block">Start</span><span className="font-medium text-foreground">{order.start_count.toLocaleString()}</span></div>}
+                                {order.remains != null && <div className="hidden sm:block"><span className="block">Remains</span><span className="font-medium text-foreground">{order.remains.toLocaleString()}</span></div>}
                               </div>
                               <div className="flex items-center justify-between mt-2 sm:mt-3 pt-2 sm:pt-3 border-t">
                                 <span className="text-[10px] sm:text-xs text-muted-foreground">{formatDistanceToNow(new Date(order.created_at), { addSuffix: true })}</span>
-                                <Button variant="outline" size="sm" onClick={() => handleCheckStatus(order.id, order.panel_order_id)} disabled={checkingStatus === order.id || !order.panel_order_id} className="gap-1 h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3">
+                                <Button variant="outline" size="sm" onClick={() => handleCheckStatus(order.id, order.external_order_id)} disabled={checkingStatus === order.id || !order.external_order_id} className="gap-1 h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3">
                                   {checkingStatus === order.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}<span className="hidden xs:inline">Check</span> Status
                                 </Button>
                               </div>

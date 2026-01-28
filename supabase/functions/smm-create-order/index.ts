@@ -186,12 +186,11 @@ serve(async (req) => {
 
     console.log(`Deducted ₦${totalAmount} from user ${user.id}. New balance: ₦${newBalance}`);
 
-    // Create order record (pending)
+    // Create order record (pending) - service_name not in table, only service_id FK
     const orderData = {
       user_id: user.id,
       reference: reference,
       service_id: service.id,
-      service_name: service.name,
       link: link || '',
       quantity: actualQuantity,
       amount_ngn: totalAmount,
