@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import ReactCountryFlag from 'react-country-flag';
 import {
   Search,
   Loader2,
@@ -46,37 +47,110 @@ const PLATFORMS = [
   { id: 'spotify', name: 'Spotify', shortName: 'SP', icon: Star, color: 'text-green-500', placeholder: 'https://open.spotify.com/track/...', example: 'Track, Album, or Artist URL' },
 ];
 
-// Country code to flag emoji mapping
-const COUNTRY_FLAGS: Record<string, string> = {
-  'AR': '🇦🇷', 'BR': '🇧🇷', 'US': '🇺🇸', 'UK': '🇬🇧', 'GB': '🇬🇧',
-  'DE': '🇩🇪', 'FR': '🇫🇷', 'ES': '🇪🇸', 'IT': '🇮🇹', 'PT': '🇵🇹',
-  'MX': '🇲🇽', 'CA': '🇨🇦', 'AU': '🇦🇺', 'IN': '🇮🇳', 'JP': '🇯🇵',
-  'KR': '🇰🇷', 'CN': '🇨🇳', 'RU': '🇷🇺', 'TR': '🇹🇷', 'SA': '🇸🇦',
-  'AE': '🇦🇪', 'EG': '🇪🇬', 'NG': '🇳🇬', 'ZA': '🇿🇦', 'KE': '🇰🇪',
-  'PH': '🇵🇭', 'ID': '🇮🇩', 'MY': '🇲🇾', 'SG': '🇸🇬', 'TH': '🇹🇭',
-  'VN': '🇻🇳', 'PK': '🇵🇰', 'BD': '🇧🇩', 'PL': '🇵🇱', 'NL': '🇳🇱',
-  'BE': '🇧🇪', 'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'FI': '🇫🇮',
-  'CL': '🇨🇱', 'CO': '🇨🇴', 'PE': '🇵🇪', 'VE': '🇻🇪', 'EC': '🇪🇨',
-  'IL': '🇮🇱', 'GR': '🇬🇷', 'CZ': '🇨🇿', 'HU': '🇭🇺', 'RO': '🇷🇴',
-  'UA': '🇺🇦', 'AT': '🇦🇹', 'CH': '🇨🇭', 'IE': '🇮🇪', 'NZ': '🇳🇿',
-};
+// Country codes that appear in service names
+const COUNTRY_CODES = [
+  'AR', 'BR', 'US', 'UK', 'GB', 'DE', 'FR', 'ES', 'IT', 'PT',
+  'MX', 'CA', 'AU', 'IN', 'JP', 'KR', 'CN', 'RU', 'TR', 'SA',
+  'AE', 'EG', 'NG', 'ZA', 'KE', 'PH', 'ID', 'MY', 'SG', 'TH',
+  'VN', 'PK', 'BD', 'PL', 'NL', 'BE', 'SE', 'NO', 'DK', 'FI',
+  'CL', 'CO', 'PE', 'VE', 'EC', 'IL', 'GR', 'CZ', 'HU', 'RO',
+  'UA', 'AT', 'CH', 'IE', 'NZ',
+];
 
-// Convert country codes in service names to flag emojis
-// Service names come like: "🇦🇷ARTikTok Argentina Views" or "🇧🇷BRTikTok Brazil Views"
-// We want: "🇦🇷TikTok Argentina Views" or "🇧🇷TikTok Brazil Views"
-const formatServiceName = (name: string): string => {
-  let formatted = name;
+// Convert Unicode flag emoji to country code
+// Flag emojis are made of Regional Indicator Symbols: 🇦 (U+1F1E6) to 🇿 (U+1F1FF)
+// Example: 🇳🇬 = Regional N (U+1F1F3) + Regional G (U+1F1EC) = "NG"
+const flagEmojiToCountryCode = (flag: string): string | null => {
+  const codePoints = [...flag].map(char => char.codePointAt(0) || 0);
   
-  // Remove country code that comes right after flag emoji or at start
-  // Handles: "🇦🇷ARTikTok" → "🇦🇷TikTok" and "ARTikTok" → "🇦🇷TikTok"
-  for (const [code, flag] of Object.entries(COUNTRY_FLAGS)) {
-    // Remove code after flag: "🇦🇷AR" → "🇦🇷"
-    formatted = formatted.replace(new RegExp(`${flag}\\s*${code}`, 'gi'), flag);
-    // Replace code at very start with flag: "ARTikTok" → "🇦🇷TikTok"
-    formatted = formatted.replace(new RegExp(`^${code}(?=[A-Z])`, 'g'), flag);
+  // Check if we have exactly 2 regional indicator symbols (each 4 bytes, but JS sees as 2 chars)
+  if (codePoints.length !== 2) return null;
+  
+  // Regional Indicator range: U+1F1E6 (127462) to U+1F1FF (127487)
+  const isRegionalIndicator = (cp: number) => cp >= 127462 && cp <= 127487;
+  
+  if (!isRegionalIndicator(codePoints[0]) || !isRegionalIndicator(codePoints[1])) {
+    return null;
   }
   
-  return formatted;
+  // Convert back to letters: subtract offset (127462 - 65 = 127397)
+  const letter1 = String.fromCharCode(codePoints[0] - 127397);
+  const letter2 = String.fromCharCode(codePoints[1] - 127397);
+  
+  return letter1 + letter2;
+};
+
+// Check if string starts with a flag emoji and extract the country code
+const extractFlagFromStart = (name: string): { countryCode: string | null; cleanName: string } => {
+  // Flag emojis are 4 bytes (2 UTF-16 surrogate pairs), appears as first 2 "characters" when spread
+  const chars = [...name];
+  
+  if (chars.length >= 2) {
+    // Try first 2 code points as potential flag
+    const potentialFlag = chars[0] + chars[1];
+    const countryCode = flagEmojiToCountryCode(potentialFlag);
+    
+    if (countryCode) {
+      // Remove the flag emoji from the start
+      const cleanName = chars.slice(2).join('').trimStart();
+      return { countryCode: countryCode === 'UK' ? 'GB' : countryCode, cleanName };
+    }
+  }
+  
+  // Also check for text country codes at start (e.g., "ARTikTok")
+  for (const code of COUNTRY_CODES) {
+    if (name.startsWith(code) && name.length > code.length) {
+      const nextChar = name[code.length];
+      if (nextChar === ' ' || (nextChar >= 'A' && nextChar <= 'Z')) {
+        return { 
+          countryCode: code === 'UK' ? 'GB' : code, 
+          cleanName: name.slice(code.length).trimStart() 
+        };
+      }
+    }
+  }
+  
+  return { countryCode: null, cleanName: name };
+};
+
+// Legacy function for compatibility
+const extractCountryCode = (name: string): string | null => {
+  return extractFlagFromStart(name).countryCode;
+};
+
+// Remove flag emoji or country code from service name
+const formatServiceName = (name: string): string => {
+  return extractFlagFromStart(name).cleanName;
+};
+
+// Country Flag component with SVG fallback for Windows
+const CountryFlag: React.FC<{ code: string; className?: string }> = ({ code, className }) => {
+  const normalizedCode = code === 'UK' ? 'GB' : code.toUpperCase();
+  return (
+    <ReactCountryFlag
+      countryCode={normalizedCode}
+      svg
+      style={{
+        width: '1.2em',
+        height: '1.2em',
+      }}
+      className={className}
+      title={normalizedCode}
+    />
+  );
+};
+
+// Service name with flag (uses SVG for Windows compatibility)
+const ServiceNameWithFlag: React.FC<{ name: string; className?: string }> = ({ name, className }) => {
+  const countryCode = extractCountryCode(name);
+  const cleanName = formatServiceName(name);
+  
+  return (
+    <span className={`inline-flex items-center gap-1 ${className || ''}`}>
+      {countryCode && <CountryFlag code={countryCode} />}
+      <span>{cleanName}</span>
+    </span>
+  );
 };
 
 // Get placeholder based on service platform
@@ -659,7 +733,7 @@ export default function SocialBoostPage() {
                                       <ServiceIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <p className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight">{formatServiceName(service.name)}</p>
+                                      <p className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight"><ServiceNameWithFlag name={service.name} /></p>
                                       <div className="flex items-center gap-1.5 mt-0.5 sm:mt-1">
                                         <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 h-4 sm:h-5">{service.platform || 'Other'}</Badge>
                                         <span className="text-[10px] sm:text-xs text-muted-foreground">
@@ -692,7 +766,7 @@ export default function SocialBoostPage() {
                         </CardHeader>
                         <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-4 md:p-6 pt-0 sm:pt-0">
                           <div className="p-2 sm:p-3 bg-background rounded-lg">
-                            <p className="font-medium text-xs sm:text-sm line-clamp-2">{formatServiceName(selectedService.name)}</p>
+                            <p className="font-medium text-xs sm:text-sm line-clamp-2"><ServiceNameWithFlag name={selectedService.name} /></p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{selectedService.category}</p>
                           </div>
 
@@ -896,7 +970,7 @@ export default function SocialBoostPage() {
                             <CardContent className="p-2.5 sm:p-3 md:p-4">
                               <div className="flex items-start justify-between gap-2 mb-2 sm:mb-3">
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-xs sm:text-sm line-clamp-1">{formatServiceName(order.smm_services?.name || 'Service')}</p>
+                                  <p className="font-medium text-xs sm:text-sm line-clamp-1"><ServiceNameWithFlag name={order.smm_services?.name || 'Service'} /></p>
                                   {order.link && <a href={order.link} target="_blank" rel="noopener noreferrer" className="text-[10px] sm:text-xs text-primary hover:underline flex items-center gap-1 mt-0.5">
                                     <ExternalLink className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" /><span className="truncate">{order.link}</span>
                                   </a>}

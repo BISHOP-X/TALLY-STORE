@@ -35,11 +35,11 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'No user ID found in payload metadata' });
     }
 
-    // Initialize Supabase (server-side)
+    // Initialize Supabase (server-side with service role to bypass RLS)
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL!,
-      process.env.VITE_SUPABASE_ANON_KEY!
+      process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!  // Service role bypasses RLS for webhook operations
     );
 
     // Check if transaction already processed (idempotency)

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { verifyPayment } from '@/services/ercaspay';
-import { updateUserWalletBalance } from '@/lib/supabase';
+import { verifyAndCreditWalletSecure } from '@/lib/supabase';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -56,76 +55,28 @@ export function usePaymentStatusChecker() {
         processingTransactionsRef.current.add(transactionRef);
         isCheckingRef.current = true;
         
-        const verification = await verifyPayment(transactionRef);
-        console.log('📊 Verification result:', verification);
+        // SECURE: Use Edge Function to verify AND credit wallet server-side
+        const result = await verifyAndCreditWalletSecure(transactionRef);
+        console.log('📊 Secure verification result:', result);
         
-        if (verification.success && verification.status === 'success') {
-          // Payment successful - check transaction history first to prevent duplicates
-          console.log('💰 Payment verified successful, checking for duplicates...');
+        if (result.success) {
+          // Payment successful and wallet credited
+          console.log('💰 Payment verified and wallet credited:', result.amount);
           
-          // Get recent transactions to check for duplicates
-          const { getUserTransactions } = await import('@/lib/supabase');
-          const recentTransactions = await getUserTransactions(user.id);
-          
-          // Check for duplicate transaction in last 10 minutes
-          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-          const duplicateTransaction = recentTransactions.find(tx => 
-            tx.reference === transactionRef ||
-            tx.ercas_reference === verification.transactionReference ||
-            (Math.abs(tx.amount - verification.amount) < 0.01 && 
-             new Date(tx.created_at) > tenMinutesAgo)
-          );
-          
-          if (duplicateTransaction) {
-            console.log('🚫 Duplicate transaction detected, skipping processing:', duplicateTransaction);
-            
-            // Mark as processed to stop further checking
-            const processedTransactions = JSON.parse(localStorage.getItem('processed_transactions') || '[]');
-            if (!processedTransactions.includes(transactionRef)) {
-              processedTransactions.push(transactionRef);
-              localStorage.setItem('processed_transactions', JSON.stringify(processedTransactions));
-            }
-            localStorage.removeItem('pending_topup');
-            
-            toast({
-              title: "Payment Already Processed! ✅",
-              description: `₦${verification.amount.toLocaleString()} was already added to your wallet.`,
-            });
-            
-            // Clear interval
-            if (checkIntervalRef.current) {
-              clearInterval(checkIntervalRef.current);
-              checkIntervalRef.current = null;
-            }
-            
-            return; // Exit without processing again
-          }
-          
-          console.log('✅ No duplicate found, processing payment...');
-          console.log('💰 Adding amount to wallet:', verification.amount);
-          console.log('📝 Recording transaction for user via atomic updater:', user.id);
-
-          // Use the idempotent wallet updater which also records the transaction when a reference is provided
-          const updated = await updateUserWalletBalance(
-            user.id,
-            verification.amount,
-            transactionRef,
-            verification.transactionReference
-          );
-
-          console.log('📝 Wallet update result:', updated);
-
           await refreshWalletBalance();
           
           // Mark transaction as processed
+          const processedTransactions = JSON.parse(localStorage.getItem('processed_transactions') || '[]');
           processedTransactions.push(transactionRef);
           localStorage.setItem('processed_transactions', JSON.stringify(processedTransactions));
           
           localStorage.removeItem('pending_topup');
           
           toast({
-            title: "Payment Successful! 🎉",
-            description: `₦${verification.amount.toLocaleString()} has been added to your wallet.`,
+            title: result.already_processed ? "Payment Already Processed! ✅" : "Payment Successful! 🎉",
+            description: result.already_processed 
+              ? `Your wallet balance is up to date.`
+              : `₦${result.amount?.toLocaleString()} has been added to your wallet.`,
           });
           
           // Notify UI to reload transactions
@@ -136,7 +87,10 @@ export function usePaymentStatusChecker() {
             clearInterval(checkIntervalRef.current);
             checkIntervalRef.current = null;
           }
-        } else if (verification.status === 'failed') {
+        } else if (result.error?.includes('PENDING') || result.error?.includes('pending')) {
+          // Still pending - keep checking
+          console.log('⏳ Payment still pending...');
+        } else {
           // Payment failed - clean up
           localStorage.removeItem('pending_topup');
           
@@ -223,69 +177,27 @@ export function usePaymentStatusChecker() {
             processingTransactionsRef.current.add(transactionRef);
             isCheckingRef.current = true;
             
-            const verification = await verifyPayment(transactionRef);
-            console.log('📋 Focus verification result:', verification);
+            // SECURE: Use Edge Function to verify AND credit wallet server-side
+            const result = await verifyAndCreditWalletSecure(transactionRef);
+            console.log('📋 Focus secure verification result:', result);
             
-            if (verification.success && verification.status === 'success') {
-              // Payment successful - check transaction history first to prevent duplicates
-              console.log('💰 Focus check: Payment verified successful, checking for duplicates...');
+            if (result.success) {
+              console.log('💰 Focus check: Payment verified and wallet credited:', result.amount);
               
-              // Get recent transactions to check for duplicates
-              const { getUserTransactions } = await import('@/lib/supabase');
-              const recentTransactions = await getUserTransactions(user.id);
-              
-              // Check for duplicate transaction in last 10 minutes
-              const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-              const duplicateTransaction = recentTransactions.find(tx => 
-                tx.reference === transactionRef ||
-                tx.ercas_reference === verification.transactionReference ||
-                (Math.abs(tx.amount - verification.amount) < 0.01 && 
-                 new Date(tx.created_at) > tenMinutesAgo)
-              );
-              
-              if (duplicateTransaction) {
-                console.log('🚫 Focus check: Duplicate transaction detected, skipping processing:', duplicateTransaction);
-                
-                // Mark as processed to stop further checking
-                const processedTransactions = JSON.parse(localStorage.getItem('processed_transactions') || '[]');
-                if (!processedTransactions.includes(transactionRef)) {
-                  processedTransactions.push(transactionRef);
-                  localStorage.setItem('processed_transactions', JSON.stringify(processedTransactions));
-                }
-                localStorage.removeItem('pending_topup');
-                
-                toast({
-                  title: "Payment Already Processed! ✅",
-                  description: `₦${verification.amount.toLocaleString()} was already added to your wallet.`,
-                });
-                
-                return; // Exit without processing again
-              }
-              
-              console.log('✅ Focus check: No duplicate found, processing payment...');
-              console.log('💰 Adding amount to wallet on focus:', verification.amount);
-              console.log('📝 Recording transaction on focus via atomic updater for user:', user.id);
-
-              const updatedFocus = await updateUserWalletBalance(
-                user.id,
-                verification.amount,
-                transactionRef,
-                verification.transactionReference
-              );
-
-              console.log('📝 Wallet update result on focus:', updatedFocus);
-
               await refreshWalletBalance();
               
               // Mark transaction as processed
-              processedTransactions.push(transactionRef);
-              localStorage.setItem('processed_transactions', JSON.stringify(processedTransactions));
+              const processedTxs = JSON.parse(localStorage.getItem('processed_transactions') || '[]');
+              processedTxs.push(transactionRef);
+              localStorage.setItem('processed_transactions', JSON.stringify(processedTxs));
               
               localStorage.removeItem('pending_topup');
               
               toast({
-                title: "Payment Successful! 🎉",
-                description: `₦${verification.amount.toLocaleString()} has been added to your wallet.`,
+                title: result.already_processed ? "Payment Already Processed! ✅" : "Payment Successful! 🎉",
+                description: result.already_processed 
+                  ? `Your wallet balance is up to date.`
+                  : `₦${result.amount?.toLocaleString()} has been added to your wallet.`,
               });
               
               // Notify UI to reload transactions

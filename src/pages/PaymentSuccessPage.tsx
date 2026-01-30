@@ -4,10 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, Loader2, XCircle, ArrowLeft, Wallet } from 'lucide-react';
-import { verifyPayment } from '@/services/ercaspay';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { useToast } from '@/hooks/use-toast';
-import { updateUserWalletBalance } from '@/lib/supabase';
+import { verifyAndCreditWalletSecure } from '@/lib/supabase';
 
 export default function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
@@ -56,51 +55,41 @@ export default function PaymentSuccessPage() {
       }
 
       try {
-        console.log('🔍 Verifying payment:', transactionReference);
-        const verification = await verifyPayment(transactionReference);
+        console.log('🔍 Verifying and crediting wallet securely:', transactionReference);
         
-        console.log('📥 Verification result:', verification);
+        // SECURE: Use Edge Function to verify payment AND credit wallet server-side
+        const result = await verifyAndCreditWalletSecure(transactionReference);
+        
+        console.log('📥 Secure verification result:', result);
 
-        if (verification.success && verification.status === 'success') {
-          // Payment successful - update wallet balance (idempotent updater)
-          if (user?.id) {
-            try {
-              const transactionRef = transactionReference || '';
-              await updateUserWalletBalance(user.id, verification.amount, transactionRef, verification.transactionReference);
-              await refreshWalletBalance();
+        if (result.success) {
+          await refreshWalletBalance();
 
-              // Clear pending transaction
-              localStorage.removeItem('pending_topup');
+          // Clear pending transaction
+          localStorage.removeItem('pending_topup');
 
-              setVerificationResult({
-                success: true,
-                status: 'success',
-                amount: verification.amount,
-                message: `Payment successful! ₦${verification.amount.toLocaleString()} has been added to your wallet.`
-              });
+          const message = result.already_processed 
+            ? `Payment already processed. Your wallet balance is up to date.`
+            : `Payment successful! ₦${result.amount?.toLocaleString()} has been added to your wallet.`;
 
-              toast({
-                title: "Payment Successful!",
-                description: `₦${verification.amount.toLocaleString()} has been added to your wallet.`,
-              });
+          setVerificationResult({
+            success: true,
+            status: 'success',
+            amount: result.amount || 0,
+            message
+          });
 
-            } catch (updateError) {
-              console.error('❌ Error updating wallet:', updateError);
-              setVerificationResult({
-                success: false,
-                status: 'error',
-                amount: verification.amount,
-                message: 'Payment was successful but there was an error updating your wallet. Please contact support.'
-              });
-            }
-          }
+          toast({
+            title: result.already_processed ? "Payment Already Processed" : "Payment Successful!",
+            description: message,
+          });
         } else {
           // Payment failed or pending
           setVerificationResult({
             success: false,
-            status: verification.status,
-            amount: verification.amount || storedTransaction?.amount || 0,
-            message: verification.error || `Payment ${verification.status}. Please try again or contact support.`
+            status: 'failed',
+            amount: storedTransaction?.amount || 0,
+            message: result.error || 'Payment verification failed. Please try again or contact support.'
           });
         }
 
@@ -118,7 +107,7 @@ export default function PaymentSuccessPage() {
     };
 
     verifyPaymentStatus();
-  }, [searchParams, user, refreshWalletBalance, toast]);
+  }, [searchParams, refreshWalletBalance, toast]);
 
   const handleBackToWallet = () => {
     navigate('/wallet');

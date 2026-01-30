@@ -833,7 +833,12 @@ export async function getUserWalletBalance(userId: string): Promise<number> {
   }
 }
 
-// Update user's wallet balance (add amount)
+/**
+ * @deprecated SECURITY RISK - DO NOT USE
+ * This function has been replaced by the verify-and-credit-wallet Edge Function.
+ * Use verifyAndCreditWalletSecure() instead.
+ * This function will be removed in a future update.
+ */
 export async function updateUserWalletBalance(
   userId: string,
   amountToAdd: number,
@@ -966,7 +971,98 @@ export async function getAvailableAccount(productGroupId: string): Promise<Indiv
   }
 }
 
+// Generate idempotency key for preventing duplicate purchases
+function generateIdempotencyKey(userId: string, productGroupId: string, quantity: number): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 10);
+  return `purchase_${userId.substring(0, 8)}_${productGroupId.substring(0, 8)}_${quantity}_${timestamp}_${random}`;
+}
+
+// SECURE: Process purchase via Edge Function (server-side)
+export async function processPurchaseSecure(
+  productGroupId: string,
+  quantity: number
+): Promise<{ success: boolean; error?: string; order_id?: string; amount?: number; new_balance?: number }> {
+  try {
+    // Get current session for user ID
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    const idempotencyKey = generateIdempotencyKey(session.user.id, productGroupId, quantity);
+    
+    console.log('🛒 Calling secure purchase Edge Function:', { productGroupId, quantity });
+
+    const { data, error } = await supabase.functions.invoke('process-purchase', {
+      body: {
+        product_group_id: productGroupId,
+        quantity: quantity,
+        idempotency_key: idempotencyKey,
+      },
+    });
+
+    if (error) {
+      console.error('❌ Edge Function error:', error);
+      return { success: false, error: error.message || 'Purchase failed' };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Purchase failed' };
+    }
+
+    console.log('✅ Secure purchase completed:', data);
+    return {
+      success: true,
+      order_id: data.order_id,
+      amount: data.amount,
+      new_balance: data.new_balance,
+    };
+  } catch (error) {
+    console.error('❌ processPurchaseSecure error:', error);
+    return { success: false, error: 'An unexpected error occurred' };
+  }
+}
+
+// SECURE: Verify payment and credit wallet via Edge Function (server-side)
+export async function verifyAndCreditWalletSecure(
+  transactionReference: string,
+  ercasReference?: string
+): Promise<{ success: boolean; error?: string; amount?: number; new_balance?: number; already_processed?: boolean }> {
+  try {
+    console.log('🔍 Calling secure verify-and-credit Edge Function:', transactionReference);
+
+    const { data, error } = await supabase.functions.invoke('verify-and-credit-wallet', {
+      body: {
+        transaction_reference: transactionReference,
+        ercas_reference: ercasReference,
+      },
+    });
+
+    if (error) {
+      console.error('❌ Edge Function error:', error);
+      return { success: false, error: error.message || 'Verification failed' };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Verification failed' };
+    }
+
+    console.log('✅ Wallet credited:', data);
+    return {
+      success: true,
+      amount: data.amount,
+      new_balance: data.new_balance,
+      already_processed: data.already_processed,
+    };
+  } catch (error) {
+    console.error('❌ verifyAndCreditWalletSecure error:', error);
+    return { success: false, error: 'An unexpected error occurred' };
+  }
+}
+
 // Get multiple available accounts for bulk purchase
+// NOTE: This function is deprecated - accounts are now fetched server-side only
 export async function getAvailableAccounts(productGroupId: string, quantity: number): Promise<IndividualAccount[]> {
   try {
     const { data, error } = await supabase
@@ -988,7 +1084,12 @@ export async function getAvailableAccounts(productGroupId: string, quantity: num
   }
 }
 
-// Process bulk purchase transaction (for quantity-based buying)
+/**
+ * @deprecated SECURITY RISK - DO NOT USE
+ * This function has been replaced by the process-purchase Edge Function.
+ * Use processPurchaseSecure() instead.
+ * This function will be removed in a future update.
+ */
 export async function processBulkPurchase(
   userId: string, 
   productGroupId: string,
@@ -1678,78 +1779,51 @@ export async function searchUsers(query: string) {
   }
 }
 
-// Admin adjust user wallet balance
+// SECURE: Admin adjust user wallet/crypto balance via Edge Function
 export async function adminAdjustBalance(
   userId: string,
   amount: number,
   reason: string,
-  adminEmail: string
-): Promise<{ success: boolean; newBalance: number }> {
+  _adminEmail: string, // Kept for backwards compatibility, but verified server-side
+  balanceType: 'wallet' | 'crypto' = 'wallet'
+): Promise<{ success: boolean; newBalance: number; previousBalance?: number }> {
   try {
-    // 1. Get current balance
-    const { data: profile, error: fetchError } = await supabase
-      .from('profiles')
-      .select('wallet_balance, email')
-      .eq('id', userId)
-      .single()
+    const { data, error } = await supabase.functions.invoke('admin-adjust-balance', {
+      body: {
+        target_user_id: userId,
+        adjustment_amount: amount,
+        balance_type: balanceType,
+        reason: reason,
+        idempotency_key: `admin-${userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      },
+    });
 
-    if (fetchError) {
-      console.error('Error fetching user balance:', fetchError)
-      throw new Error('Failed to fetch user balance')
+    if (error) {
+      console.error('Admin adjust balance Edge Function error:', error);
+      throw new Error(error.message || 'Failed to adjust balance');
     }
 
-    const currentBalance = profile.wallet_balance || 0
-    const newBalance = currentBalance + amount
-
-    // 2. Validate - prevent negative balance
-    if (newBalance < 0) {
-      throw new Error(`Insufficient balance. Current: ₦${currentBalance.toLocaleString()}, Attempted deduction: ₦${Math.abs(amount).toLocaleString()}`)
+    if (!data.success) {
+      throw new Error(data.error || 'Balance adjustment failed');
     }
 
-    // 3. Update balance
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ wallet_balance: newBalance })
-      .eq('id', userId)
+    console.log('✅ Balance adjusted via Edge Function:', {
+      user: data.target_email,
+      previousBalance: data.previous_balance,
+      adjustment: data.adjustment,
+      newBalance: data.new_balance,
+      reason: data.reason,
+      admin: data.adjusted_by
+    });
 
-    if (updateError) {
-      console.error('Error updating balance:', updateError)
-      throw new Error('Failed to update user balance')
-    }
-
-    // 4. Create transaction record for audit trail
-    const transactionType = amount > 0 ? 'ADMIN_CREDIT' : 'ADMIN_DEBIT'
-    
-    const { error: txError } = await supabase
-      .from('transactions')
-      .insert({
-        user_id: userId,
-        type: transactionType,
-        amount: Math.abs(amount),
-        status: 'completed',
-        description: `Admin adjustment: ${reason} (by ${adminEmail})`,
-        reference: `ADMIN_${Date.now()}`
-      })
-
-    if (txError) {
-      console.error('Error creating transaction record:', txError)
-      // Don't throw - balance already updated, just log the error
-      console.warn('Balance updated but transaction record failed to create')
-    }
-
-    console.log('✅ Balance adjusted:', {
-      user: profile.email,
-      oldBalance: currentBalance,
-      adjustment: amount,
-      newBalance,
-      reason,
-      admin: adminEmail
-    })
-
-    return { success: true, newBalance }
+    return { 
+      success: true, 
+      newBalance: data.new_balance,
+      previousBalance: data.previous_balance
+    };
   } catch (error) {
-    console.error('Error in adminAdjustBalance:', error)
-    throw error
+    console.error('Error in adminAdjustBalance:', error);
+    throw error;
   }
 }
 

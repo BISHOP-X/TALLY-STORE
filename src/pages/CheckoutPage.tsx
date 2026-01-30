@@ -12,9 +12,8 @@ import { BackButton, BackToProducts } from '@/components/ui/back-button'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { 
-  processPurchase, 
+  processPurchaseSecure,
   getIndividualAccountById,
-  processBulkPurchase,
   type IndividualAccount,
   type ProductGroup,
   type Category 
@@ -101,15 +100,17 @@ export default function CheckoutPage() {
     setPurchasing(true)
     
     try {
-      // Current system uses bulk purchase flow for all purchases
-      console.log('🔄 Processing purchase for', quantity, 'accounts from product group:', productGroup.id)
+      // SECURE: Use Edge Function for purchase (server-side processing)
+      console.log('🔄 Processing secure purchase for', quantity, 'accounts from product group:', productGroup.id)
       
-      const result = await processBulkPurchase(user.id, productGroup.id, quantity)
+      const result = await processPurchaseSecure(productGroup.id, quantity)
       
       if (result.success) {
         const purchaseType = quantity > 1 ? 'Bulk Purchase' : 'Purchase'
-        const accountCount = result.accounts?.length || quantity
-        const accountText = quantity > 1 ? `${accountCount} accounts` : '1 account'
+        const accountText = quantity > 1 ? `${quantity} accounts` : '1 account'
+        
+        // Refresh wallet balance after successful purchase
+        await refreshWalletBalance()
         
         toast({
           title: `${purchaseType} Successful! 🎉`,
@@ -121,7 +122,7 @@ export default function CheckoutPage() {
           state: { 
             purchaseSuccess: true, 
             bulkPurchase: quantity > 1,
-            accountCount: accountCount,
+            accountCount: quantity,
             productGroupName: productGroup.name
           } 
         })
