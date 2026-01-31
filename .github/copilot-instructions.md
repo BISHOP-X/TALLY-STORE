@@ -1,25 +1,37 @@
 # TallyStore - AI Agent Instructions
 
 ## Project Overview
-Nigerian e-commerce platform selling social media accounts with fintech features (crypto exchange, bills payment, SMM services). Built with React + TypeScript + Vite frontend and Supabase backend.
+Nigerian e-commerce platform for social media accounts with fintech features (crypto exchange, bills, SMM). React + TypeScript + Vite frontend, Supabase (PostgreSQL + Edge Functions) backend.
 
 ## Architecture
 
 ### Dual Balance System
-Users have **two balances** in the `profiles` table:
-- `wallet_balance` — Main wallet (top-up via Ercas Pay, used for purchases)
-- `crypto_balance` — Earned from selling crypto (transfer to wallet or withdraw to bank)
+Users have **two balances** in `profiles` table:
+- `wallet_balance` — Main wallet (top-up via Ercas Pay, purchases)
+- `crypto_balance` — Earned from selling crypto (transfer to wallet or bank withdrawal)
 
 ### Frontend → Backend Flow
-1. Frontend calls Supabase Edge Functions with `Authorization: Bearer <token>`
-2. Edge Functions validate auth, interact with external APIs (SageCloud, NowPayments, SMM Panel)
-3. Functions update database and return response
+```
+React Page → src/lib/supabase.ts → Edge Function → External API (SageCloud/NowPayments/SMM Panel)
+                  ↓                       ↓
+             Direct DB query         Update DB + return response
+```
 
-### Key Directories
-- `src/lib/supabase.ts` — Main data layer (~1800 lines), all database operations
-- `src/contexts/SimpleAuth.tsx` — Auth context with wallet balance state
-- `supabase/functions/_shared/` — Reusable API clients for external services
-- `supabase/functions/*/index.ts` — Individual Edge Functions
+### Key Files
+| File | Purpose |
+|------|---------|
+| `src/lib/supabase.ts` | Central data layer (~1800+ lines) - all database operations |
+| `src/contexts/SimpleAuth.tsx` | Auth context with `useAuth()` hook, wallet balance state |
+| `src/components/SimpleProtectedRoute.tsx` | Route guards (`<ProtectedRoute requireRole="admin">`) |
+| `supabase/functions/_shared/` | Reusable API clients for external services |
+
+### External API Clients (`supabase/functions/_shared/`)
+| Client | Service | Usage |
+|--------|---------|-------|
+| `sagecloud-client.ts` | SageCloud | Bills (airtime, data), bank transfers |
+| `nowpayments-client.ts` | NowPayments | Crypto sell orders |
+| `smm-panel-client.ts` | thelordofthepanels.com | Social media marketing services |
+| `forex-rates.ts` | Currency conversion utilities |
 
 ## Essential Patterns
 
@@ -37,59 +49,73 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-  // ... auth check, business logic
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
+  // Validate auth, business logic, return JSON response
 });
 ```
 
-### Calling Edge Functions from Frontend
+### Invoking Edge Functions (Frontend)
 ```typescript
 const { data, error } = await supabase.functions.invoke('function-name', {
   body: { param1: value1 },
 });
 ```
 
-### Admin Check
+### Admin Check Pattern
 ```typescript
 // Hardcoded admin: wisdomthedev@gmail.com
-// Also check profiles.is_admin column
+// Also stored in profiles.is_admin column
+const { isAdmin } = useAuth();
 ```
-
-## External API Clients (`_shared/`)
-
-| Client | Service | Purpose |
-|--------|---------|---------|
-| `sagecloud-client.ts` | SageCloud | Bills (airtime, data), bank transfers |
-| `nowpayments-client.ts` | NowPayments | Crypto sell orders |
-| `smm-panel-client.ts` | thelordofthepanels.com | Social media marketing services |
 
 ## Commands
 ```bash
-bun dev              # Start dev server (port 8080)
-bun build            # Production build
-supabase functions serve  # Local Edge Function testing
-supabase db push     # Apply migrations
+npm run dev              # Dev server (port 8080)
+npm run build            # Production build
+supabase functions serve # Local Edge Function testing
+supabase db push         # Apply migrations to remote
 ```
 
 ## Database Conventions
-- All amounts stored in NGN (₦)
-- Use `idempotency_key` to prevent duplicate transactions
-- Tables: `profiles`, `transactions`, `orders`, `crypto_transactions`, `bills_transactions`, `smm_orders`
-- Migrations in `supabase/migrations/` with `YYYYMMDDHHMMSS_` prefix
+- **Currency**: All amounts stored in NGN (₦), display with `amount.toLocaleString()`
+- **Idempotency**: Use `idempotency_key` column to prevent duplicate transactions
+- **Migrations**: `supabase/migrations/YYYYMMDDHHMMSS_description.sql`
+- **RLS**: Row-level security on all user-facing tables
+
+### Key Tables
+| Table | Purpose |
+|-------|---------|
+| `profiles` | User data with `wallet_balance`, `crypto_balance`, `is_admin` |
+| `transactions` | Wallet transactions (topup/purchase/refund) |
+| `orders` | Product purchases |
+| `crypto_transactions` | Crypto sell orders |
+| `bills_transactions` | Airtime/data purchases |
+| `smm_orders` / `smm_services` | SMM marketing orders and cached services |
 
 ## UI Conventions
-- Components use shadcn/ui (`src/components/ui/`)
-- Purple/blue gradient theme with dark/light mode
-- Balance cards: Green = wallet, Orange = crypto
-- Format currency: `amount.toLocaleString()` with ₦ prefix
-- Protected routes use `<ProtectedRoute requireRole="user|admin">`
+- **Components**: shadcn/ui in `src/components/ui/`
+- **Theme**: Purple/blue gradient, dark/light mode via `next-themes`
+- **Balance cards**: Green = wallet, Orange = crypto
+- **Loading states**: Use shadcn Button `disabled` prop + spinner
+- **Protected routes**: Wrap with `<ProtectedRoute requireRole="user|admin">`
 
 ## SMM Pricing Formula
 ```
-Panel rate (USD/1000) × 2 × 1600 (NGN rate) = Selling price in NGN
+Panel rate (USD/1000) × 2 × 1600 = NGN selling price
 ```
 
 ## Before Making Changes
-1. Read the full file before editing (check `src/lib/supabase.ts` for database operations)
-2. Check `CONTEXT.md` for current feature status and table schemas
-3. Verify Edge Function secrets are in Supabase dashboard (not .env)
-4. Use existing patterns from similar features (e.g., bills → SMM flow)
+1. **Read full files** before editing (especially `src/lib/supabase.ts`)
+2. **Check existing documentation**: `CONTEXT.md` for feature status, `PRD.md` for requirements
+3. **Edge Function secrets**: Stored in Supabase dashboard, not `.env` files
+4. **Follow existing patterns**: Copy from similar features (e.g., bills → SMM flow)
+5. **Ask before assuming**: See `LLM_RULES.md` for context-gathering guidelines
+
+## Project Context Files
+- `CONTEXT.md` — Current feature status, table schemas, API endpoints
+- `LLM_RULES.md` — Guidelines for AI agents (ask before assuming)
+- `PRD.md` — Full product requirements document
+- `SMS-DOCS.md` — External API documentation

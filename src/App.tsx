@@ -8,6 +8,10 @@ import { AuthProvider } from '@/contexts/SimpleAuth'
 import { ProtectedRoute, PublicRoute } from '@/components/SimpleProtectedRoute'
 import InstallPromptBanner from '@/components/InstallPromptBanner'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
+import MaintenancePage from '@/components/MaintenancePage'
+
+// ⚠️ MAINTENANCE MODE - Set to false to restore normal site
+const MAINTENANCE_MODE = true;
 
 // Pages
 import Index from "./pages/Index";
@@ -41,19 +45,25 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem
-      disableTransitionOnChange={false}
-    >
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AnnouncementBanner />
-        <InstallPromptBanner />
+const App = () => {
+  // Show maintenance page when enabled
+  if (MAINTENANCE_MODE) {
+    return <MaintenancePage />;
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem
+        disableTransitionOnChange={false}
+      >
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AnnouncementBanner />
+          <InstallPromptBanner />
           <AuthProvider>
             <Routes>
               {/* Public Routes */}
@@ -68,139 +78,139 @@ const App = () => (
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/web-services" element={<WebServicesPage />} />
               <Route path="/email-confirmation" element={<EmailConfirmation />} />
-              
+
               {/* Auth Routes - redirect to dashboard if already logged in */}
-              <Route 
-                path="/login" 
+              <Route
+                path="/login"
                 element={
                   <PublicRoute>
                     <SimpleLogin />
                   </PublicRoute>
-                } 
+                }
               />
-              <Route 
-                path="/register" 
+              <Route
+                path="/register"
                 element={
                   <PublicRoute>
                     <SimpleRegister />
                   </PublicRoute>
-                } 
+                }
               />
-              
+
               {/* Auth callback for OAuth - not needed for email/password auth */}
 
               {/* Protected Routes - require authentication */}
-              <Route 
-                path="/dashboard" 
+              <Route
+                path="/dashboard"
                 element={
                   <ProtectedRoute requireRole="user">
                     <Dashboard />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/profile" 
+              <Route
+                path="/profile"
                 element={
                   <ProtectedRoute>
                     <ProfilePage />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/orders" 
+              <Route
+                path="/orders"
                 element={
                   <ProtectedRoute>
                     <OrderHistoryPage />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/checkout" 
+              <Route
+                path="/checkout"
                 element={
                   <ProtectedRoute>
                     <CheckoutPage />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/wallet" 
+              <Route
+                path="/wallet"
                 element={
                   <ProtectedRoute requireRole="user">
                     <WalletPage />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/payment-callback" 
+              <Route
+                path="/payment-callback"
                 element={
                   <ProtectedRoute requireRole="user">
                     <PaymentCallbackPage />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/payment-success" 
+              <Route
+                path="/payment-success"
                 element={
                   <ProtectedRoute requireRole="user">
                     <PaymentSuccessPage />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/crypto-exchange" 
+              <Route
+                path="/crypto-exchange"
                 element={
                   <ProtectedRoute requireRole="user">
                     <CryptoExchange />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/bills" 
+              <Route
+                path="/bills"
                 element={
                   <ProtectedRoute requireRole="user">
                     <BillsPayment />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/crypto-withdrawal" 
+              <Route
+                path="/crypto-withdrawal"
                 element={
                   <ProtectedRoute requireRole="user">
                     <CryptoWithdrawal />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/crypto-history" 
+              <Route
+                path="/crypto-history"
                 element={
                   <ProtectedRoute requireRole="user">
                     <CryptoHistory />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/get-ip" 
+              <Route
+                path="/get-ip"
                 element={
                   <ProtectedRoute requireRole="admin">
                     <GetIP />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/social-boost" 
+              <Route
+                path="/social-boost"
                 element={
                   <ProtectedRoute requireRole="admin">
                     <SocialBoostPage />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/admin" 
+              <Route
+                path="/admin"
                 element={
                   <ProtectedRoute requireRole="admin">
                     <AdminPage />
                   </ProtectedRoute>
-                } 
+                }
               />
 
               {/* Catch all route */}
@@ -210,6 +220,7 @@ const App = () => (
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
-);
+  );
+};
 
 export default App;
