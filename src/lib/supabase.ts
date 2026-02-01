@@ -1004,7 +1004,21 @@ export async function processPurchaseSecure(
 
     if (error) {
       console.error('❌ Edge Function error:', error);
-      return { success: false, error: error.message || 'Purchase failed' };
+      
+      // Try to extract detailed error message from response context
+      let errorMessage = error.message || 'Purchase failed';
+      
+      // Check if error has context with the actual error response
+      if (error.context && typeof error.context === 'object') {
+        const context = error.context as any;
+        if (context.error) {
+          errorMessage = context.error;
+        } else if (context.message) {
+          errorMessage = context.message;
+        }
+      }
+      
+      return { success: false, error: errorMessage };
     }
 
     if (!data?.success) {
@@ -1018,9 +1032,38 @@ export async function processPurchaseSecure(
       amount: data.amount,
       new_balance: data.new_balance,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ processPurchaseSecure error:', error);
-    return { success: false, error: 'An unexpected error occurred' };
+    
+    // Try to extract meaningful error message
+    let errorMessage = 'An unexpected error occurred';
+    
+    if (error?.message) {
+      errorMessage = error.message;
+    }
+    
+    // For FunctionsHttpError, try to parse the response body
+    if (error?.context) {
+      try {
+        // Check for body in context
+        if (error.context.body) {
+          const body = typeof error.context.body === 'string' 
+            ? JSON.parse(error.context.body) 
+            : error.context.body;
+          if (body.error) {
+            errorMessage = body.error;
+          }
+        }
+        // Check for error directly in context
+        else if (error.context.error) {
+          errorMessage = error.context.error;
+        }
+      } catch (e) {
+        console.error('Failed to parse error context:', e);
+      }
+    }
+    
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -1855,5 +1898,39 @@ export async function getUserOrdersAdmin(userId: string) {
   } catch (error) {
     console.error('Error in getUserOrdersAdmin:', error)
     throw error
+  }
+}
+
+// Create pending payment record for automatic recovery
+export async function createPendingPayment(params: {
+  userId: string;
+  transactionReference: string;
+  ercasReference?: string;
+  amount: number;
+}) {
+  try {
+    const { data, error } = await supabase
+      .from('pending_payments')
+      .insert({
+        user_id: params.userId,
+        transaction_reference: params.transactionReference,
+        ercas_reference: params.ercasReference || null,
+        amount: params.amount,
+        status: 'pending'
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating pending payment:', error)
+      throw error
+    }
+
+    console.log('✅ Pending payment record created:', data)
+    return data
+  } catch (error) {
+    console.error('Error in createPendingPayment:', error)
+    // Don't throw - this is optional tracking, shouldn't block payment
+    return null
   }
 }

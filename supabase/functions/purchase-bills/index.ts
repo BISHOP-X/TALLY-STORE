@@ -274,8 +274,8 @@ serve(async (req) => {
     let actualCurrentBalance = currentBalance;
     
     for (let attempt = 0; attempt < 5 && !balanceDeducted; attempt++) {
-      // Re-fetch balance to ensure we have latest value
-      const { data: freshUserData } = await supabaseClient
+      // Re-fetch balance to ensure we have latest value (use admin client)
+      const { data: freshUserData } = await supabaseAdmin
         .from('profiles')
         .select(balanceColumn)
         .eq('id', user.id)
@@ -286,18 +286,19 @@ serve(async (req) => {
       // Re-check balance is sufficient
       if (actualCurrentBalance < purchaseAmount) {
         // Rollback transaction record
-        await supabaseClient
+        await supabaseAdmin
           .from('bills_transactions')
           .delete()
           .eq('id', billRecord.id);
         throw new Error(`Insufficient ${balanceDisplayName} balance. Available: ₦${actualCurrentBalance.toLocaleString()}, Required: ₦${purchaseAmount.toLocaleString()}`);
       }
       
-      // Optimistic lock: only update if balance matches what we read
-      const { data: updateData, error: balanceError } = await supabaseClient
+      // Optimistic lock: only update if balance matches what we read (use admin client)
+      const { data: updateData, error: balanceError } = await supabaseAdmin
         .from('profiles')
         .update({ [balanceColumn]: actualCurrentBalance - purchaseAmount })
-        .match({ id: user.id, [balanceColumn]: actualCurrentBalance })
+        .eq('id', user.id)
+        .eq(balanceColumn, actualCurrentBalance)
         .select()
         .single();
 
@@ -309,7 +310,7 @@ serve(async (req) => {
 
       if (updateData) {
         balanceDeducted = true;
-        console.log(`✅ Deducted ${purchaseAmount} from user ${user.id} ${balanceColumn}`);
+        console.log(`✅ Deducted ₦${purchaseAmount} from user ${user.id} ${balanceColumn}, new balance: ₦${updateData[balanceColumn]}`);
       } else {
         console.warn(`🔁 No rows updated on attempt ${attempt + 1}, retrying...`);
         await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
@@ -318,7 +319,7 @@ serve(async (req) => {
     
     if (!balanceDeducted) {
       // Rollback transaction record
-      await supabaseClient
+      await supabaseAdmin
         .from('bills_transactions')
         .delete()
         .eq('id', billRecord.id);
@@ -394,7 +395,7 @@ serve(async (req) => {
       // Refund user's balance with optimistic locking (same column that was deducted)
       let refunded = false;
       for (let attempt = 0; attempt < 5 && !refunded; attempt++) {
-        const { data: currentUserData } = await supabaseClient
+        const { data: currentUserData } = await supabaseAdmin
           .from('profiles')
           .select(balanceColumn)
           .eq('id', user.id)
@@ -403,16 +404,17 @@ serve(async (req) => {
         const currentBal = parseFloat(currentUserData?.[balanceColumn] || '0');
         const refundedBalance = currentBal + purchaseAmount;
         
-        const { data: refundData } = await supabaseClient
+        const { data: refundData } = await supabaseAdmin
           .from('profiles')
           .update({ [balanceColumn]: refundedBalance })
-          .match({ id: user.id, [balanceColumn]: currentBal })
+          .eq('id', user.id)
+          .eq(balanceColumn, currentBal)
           .select()
           .single();
         
         if (refundData) {
           refunded = true;
-          console.log(`✅ Refunded ${purchaseAmount} to user ${user.id} ${balanceColumn}`);
+          console.log(`✅ Refunded ₦${purchaseAmount} to user ${user.id} ${balanceColumn}`);
         } else {
           await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
         }
@@ -446,6 +448,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in purchase-bills:', error);
     
+    // Return 200 status with success: false so client can read the error message
     return new Response(
       JSON.stringify({
         success: false,
@@ -453,7 +456,7 @@ serve(async (req) => {
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 200,
       }
     );
   }

@@ -4,6 +4,7 @@ import { Wallet, ShoppingBag, Download, Settings } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { CryptoBalanceCard } from '@/components/CryptoBalanceCard'
+import { PaymentVerificationCard } from '@/components/PaymentVerificationCard'
 import NavbarAuth from '@/components/NavbarAuth'
 
 export default function Dashboard() {
@@ -49,6 +50,9 @@ export default function Dashboard() {
           {/* Crypto Balance Card */}
           <CryptoBalanceCard />
         </div>
+
+        {/* Payment Verification */}
+        <PaymentVerificationCard />
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

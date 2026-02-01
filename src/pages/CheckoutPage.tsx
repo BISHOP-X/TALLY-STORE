@@ -127,19 +127,54 @@ export default function CheckoutPage() {
           } 
         })
       } else {
+        // Parse error message for better user experience
+        let errorTitle = "Purchase Failed";
+        let errorDescription = result.error || "Failed to complete purchase";
+        
+        if (result.error?.includes('OUT_OF_STOCK')) {
+          errorTitle = "Out of Stock 📦";
+          errorDescription = result.error.replace('OUT_OF_STOCK: ', '');
+        } else if (result.error?.includes('INSUFFICIENT_STOCK')) {
+          errorTitle = "Limited Stock Available 📦";
+          errorDescription = result.error.replace('INSUFFICIENT_STOCK: ', '');
+        } else if (result.error?.includes('Insufficient wallet balance')) {
+          errorTitle = "Insufficient Balance 💰";
+          errorDescription = "Please top up your wallet to complete this purchase.";
+        }
+        
         toast({
           variant: "destructive",
-          title: "Purchase Failed",
-          description: result.error || "Failed to complete purchase"
+          title: errorTitle,
+          description: errorDescription
         })
       }
       
     } catch (error) {
       console.error('❌ Purchase error:', error)
+      
+      // Parse error for better messaging
+      let errorTitle = "Purchase Failed";
+      let errorDescription = "An unexpected error occurred during purchase";
+      
+      if (error instanceof Error) {
+        if (error.message.includes('OUT_OF_STOCK')) {
+          errorTitle = "Out of Stock 📦";
+          errorDescription = error.message.replace('OUT_OF_STOCK: ', '');
+        } else if (error.message.includes('INSUFFICIENT_STOCK')) {
+          errorTitle = "Limited Stock Available 📦";
+          errorDescription = error.message.replace('INSUFFICIENT_STOCK: ', '');
+        } else if (error.message.includes('Insufficient wallet balance')) {
+          errorTitle = "Insufficient Balance 💰";
+          errorDescription = "Please top up your wallet to complete this purchase.";
+        } else {
+          errorDescription = error.message;
+        }
+      }
+      
       toast({
         variant: "destructive",
-        title: "Purchase Failed",
-        description: "An unexpected error occurred during purchase"
+        title: errorTitle,
+        description: errorDescription
       })
     } finally {
       setPurchasing(false)

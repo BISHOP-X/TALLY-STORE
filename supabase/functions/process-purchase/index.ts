@@ -105,9 +105,19 @@ serve(async (req) => {
       throw new Error('Failed to check availability');
     }
 
+    console.log(`📦 Found ${availableAccounts?.length || 0} available accounts for product_group_id: ${product_group_id}`);
+
     if (!availableAccounts || availableAccounts.length < quantity) {
       const available = availableAccounts?.length || 0;
-      throw new Error(`Only ${available} accounts available, but ${quantity} requested`);
+      
+      // Log the issue for debugging
+      console.error(`❌ Stock mismatch: product_group_id=${product_group_id}, found=${available}, requested=${quantity}`);
+      
+      if (available === 0) {
+        throw new Error(`OUT_OF_STOCK: ${productGroup.name} is currently out of stock. Please check back later or contact support.`);
+      } else {
+        throw new Error(`INSUFFICIENT_STOCK: Only ${available} account(s) available for ${productGroup.name}. You requested ${quantity}.`);
+      }
     }
 
     // 3. Check wallet balance
@@ -266,7 +276,10 @@ serve(async (req) => {
     console.error('❌ Purchase error:', error);
 
     const message = error instanceof Error ? error.message : 'Purchase failed';
-    const status = message === 'Unauthorized' ? 401 : 400;
+    
+    // Return 200 with success: false for business errors so the client can read the message
+    // Only return 401 for auth errors
+    const status = message === 'Unauthorized' ? 401 : 200;
 
     return new Response(
       JSON.stringify({ success: false, error: message }),

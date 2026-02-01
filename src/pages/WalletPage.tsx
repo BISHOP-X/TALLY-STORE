@@ -16,6 +16,7 @@ import {
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import { TopUpWallet } from '@/components/TopUpWallet'
+import { PaymentVerificationCard } from '@/components/PaymentVerificationCard'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { useToast } from '@/hooks/use-toast'
 import { usePaymentStatusChecker } from '@/hooks/usePaymentStatusChecker'
@@ -163,6 +164,9 @@ export default function WalletPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Payment Verification */}
+          <PaymentVerificationCard />
 
           {/* Main Content */}
           <Tabs defaultValue="topup" className="space-y-6">

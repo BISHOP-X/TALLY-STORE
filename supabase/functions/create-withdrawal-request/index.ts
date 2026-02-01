@@ -239,8 +239,8 @@ serve(async (req) => {
     let actualCurrentBalance = currentBalance;
     
     for (let attempt = 0; attempt < 5 && !balanceDeducted; attempt++) {
-      // Re-fetch balance to ensure we have latest value
-      const { data: freshUserData } = await supabaseClient
+      // Re-fetch balance to ensure we have latest value (use admin client to bypass RLS)
+      const { data: freshUserData } = await supabaseAdmin
         .from('profiles')
         .select('crypto_balance')
         .eq('id', user.id)
@@ -251,18 +251,19 @@ serve(async (req) => {
       // Re-check balance is sufficient
       if (actualCurrentBalance < withdrawalAmount) {
         // Rollback withdrawal record
-        await supabaseClient
+        await supabaseAdmin
           .from('crypto_withdrawals')
           .delete()
           .eq('id', withdrawalRecord.id);
         throw new Error(`Insufficient balance. Available: ₦${actualCurrentBalance.toLocaleString()}, Requested: ₦${withdrawalAmount.toLocaleString()}`);
       }
       
-      // Optimistic lock: only update if balance matches what we read
-      const { data: updateData, error: balanceError } = await supabaseClient
+      // Optimistic lock: only update if balance matches what we read (use admin client)
+      const { data: updateData, error: balanceError } = await supabaseAdmin
         .from('profiles')
         .update({ crypto_balance: actualCurrentBalance - withdrawalAmount })
-        .match({ id: user.id, crypto_balance: actualCurrentBalance })
+        .eq('id', user.id)
+        .eq('crypto_balance', actualCurrentBalance)
         .select()
         .single();
 
@@ -274,7 +275,7 @@ serve(async (req) => {
 
       if (updateData) {
         balanceDeducted = true;
-        console.log(`✅ Deducted ${withdrawalAmount} from user ${user.id}`);
+        console.log(`✅ Deducted ₦${withdrawalAmount} from user ${user.id}, new balance: ₦${updateData.crypto_balance}`);
       } else {
         console.warn(`🔁 No rows updated on attempt ${attempt + 1}, retrying...`);
         await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
@@ -283,7 +284,7 @@ serve(async (req) => {
     
     if (!balanceDeducted) {
       // Rollback withdrawal record
-      await supabaseClient
+      await supabaseAdmin
         .from('crypto_withdrawals')
         .delete()
         .eq('id', withdrawalRecord.id);
@@ -342,7 +343,7 @@ serve(async (req) => {
       // Refund user's balance with optimistic locking
       let refunded = false;
       for (let attempt = 0; attempt < 5 && !refunded; attempt++) {
-        const { data: currentUserData } = await supabaseClient
+        const { data: currentUserData } = await supabaseAdmin
           .from('profiles')
           .select('crypto_balance')
           .eq('id', user.id)
@@ -351,16 +352,17 @@ serve(async (req) => {
         const currentBal = parseFloat(currentUserData?.crypto_balance || '0');
         const refundedBalance = currentBal + withdrawalAmount;
         
-        const { data: refundData } = await supabaseClient
+        const { data: refundData } = await supabaseAdmin
           .from('profiles')
           .update({ crypto_balance: refundedBalance })
-          .match({ id: user.id, crypto_balance: currentBal })
+          .eq('id', user.id)
+          .eq('crypto_balance', currentBal)
           .select()
           .single();
         
         if (refundData) {
           refunded = true;
-          console.log(`✅ Refunded ${withdrawalAmount} to user ${user.id}`);
+          console.log(`✅ Refunded ₦${withdrawalAmount} to user ${user.id}`);
         } else {
           await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
         }
@@ -391,24 +393,25 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error('Error in create-withdrawal-request:', error);
     let errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-    let statusCode = 400;
     
     // Handle SERVICE_UNAVAILABLE errors (our internal issues like low balance)
     if (errorMessage.startsWith('SERVICE_UNAVAILABLE:')) {
       errorMessage = errorMessage.replace('SERVICE_UNAVAILABLE: ', '');
-      statusCode = 503; // Service Unavailable
     }
     // Handle SageCloud API errors with professional message
     else if (errorMessage.includes('SageCloud API error') || errorMessage.includes('SageCloud authentication failed')) {
       console.error('SageCloud API Error (hidden from user):', errorMessage);
       errorMessage = 'We\'re experiencing a temporary service disruption. Please try again later. If this continues, contact support.';
-      statusCode = 503;
     }
     // Handle transfer failures with professional message
     else if (errorMessage.includes('Transfer failed')) {
       console.error('Transfer Error (hidden from user):', errorMessage);
       errorMessage = 'Your withdrawal could not be processed at this time. Your balance has been restored. Please try again later.';
     }
+    
+    // Return 200 status with success: false so client can read the error message
+    // Only return non-200 for auth errors
+    const statusCode = errorMessage.includes('Missing authorization') || errorMessage.includes('Unauthorized') ? 401 : 200;
     
     return new Response(
       JSON.stringify({

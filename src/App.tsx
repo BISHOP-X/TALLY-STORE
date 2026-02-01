@@ -11,7 +11,9 @@ import AnnouncementBanner from '@/components/AnnouncementBanner'
 import MaintenancePage from '@/components/MaintenancePage'
 
 // ⚠️ MAINTENANCE MODE - Set to false to restore normal site
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
+// Local dev bypass: maintenance only shows in production
+const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 // Pages
 import Index from "./pages/Index";
@@ -46,8 +48,8 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Show maintenance page when enabled
-  if (MAINTENANCE_MODE) {
+  // Show maintenance page when enabled (except on local dev)
+  if (MAINTENANCE_MODE && !isLocalDev) {
     return <MaintenancePage />;
   }
 
@@ -199,7 +201,7 @@ const App = () => {
               <Route
                 path="/social-boost"
                 element={
-                  <ProtectedRoute requireRole="admin">
+                  <ProtectedRoute requireRole="user">
                     <SocialBoostPage />
                   </ProtectedRoute>
                 }
