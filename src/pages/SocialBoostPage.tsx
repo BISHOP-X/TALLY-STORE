@@ -622,7 +622,6 @@ export default function SocialBoostPage() {
         <div className="text-center mb-4 sm:mb-6">
           <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-1">Boost Your Social Media</h2>
           <p className="text-xs sm:text-sm text-muted-foreground">Followers, likes, views & more</p>
-          <Badge variant="outline" className="mt-2 text-orange-600 border-orange-600 text-xs">🔒 Admin Testing</Badge>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
