@@ -9,11 +9,41 @@ import { ProtectedRoute, PublicRoute } from '@/components/SimpleProtectedRoute'
 import InstallPromptBanner from '@/components/InstallPromptBanner'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 import MaintenancePage from '@/components/MaintenancePage'
+import { useEffect } from 'react'
 
 // ⚠️ MAINTENANCE MODE - Set to false to restore normal site
 const MAINTENANCE_MODE = false;
 // Local dev bypass: maintenance only shows in production
 const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// Version tracking for cache busting
+const MAINTENANCE_VERSION = "1.1";
+
+// Force cache clear on version change
+if (typeof window !== 'undefined' && !isLocalDev) {
+  const lastVersion = localStorage.getItem('app_version');
+  if (lastVersion !== MAINTENANCE_VERSION) {
+    console.log(`🔄 Version changed from ${lastVersion} to ${MAINTENANCE_VERSION}, clearing caches...`);
+    
+    // Clear service workers
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        registrations.forEach(registration => registration.unregister());
+      });
+    }
+    
+    // Clear all caches
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => caches.delete(name));
+      });
+    }
+    
+    // Update version and reload
+    localStorage.setItem('app_version', MAINTENANCE_VERSION);
+    setTimeout(() => window.location.reload(), 100);
+  }
+}
 
 // Pages
 import Index from "./pages/Index";
