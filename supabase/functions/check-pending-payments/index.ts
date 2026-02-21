@@ -92,10 +92,11 @@ serve(async (req) => {
         }
 
         // Call verify-and-credit-wallet Edge Function
+        // IMPORTANT: field names must match what verify-and-credit-wallet expects
         const verifyResponse = await supabase.functions.invoke('verify-and-credit-wallet', {
           body: {
-            transactionReference: payment.transaction_reference,
-            ercasReference: payment.ercas_reference
+            transaction_reference: payment.transaction_reference,
+            ercas_reference: payment.ercas_reference
           }
         });
 
@@ -118,19 +119,18 @@ serve(async (req) => {
         const verifyData = verifyResponse.data;
         console.log(`[CHECK-PENDING] Verify response for ${payment.id}:`, verifyData);
 
-        if (verifyData.success && verifyData.credited) {
+        if (verifyData.success && !verifyData.already_processed) {
           // Payment was successfully credited
-          console.log(`[CHECK-PENDING] ✅ Payment ${payment.id} successfully credited`);
+          console.log(`[CHECK-PENDING] ✅ Payment ${payment.id} successfully credited: +₦${verifyData.amount}`);
           await supabase
             .from('pending_payments')
             .update({
               status: 'credited',
-              ercas_reference: verifyData.ercasReference || payment.ercas_reference,
               error_message: null
             })
             .eq('id', payment.id);
           results.credited++;
-        } else if (verifyData.alreadyCredited) {
+        } else if (verifyData.success && verifyData.already_processed) {
           // Payment was already credited before
           console.log(`[CHECK-PENDING] Payment ${payment.id} already credited`);
           await supabase

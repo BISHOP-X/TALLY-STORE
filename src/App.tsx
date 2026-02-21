@@ -9,6 +9,7 @@ import { ProtectedRoute, PublicRoute } from '@/components/SimpleProtectedRoute'
 import InstallPromptBanner from '@/components/InstallPromptBanner'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 import MaintenancePage from '@/components/MaintenancePage'
+import GlobalPaymentChecker from '@/components/GlobalPaymentChecker'
 import { useEffect } from 'react'
 
 // ⚠️ MAINTENANCE MODE - Set to false to restore normal site
@@ -97,6 +98,7 @@ const App = () => {
           <AnnouncementBanner />
           <InstallPromptBanner />
           <AuthProvider>
+            <GlobalPaymentChecker />
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Index />} />

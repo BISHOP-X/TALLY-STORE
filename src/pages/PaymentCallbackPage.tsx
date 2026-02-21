@@ -3,14 +3,14 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
-import { ercasPayService } from '@/lib/ercasPay'
+import { verifyAndCreditWalletSecure } from '@/lib/supabase'
 import { useAuth } from '@/contexts/SimpleAuth'
 import Navbar from '@/components/NavbarAuth'
 
 export default function PaymentCallbackPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshWalletBalance } = useAuth()
   const [status, setStatus] = useState<'loading' | 'success' | 'failed' | 'error'>('loading')
   const [paymentData, setPaymentData] = useState<any>(null)
 
@@ -25,31 +25,44 @@ export default function PaymentCallbackPage() {
       return
     }
 
-    verifyPayment(transactionReference)
+    verifyAndCredit(transactionReference)
   }, [searchParams])
 
-  const verifyPayment = async (transactionReference: string) => {
+  const verifyAndCredit = async (transactionReference: string) => {
     try {
-      const verification = await ercasPayService.verifyPayment(transactionReference)
+      // Use the secure Edge Function to verify AND credit the wallet server-side
+      const result = await verifyAndCreditWalletSecure(transactionReference)
       
-      if (verification.success && verification.data) {
-        if (verification.data.status === 'SUCCESSFUL') {
-          setStatus('success')
-          setPaymentData(verification.data)
-          
-          // TODO: Update user wallet balance in Supabase
-          // await updateWalletBalance(user?.id, verification.data.amount)
-          
-        } else if (verification.data.status === 'PENDING') {
-          setStatus('loading')
-          // Retry verification after a delay
-          setTimeout(() => verifyPayment(transactionReference), 3000)
-        } else {
-          setStatus('failed')
-          setPaymentData(verification.data)
+      if (result.success) {
+        setStatus('success')
+        setPaymentData({
+          amount: result.amount,
+          reference: transactionReference,
+          newBalance: result.new_balance,
+          alreadyProcessed: result.already_processed,
+        })
+        
+        // Refresh wallet balance in the auth context
+        await refreshWalletBalance()
+        
+        // Clean up pending topup from localStorage
+        localStorage.removeItem('pending_topup')
+        
+        // Mark as processed to prevent duplicate polling
+        const processedTxs = JSON.parse(localStorage.getItem('processed_transactions') || '[]')
+        if (!processedTxs.includes(transactionReference)) {
+          processedTxs.push(transactionReference)
+          localStorage.setItem('processed_transactions', JSON.stringify(processedTxs))
         }
+        
+        // Notify other components
+        window.dispatchEvent(new CustomEvent('transactionAdded'))
+      } else if (result.error?.includes('pending') || result.error?.includes('PENDING')) {
+        // Payment still pending at Ercas - retry after delay
+        setTimeout(() => verifyAndCredit(transactionReference), 5000)
       } else {
-        setStatus('error')
+        setStatus('failed')
+        setPaymentData({ reference: transactionReference, error: result.error })
       }
     } catch (error) {
       console.error('Payment verification failed:', error)
@@ -78,8 +91,10 @@ export default function PaymentCallbackPage() {
         }
       case 'success':
         return {
-          title: 'Payment Successful!',
-          description: `Your wallet has been topped up with ₦${paymentData?.amount?.toLocaleString() || '0'}.`
+          title: paymentData?.alreadyProcessed ? 'Payment Already Processed!' : 'Payment Successful!',
+          description: paymentData?.alreadyProcessed 
+            ? 'Your wallet balance is already up to date.'
+            : `₦${paymentData?.amount?.toLocaleString() || '0'} has been added to your wallet.`
         }
       case 'failed':
         return {
