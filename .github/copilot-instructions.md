@@ -113,6 +113,24 @@ Panel rate (USD/1000) × 2 × 1600 = NGN selling price
 3. **Edge Function secrets**: Stored in Supabase dashboard, not `.env` files
 4. **Follow existing patterns**: Copy from similar features (e.g., bills → SMM flow)
 5. **Ask before assuming**: See `LLM_RULES.md` for context-gathering guidelines
+6. **NEVER guess database state** — always query via `mcp_supabase_execute_sql`
+7. **Use Context7 MCP** for up-to-date library docs — never guess API signatures
+8. **NEVER batch-credit/debit wallets** without explicit user approval and showing exact scope
+9. **NEVER manually fire cron jobs** without user confirming what will be processed
+10. **Admins may have manually compensated users** — never auto-credit old stuck payments
+
+## Money Safety Rules
+- **Insert transaction FIRST, then update wallet** (atomic lock via unique constraint)
+- **Unique constraint on `transactions.reference`** prevents double-crediting
+- **Check `pending_payments` status check constraint** before setting custom statuses (allowed: pending/credited/failed/expired)
+- **Wallet operations are effectively irreversible** — users spend money instantly
+- When in doubt about whether a user was already compensated: **DO NOT CREDIT — flag for admin review**
+
+## Supabase Infrastructure (verified facts)
+- `current_setting('app.*')` does NOT work — use hardcoded project URL
+- `pg_net` extension required for cron HTTP calls — verify it's enabled
+- `pg_cron` jobs: check `cron.job_run_details` for failures, not just `cron.job`
+- All Edge Functions use `verify_jwt: false` — auth handled in code
 
 ## Project Context Files
 - `CONTEXT.md` — Current feature status, table schemas, API endpoints
