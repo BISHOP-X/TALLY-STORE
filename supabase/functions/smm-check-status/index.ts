@@ -152,6 +152,74 @@ serve(async (req) => {
       .update(updateData)
       .eq('id', order.id);
 
+    // Auto-refund for cancelled orders where panel charge is 0 (nothing was delivered)
+    // Also handle partial refunds for partial orders
+    let refundAmount = 0;
+    let refundMessage = '';
+
+    if (newStatus === 'cancelled' && order.status !== 'cancelled') {
+      // Full refund — panel cancelled and charged nothing
+      const panelCharge = parseFloat(panelStatus.charge || '0');
+      if (panelCharge === 0) {
+        refundAmount = parseFloat(order.amount_ngn) || 0;
+        refundMessage = `Auto-refund for cancelled SMM order (panel charge: $0)`;
+      }
+    } else if (newStatus === 'partial' && order.status !== 'partial') {
+      // Partial refund — panel only delivered some of the order
+      const totalRemains = parseInt(panelStatus.remains || '0');
+      if (totalRemains > 0 && order.quantity > 0) {
+        const undeliveredRatio = totalRemains / order.quantity;
+        refundAmount = Math.floor(parseFloat(order.amount_ngn) * undeliveredRatio);
+        refundMessage = `Auto-refund for partial SMM order (${totalRemains}/${order.quantity} undelivered)`;
+      }
+    }
+
+    if (refundAmount > 0) {
+      // Check if refund was already issued
+      const { data: existingRefund } = await supabaseAdmin
+        .from('transactions')
+        .select('id')
+        .eq('reference', `REFUND-${order.reference}`)
+        .eq('type', 'refund')
+        .limit(1);
+
+      if (!existingRefund || existingRefund.length === 0) {
+        // Get current wallet balance
+        const { data: userProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('wallet_balance')
+          .eq('id', order.user_id)
+          .single();
+
+        if (userProfile) {
+          const currentWallet = parseFloat(userProfile.wallet_balance) || 0;
+          const refundedBalance = currentWallet + refundAmount;
+
+          // Credit wallet
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              wallet_balance: refundedBalance,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', order.user_id);
+
+          // Record refund transaction
+          await supabaseAdmin.from('transactions').insert({
+            user_id: order.user_id,
+            type: 'refund',
+            amount: refundAmount,
+            balance_after: refundedBalance,
+            description: refundMessage + `: ${order.reference}`,
+            reference: `REFUND-${order.reference}`,
+            status: 'completed',
+          });
+
+          console.log(`Auto-refunded ₦${refundAmount} for order ${order.reference} (${newStatus})`);
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -167,6 +235,7 @@ serve(async (req) => {
           start_count: updateData.start_count,
           remains: updateData.remains,
           charge: panelStatus.charge,
+          refund_amount: refundAmount > 0 ? refundAmount : undefined,
           created_at: order.created_at,
           updated_at: updateData.updated_at,
           completed_at: updateData.completed_at || order.completed_at,

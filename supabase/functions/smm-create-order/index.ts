@@ -149,7 +149,30 @@ serve(async (req) => {
 
     console.log(`Order calculation: ${actualQuantity} units, type: ${service.service_type}, total: ₦${totalAmount}`);
 
-    // Get user's wallet balance
+    // Check for duplicate active order with same link (prevent "active order" panel errors)
+    if (link) {
+      const { data: activeOrders } = await supabaseAdmin
+        .from('smm_orders')
+        .select('id, reference, status')
+        .eq('user_id', user.id)
+        .eq('service_id', service.id)
+        .eq('link', link)
+        .in('status', ['pending', 'processing', 'in_progress'])
+        .limit(1);
+
+      if (activeOrders && activeOrders.length > 0) {
+        throw new Error(
+          `You already have an active order for this link (${activeOrders[0].reference}). ` +
+          `Please wait for it to complete before placing a new one.`
+        );
+      }
+    }
+
+    // Generate order reference
+    const reference = generateReference();
+
+    // Atomic wallet deduction with optimistic locking to prevent race conditions
+    // Read balance → check sufficient → deduct with WHERE matching original balance
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('wallet_balance')
@@ -166,22 +189,23 @@ serve(async (req) => {
       throw new Error(`Insufficient balance. Required: ₦${totalAmount.toLocaleString()}, Available: ₦${currentBalance.toLocaleString()}`);
     }
 
-    // Generate order reference
-    const reference = generateReference();
-
-    // Deduct from wallet balance
     const newBalance = currentBalance - totalAmount;
 
-    const { error: balanceError } = await supabaseAdmin
+    // Optimistic locking: only update if balance hasn't changed since we read it
+    // This prevents race conditions from concurrent orders
+    const { data: updateResult, error: balanceError } = await supabaseAdmin
       .from('profiles')
       .update({
         wallet_balance: newBalance,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', user.id);
+      .eq('id', user.id)
+      .eq('wallet_balance', currentBalance)
+      .select('wallet_balance')
+      .single();
 
-    if (balanceError) {
-      throw new Error('Failed to deduct wallet balance');
+    if (balanceError || !updateResult) {
+      throw new Error('Balance changed during transaction. Please try again.');
     }
 
     console.log(`Deducted ₦${totalAmount} from user ${user.id}. New balance: ₦${newBalance}`);
@@ -303,9 +327,28 @@ serve(async (req) => {
       panelError = err.message || 'Failed to place order with panel';
     }
 
-    // If panel order failed, mark as failed but don't refund automatically
-    // Admin can review and refund manually
+    // If panel order failed, auto-refund the user immediately
     if (panelError) {
+      // Refund wallet balance
+      const { data: currentProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', user.id)
+        .single();
+
+      const refundedBalance = (parseFloat(currentProfile?.wallet_balance) || 0) + totalAmount;
+
+      await supabaseAdmin
+        .from('profiles')
+        .update({
+          wallet_balance: refundedBalance,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      console.log(`Auto-refunded ₦${totalAmount} to user ${user.id}. Balance restored to ₦${refundedBalance}`);
+
+      // Mark order as failed
       await supabaseAdmin
         .from('smm_orders')
         .update({
@@ -315,18 +358,29 @@ serve(async (req) => {
         })
         .eq('id', order.id);
 
-      // Log transaction as failed
+      // Log the failed purchase transaction
       await supabaseAdmin.from('transactions').insert({
         user_id: user.id,
         type: 'purchase',
         amount: -totalAmount,
         balance_after: newBalance,
-        description: `SMM Order Failed: ${service.name} (${quantity} units) - ${panelError}`,
+        description: `SMM Order Failed: ${service.name} (${actualQuantity} units) - ${panelError}`,
         reference: reference,
         status: 'failed',
       });
 
-      throw new Error(`Order failed: ${panelError}. Your balance has been deducted. Please contact support with reference: ${reference}`);
+      // Log the automatic refund transaction
+      await supabaseAdmin.from('transactions').insert({
+        user_id: user.id,
+        type: 'refund',
+        amount: totalAmount,
+        balance_after: refundedBalance,
+        description: `Auto-refund for failed SMM order: ${service.name} (${actualQuantity} units)`,
+        reference: `REFUND-${reference}`,
+        status: 'completed',
+      });
+
+      throw new Error(`Order failed: ${panelError}. Your balance of ₦${totalAmount.toLocaleString()} has been automatically refunded.`);
     }
 
     // Log successful transaction
@@ -335,7 +389,7 @@ serve(async (req) => {
       type: 'purchase',
       amount: -totalAmount,
       balance_after: newBalance,
-      description: `SMM Order: ${service.name} (${quantity} units)`,
+      description: `SMM Order: ${service.name} (${actualQuantity} units)`,
       reference: reference,
       status: 'completed',
     });
