@@ -92,11 +92,12 @@ serve(async (req) => {
         }
 
         // Call verify-and-credit-wallet Edge Function
-        // IMPORTANT: field names must match what verify-and-credit-wallet expects
+        // Pass user_id so cron (service-role) calls can identify the user
         const verifyResponse = await supabase.functions.invoke('verify-and-credit-wallet', {
           body: {
             transaction_reference: payment.transaction_reference,
-            ercas_reference: payment.ercas_reference
+            ercas_reference: payment.ercas_reference,
+            user_id: payment.user_id
           }
         });
 

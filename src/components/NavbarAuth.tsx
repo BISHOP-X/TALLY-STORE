@@ -15,7 +15,7 @@ export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showInstallDialog, setShowInstallDialog] = useState(false)
   const [announcementVisible, setAnnouncementVisible] = useState(true)
-  const { user, signOut, isAdmin, walletBalance } = useAuth()
+  const { user, signOut, isAdmin, walletBalance, walletLoading } = useAuth()
   const { canInstall, isInstalled, isAndroid, isIOS, installApp } = usePWAInstall()
   const { toast } = useToast()
   const navigate = useNavigate()
@@ -214,7 +214,11 @@ export default function Navbar() {
                 {!isAdmin && (
                   <Link to="/wallet" className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary transition-colors">
                     <Wallet className="h-4 w-4" />
-                    ₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}
+                    {walletLoading ? (
+                      <span className="inline-block h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                    ) : (
+                      <>₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}</>
+                    )}
                   </Link>
                 )}
               </div>
@@ -331,7 +335,11 @@ export default function Navbar() {
                     {!isAdmin && (
                       <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 px-4">
                         <Wallet className="h-4 w-4" />
-                        Balance: ₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}
+                        {walletLoading ? (
+                          <span className="inline-block h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                        ) : (
+                          <>Balance: ₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}</>
+                        )}
                       </div>
                     )}
                     

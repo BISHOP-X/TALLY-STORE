@@ -19,17 +19,15 @@ import { TopUpWallet } from '@/components/TopUpWallet'
 import { PaymentVerificationCard } from '@/components/PaymentVerificationCard'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { useToast } from '@/hooks/use-toast'
-import { usePaymentStatusChecker } from '@/hooks/usePaymentStatusChecker'
 import { getUserTransactions } from '@/lib/supabase'
 
 export default function WalletPage() {
-  const { user, walletBalance, refreshWalletBalance } = useAuth()
+  const { user, walletBalance, walletLoading, refreshWalletBalance } = useAuth()
   const { toast } = useToast()
   const [transactions, setTransactions] = useState<any[]>([])
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
   
-  // Auto-check for payment completions
-  usePaymentStatusChecker()
+  // Payment status checking is handled by GlobalPaymentChecker (app-level)
 
   // Load user transactions
   const loadTransactions = async () => {
@@ -122,7 +120,11 @@ export default function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold mb-1">
-                  ₦{walletBalance.toLocaleString()}
+                  {walletLoading ? (
+                    <span className="inline-block h-8 w-32 bg-white/20 rounded animate-pulse" />
+                  ) : (
+                    <>₦{walletBalance.toLocaleString()}</>
+                  )}
                 </div>
                 <p className="text-white/80 text-sm">
                   Available for purchases

@@ -11,6 +11,7 @@ interface AuthContextType {
   resendConfirmation: (email: string) => Promise<{ success: boolean; error?: string }>
   isAdmin: boolean
   walletBalance: number
+  walletLoading: boolean
   refreshWalletBalance: () => Promise<void>
 }
 
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
+  const [walletLoading, setWalletLoading] = useState(true)
 
   useEffect(() => {
     // Get initial session
@@ -67,10 +69,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsAdmin(data.is_admin || false)
         setWalletBalance(data.wallet_balance || 0)
       }
+      setWalletLoading(false)
     } catch (error) {
       console.error('Error checking admin status:', error)
       setIsAdmin(false)
       setWalletBalance(0)
+      setWalletLoading(false)
     }
   }
 
@@ -173,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     resendConfirmation,
     isAdmin,
     walletBalance,
+    walletLoading,
     refreshWalletBalance
   }
 

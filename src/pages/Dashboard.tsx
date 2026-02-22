@@ -8,7 +8,7 @@ import { PaymentVerificationCard } from '@/components/PaymentVerificationCard'
 import NavbarAuth from '@/components/NavbarAuth'
 
 export default function Dashboard() {
-  const { user, walletBalance } = useAuth()
+  const { user, walletBalance, walletLoading } = useAuth()
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
@@ -37,7 +37,11 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold mb-2">
-                ₦{walletBalance?.toLocaleString() || '0.00'}
+                {walletLoading ? (
+                  <span className="inline-block h-8 w-32 bg-white/20 rounded animate-pulse" />
+                ) : (
+                  <>₦{walletBalance?.toLocaleString() || '0.00'}</>
+                )}
               </div>
               <Link to="/wallet">
                 <Button variant="secondary" className="bg-white/20 hover:bg-white/30 text-white">

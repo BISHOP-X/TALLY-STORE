@@ -9,19 +9,32 @@ const corsHeaders = {
 const ERCASPAY_BASE_URL = 'https://api.ercaspay.com/api/v1';
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Get authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       throw new Error('Missing authorization header');
     }
 
-    // Initialize user client (to get authenticated user)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Parse request body
+    const { transaction_reference, ercas_reference, user_id: body_user_id } = await req.json();
+
+    if (!transaction_reference) {
+      throw new Error('transaction_reference is required');
+    }
+
+    // Determine user: either from JWT or from body (for cron/admin calls)
+    let userId: string;
+
+    // Try JWT auth first
     const supabaseUser = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -31,41 +44,44 @@ serve(async (req) => {
       }
     );
 
-    // Verify the user
     const { data: { user }, error: userError } = await supabaseUser.auth.getUser(
       authHeader.replace('Bearer ', '')
     );
 
-    if (userError || !user) {
+    if (user && !userError) {
+      userId = user.id;
+    } else if (body_user_id) {
+      // Called by cron/admin with service role key — user_id passed in body
+      // Verify caller is using service role key by checking if authHeader contains service role
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+      if (authHeader !== `Bearer ${serviceRoleKey}`) {
+        throw new Error('Unauthorized');
+      }
+      userId = body_user_id;
+    } else {
       throw new Error('Unauthorized');
     }
 
-    // Initialize admin client (bypasses RLS)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    console.log(`🔍 Verifying payment: ${transaction_reference} for user ${userId}`);
 
-    // Parse request body
-    const { transaction_reference, ercas_reference } = await req.json();
-
-    if (!transaction_reference) {
-      throw new Error('transaction_reference is required');
-    }
-
-    console.log(`🔍 Verifying payment: ${transaction_reference} for user ${user.id}`);
-
-    // Check if already processed (idempotency)
+    // STEP 1: Check if already processed (idempotency)
     const { data: existingTx } = await supabaseAdmin
       .from('transactions')
       .select('id, amount, balance_after')
-      .or(`reference.eq.${transaction_reference},ercas_reference.eq.${ercas_reference || transaction_reference}`)
-      .eq('user_id', user.id)
+      .eq('reference', transaction_reference)
+      .eq('user_id', userId)
       .eq('type', 'topup')
-      .single();
+      .maybeSingle();
 
     if (existingTx) {
       console.log(`⚠️ Transaction already processed: ${transaction_reference}`);
+      
+      // Also update pending_payment status if exists
+      await supabaseAdmin
+        .from('pending_payments')
+        .update({ status: 'credited', error_message: 'Already credited' })
+        .eq('transaction_reference', transaction_reference);
+      
       return new Response(
         JSON.stringify({
           success: true,
@@ -78,7 +94,7 @@ serve(async (req) => {
       );
     }
 
-    // Verify with Ercas Pay API
+    // STEP 2: Verify with Ercas Pay API
     const ercasSecretKey = Deno.env.get('ERCASPAY_SECRET_KEY');
     if (!ercasSecretKey) {
       throw new Error('Ercas Pay not configured');
@@ -95,11 +111,10 @@ serve(async (req) => {
       }
     );
 
-    // Parse response body regardless of status code (Ercas returns 400 for pending)
     const verifyResult = await verifyResponse.json();
     console.log('📥 Ercas verification result:', JSON.stringify(verifyResult));
 
-    // Handle pending payments gracefully
+    // Handle pending
     if (verifyResult.responseBody?.status === 'PENDING' || verifyResult.responseCode === 'pending') {
       console.log('⏳ Payment is still pending');
       return new Response(
@@ -112,7 +127,7 @@ serve(async (req) => {
       );
     }
 
-    // Handle failed verification
+    // Handle failed
     if (!verifyResult.requestSuccessful && verifyResult.responseBody?.status !== 'SUCCESSFUL') {
       const errorMsg = verifyResult.errorMessage || verifyResult.responseMessage || 'Payment verification failed';
       console.error('❌ Verification failed:', errorMsg);
@@ -142,57 +157,31 @@ serve(async (req) => {
     const amount = transaction.amount;
     const ercasRef = transaction.ercs_reference;
 
-    // Get current wallet balance
+    // STEP 3: INSERT transaction record FIRST as the atomic lock
+    // The unique constraint on reference prevents double-crediting:
+    // If two concurrent requests both pass the idempotency check above,
+    // only ONE insert will succeed — the other hits unique constraint and fails.
+    // This is the ONLY reliable way to prevent race conditions.
+    
+    // Read current balance for the record
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('wallet_balance')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single();
 
     if (profileError || !profile) {
       throw new Error('Failed to fetch wallet balance');
     }
 
-    const currentBalance = profile.wallet_balance || 0;
+    const currentBalance = parseFloat(profile.wallet_balance) || 0;
     const newBalance = currentBalance + amount;
 
-    // Update wallet balance with optimistic locking
-    const { data: updatedProfile, error: updateError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        wallet_balance: newBalance,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', user.id)
-      .eq('wallet_balance', currentBalance)
-      .select()
-      .single();
-
-    if (updateError || !updatedProfile) {
-      // Retry with fresh balance
-      const { data: freshProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('wallet_balance')
-        .eq('id', user.id)
-        .single();
-
-      if (freshProfile) {
-        const retryBalance = freshProfile.wallet_balance + amount;
-        await supabaseAdmin
-          .from('profiles')
-          .update({
-            wallet_balance: retryBalance,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.id);
-      }
-    }
-
-    // Record transaction
+    // Insert transaction first — if this fails due to unique constraint, another request already handled it
     const { error: txError } = await supabaseAdmin
       .from('transactions')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         type: 'topup',
         amount: amount,
         status: 'completed',
@@ -203,11 +192,104 @@ serve(async (req) => {
       });
 
     if (txError) {
+      // Check if it's a unique constraint violation — means another request already processed this
+      if (txError.code === '23505') {
+        console.log(`⚠️ Transaction insert conflict (already processed by concurrent request): ${transaction_reference}`);
+        
+        // Fetch the existing transaction to return correct data
+        const { data: existingTx2 } = await supabaseAdmin
+          .from('transactions')
+          .select('amount, balance_after')
+          .eq('reference', transaction_reference)
+          .eq('user_id', userId)
+          .eq('type', 'topup')
+          .maybeSingle();
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            already_processed: true,
+            amount: existingTx2?.amount || amount,
+            new_balance: existingTx2?.balance_after || newBalance,
+            message: 'Payment already credited to wallet',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       console.error('❌ Failed to record transaction:', txError);
-      // Don't fail - wallet was updated
+      throw new Error('Failed to record transaction');
     }
 
-    console.log(`✅ Wallet credited: +₦${amount} for user ${user.id}, new balance: ₦${newBalance}`);
+    // STEP 4: Transaction inserted successfully — now we're the ONLY request processing this.
+    // Update wallet balance safely.
+    const { data: updatedProfile, error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        wallet_balance: newBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+      .eq('wallet_balance', currentBalance)
+      .select('wallet_balance')
+      .single();
+
+    if (updateError || !updatedProfile) {
+      // Optimistic lock failed — balance changed between read and write.
+      // Re-read and apply the credit.
+      const { data: freshProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', userId)
+        .single();
+
+      if (freshProfile) {
+        const freshBalance = parseFloat(freshProfile.wallet_balance) || 0;
+        const retryBalance = freshBalance + amount;
+        
+        await supabaseAdmin
+          .from('profiles')
+          .update({
+            wallet_balance: retryBalance,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId);
+
+        // Update the transaction record with correct balance_after
+        await supabaseAdmin
+          .from('transactions')
+          .update({ balance_after: retryBalance })
+          .eq('reference', transaction_reference)
+          .eq('user_id', userId)
+          .eq('type', 'topup');
+
+        console.log(`✅ Wallet credited (retry): +₦${amount} for user ${userId}, new balance: ₦${retryBalance}`);
+
+        // Update pending_payment status
+        await supabaseAdmin
+          .from('pending_payments')
+          .update({ status: 'credited' })
+          .eq('transaction_reference', transaction_reference);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            amount: amount,
+            new_balance: retryBalance,
+            message: `₦${amount.toLocaleString()} has been added to your wallet`,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // Update pending_payment status
+    await supabaseAdmin
+      .from('pending_payments')
+      .update({ status: 'credited' })
+      .eq('transaction_reference', transaction_reference);
+
+    console.log(`✅ Wallet credited: +₦${amount} for user ${userId}, new balance: ₦${newBalance}`);
 
     return new Response(
       JSON.stringify({
