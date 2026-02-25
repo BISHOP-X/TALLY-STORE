@@ -1,5 +1,63 @@
 # TallyStore - AI Agent Instructions
 
+---
+
+## 🤖 Autonomous Workflow — Closed-Loop Development
+
+### Core Philosophy
+You are an autonomous coding agent. Your goal is to **fully resolve every task without handing back to the user mid-way**. Research → Plan → Implement → Verify → Fix → Verify again. Loop until done. The user should only need to describe what they want — everything else is your job.
+
+### MCP Servers — Use Them, Don't Guess
+You have full access to these MCP servers. **USE THEM before making assumptions.** Never guess at data shapes, schemas, column names, API responses, or UI state when you can look it up.
+
+| MCP Server | What It Does | When To Use |
+|---|---|---|
+| **Supabase** | Query tables, run SQL, apply migrations, deploy Edge Functions, read logs | ANY database/backend question. Check schemas before coding. Read Edge Function logs after deploy. Verify data after mutations. |
+| **Chrome DevTools** | Take screenshots, read console logs, inspect network requests, click elements, navigate pages | After ANY frontend change. Verify UI renders correctly. Catch console errors. Check network calls to Supabase. |
+| **Context7** | Fetch live documentation for React, TypeScript, Tailwind, Supabase, any npm package | When unsure about API usage, hooks behavior, CSS classes, or library features. Always check docs instead of guessing syntax. |
+| **Sequential Thinking** | Structured multi-step reasoning | Complex architectural decisions, multi-file refactors, debugging chains with multiple possible root causes. |
+
+### Self-Testing Loop — Iterate Until It Works
+After implementing any change, **verify it actually works**. Do NOT mark a task done based on "it should work" — prove it.
+
+1. **After code edits**: Run `get_errors` to check for TypeScript/lint errors. Fix them and check again. Loop until zero errors.
+2. **After frontend changes**: Use Chrome DevTools MCP to take a screenshot, check console for errors, inspect network requests. If ANY issue found → fix → re-verify.
+3. **After Edge Function changes**: Deploy, then check Supabase logs via MCP. Verify response shape matches what the frontend expects.
+4. **After database migrations**: Run a SELECT query via Supabase MCP to verify the table/column was created correctly.
+
+**The loop:** `Edit → Check Errors → Fix → (repeat until 0) → Verify in Chrome → Fix UI issues → Verify again → Done`
+
+### Never Delete, Never Destroy
+- **NEVER DROP a full database or table** without explicit user confirmation.
+- **NEVER truncate a production table** without a backup plan.
+- **Schema changes MUST go through `mcp_supabase_apply_migration`** — never use `execute_sql` for DDL.
+- **NEVER overwrite an entire file** when a targeted `replace_string_in_file` will do.
+
+### Error Resolution — Don't Stop, Don't Ask
+1. Read the full error message — don't skim
+2. Identify the root cause — don't patch symptoms
+3. Fix it and verify
+4. If still broken → back to step 1. Loop up to 5 iterations.
+5. If 3+ iterations fail on the same approach → the approach is wrong. Re-architect.
+6. Only ask the user if after 5 genuine attempts the issue requires information you truly cannot discover.
+
+### Code Quality Standards
+- **Root causes only** — never apply surface-level patches. Find WHY it broke.
+- **No temporary fixes** — if you write a workaround, it becomes permanent. Do it right.
+- **Keep functions small** — single responsibility. If a function does 3 things, split it.
+- **DRY** — shared utilities go in `lib/` or `utils/`.
+- **No dead code** — no commented-out code, unused imports, or FIXME debt.
+
+### Post-Change Checklist
+- [ ] Zero TypeScript errors (`get_errors`)
+- [ ] No console errors in Chrome (if frontend change)
+- [ ] Network requests succeed (if API change)
+- [ ] UI looks correct (Chrome screenshot if visual change)
+- [ ] No regressions in related functionality
+- [ ] Changes committed with a descriptive message
+
+---
+
 ## Project Overview
 Nigerian e-commerce platform for social media accounts with fintech features (crypto exchange, bills, SMM). React + TypeScript + Vite frontend, Supabase (PostgreSQL + Edge Functions) backend.
 
