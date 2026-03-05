@@ -1745,6 +1745,8 @@ export default function AdminPage() {
                       <ul className="list-disc list-inside space-y-1 text-muted-foreground">
                         <li><strong>email_password</strong> - Email account password</li>
                         <li><strong>two_fa</strong> or <strong>two_fa_code</strong> - Two-factor authentication code</li>
+                        <li><strong>recovery_email</strong> - Recovery email address</li>
+                        <li><strong>recovery_email_password</strong> - Recovery email password</li>
                         <li><strong>username</strong> - Account username (if email is primary identifier)</li>
                       </ul>
                       <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
@@ -1752,9 +1754,9 @@ export default function AdminPage() {
                           💡 Sample CSV format:
                         </p>
                         <code className="text-xs text-blue-700 dark:text-blue-300 block mt-1">
-                          username,password,email,email_password,two_fa<br/>
-                          john_doe,pass123,john@email.com,emailpass123,123456<br/>
-                          jane_smith,mypass,jane@email.com,,
+                          username,password,email,email_password,two_fa,recovery_email,recovery_email_password<br/>
+                          john_doe,pass123,john@email.com,emailpass123,123456,recovery@email.com,recpass123<br/>
+                          jane_smith,mypass,jane@email.com,,,,
                         </code>
                       </div>
                     </div>

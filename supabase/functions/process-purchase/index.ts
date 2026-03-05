@@ -190,6 +190,8 @@ serve(async (req) => {
           email: acc.email,
           email_password: acc.email_password,
           two_fa_code: acc.two_fa_code,
+          recovery_email: acc.recovery_email,
+          recovery_email_password: acc.recovery_email_password,
           additional_info: acc.additional_info,
         })),
         product_name: productGroup.name,
@@ -240,7 +242,7 @@ serve(async (req) => {
 
     await supabaseAdmin
       .from('product_groups')
-      .update({ stock: remainingStock || 0 })
+      .update({ stock_count: remainingStock || 0 })
       .eq('id', product_group_id);
 
     // 9. Record transaction

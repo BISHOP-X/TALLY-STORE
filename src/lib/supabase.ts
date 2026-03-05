@@ -448,6 +448,8 @@ export interface IndividualAccount {
   email?: string
   email_password?: string
   two_fa_code?: string
+  recovery_email?: string
+  recovery_email_password?: string
   additional_info?: any
   status: 'available' | 'sold' | 'reserved'
   created_at: string
@@ -768,6 +770,8 @@ export async function processBulkAccountUpload(
         email: row.email || undefined,
         email_password: row.email_password || undefined,
         two_fa_code: row.two_fa || row.two_fa_code || undefined,
+        recovery_email: row.recovery_email || undefined,
+        recovery_email_password: row.recovery_email_password || undefined,
         additional_info: null,
         status: 'available'
       }
