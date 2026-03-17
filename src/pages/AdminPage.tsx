@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,14 @@ import {
   Loader2,
   Search,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Mail,
+  Send,
+  XCircle,
+  RefreshCw,
+  CheckCircle2,
+  Clock,
+  X
 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
@@ -55,9 +62,10 @@ import {
   type Category, 
   type ProductGroup,
   type IndividualAccount,
-  type ProductTemplate
+  type ProductTemplate,
+  supabase
 } from '@/lib/supabase'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { useToast } from '@/hooks/use-toast'
 import { 
@@ -143,9 +151,160 @@ export default function AdminPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null)
 
+  // Email / Broadcast state
+  const [emailSubject, setEmailSubject] = useState('TallyStore Notification')
+  const [emailMessage, setEmailMessage] = useState('')
+  const [emailRecipients, setEmailRecipients] = useState<string[]>([])
+  const [emailRecipientInput, setEmailRecipientInput] = useState('')
+  const [isSendingEmail, setIsSendingEmail] = useState(false)
+  const [broadcastJobs, setBroadcastJobs] = useState<any[]>([])
+  const [isBroadcasting, setIsBroadcasting] = useState(false)
+  const [isDryRun, setIsDryRun] = useState(false)
+  const [dryRunResult, setDryRunResult] = useState<any>(null)
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false)
+  const broadcastPollRef = useRef<NodeJS.Timeout | null>(null)
+
+  // ==================== EMAIL / BROADCAST HANDLERS ====================
+
+  const loadBroadcastJobs = useCallback(async () => {
+    try {
+      setIsLoadingJobs(true)
+      const { data, error } = await supabase.functions.invoke('email/broadcast-status', { method: 'GET' })
+      if (error) throw error
+      if (data?.success) setBroadcastJobs(data.jobs || [])
+    } catch (err) {
+      console.error('Failed to load broadcast jobs:', err)
+    } finally {
+      setIsLoadingJobs(false)
+    }
+  }, [])
+
+  // Poll for active jobs
+  useEffect(() => {
+    const hasActive = broadcastJobs.some(j => j.status === 'queued' || j.status === 'processing')
+    if (hasActive && !broadcastPollRef.current) {
+      broadcastPollRef.current = setInterval(loadBroadcastJobs, 5000)
+    } else if (!hasActive && broadcastPollRef.current) {
+      clearInterval(broadcastPollRef.current)
+      broadcastPollRef.current = null
+    }
+    return () => { if (broadcastPollRef.current) clearInterval(broadcastPollRef.current) }
+  }, [broadcastJobs, loadBroadcastJobs])
+
+  const buildEmailHtml = (message: string) =>
+    `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
+      <div style="background:linear-gradient(135deg,#7c3aed,#3b82f6);padding:24px;border-radius:12px;color:white;text-align:center;margin-bottom:24px">
+        <h1 style="margin:0;font-size:24px">TallyStore</h1>
+      </div>
+      <div style="padding:16px;line-height:1.6;color:#333">
+        ${message.replace(/\n/g, '<br/>')}
+      </div>
+      <div style="text-align:center;margin-top:24px">
+        <a href="https://tallystore.org/dashboard" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Go to Dashboard</a>
+      </div>
+      <div style="text-align:center;margin-top:32px;color:#999;font-size:12px"><p>TallyStore — Your trusted digital marketplace</p></div>
+    </div>`
+
+  const addEmailRecipient = () => {
+    const email = emailRecipientInput.trim().toLowerCase()
+    if (!email) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({ title: 'Invalid email', description: 'Please enter a valid email address', variant: 'destructive' })
+      return
+    }
+    if (emailRecipients.includes(email)) {
+      toast({ title: 'Duplicate', description: 'This email is already in the list', variant: 'destructive' })
+      return
+    }
+    setEmailRecipients(prev => [...prev, email])
+    setEmailRecipientInput('')
+  }
+
+  const handleSendToList = async () => {
+    if (emailRecipients.length === 0 || !emailMessage.trim()) {
+      toast({ title: 'Missing info', description: 'Add recipients and a message', variant: 'destructive' })
+      return
+    }
+    setIsSendingEmail(true)
+    const html = buildEmailHtml(emailMessage)
+    let sentCount = 0
+    let failCount = 0
+    for (const to of emailRecipients) {
+      try {
+        const { data, error } = await supabase.functions.invoke('email/send', { body: { to, subject: emailSubject, html } })
+        if (error || !data?.success) failCount++
+        else sentCount++
+      } catch { failCount++ }
+    }
+    setIsSendingEmail(false)
+    toast({ title: 'Done', description: `Sent: ${sentCount}, Failed: ${failCount}` })
+    if (sentCount > 0) { setEmailRecipients([]); setEmailMessage('') }
+  }
+
+  const handleBroadcast = async () => {
+    if (!emailMessage.trim()) {
+      toast({ title: 'Missing message', description: 'Write a message before broadcasting', variant: 'destructive' })
+      return
+    }
+    const html = buildEmailHtml(emailMessage)
+
+    if (isDryRun) {
+      setIsBroadcasting(true)
+      try {
+        const { data, error } = await supabase.functions.invoke('email/broadcast', { body: { subject: emailSubject, html, dryRun: true } })
+        if (error) throw error
+        setDryRunResult(data)
+      } catch (err: any) {
+        toast({ title: 'Dry run failed', description: err.message, variant: 'destructive' })
+      } finally {
+        setIsBroadcasting(false)
+      }
+      return
+    }
+
+    if (!confirm(`This will email ALL registered users. The emails will be sent automatically in the background — you can close this page. Continue?`)) return
+    setIsBroadcasting(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('email/broadcast', { body: { subject: emailSubject, html } })
+      if (error) throw error
+      toast({ title: 'Broadcast queued!', description: data?.message || 'Processing will start within 1 minute.' })
+      setEmailMessage('')
+      setDryRunResult(null)
+      await loadBroadcastJobs()
+    } catch (err: any) {
+      toast({ title: 'Broadcast failed', description: err.message, variant: 'destructive' })
+    } finally {
+      setIsBroadcasting(false)
+    }
+  }
+
+  const handleCancelBroadcast = async (jobId: string) => {
+    if (!confirm('Cancel this broadcast? Emails already sent cannot be undone.')) return
+    try {
+      const { data, error } = await supabase.functions.invoke('email/cancel-broadcast', { body: { jobId } })
+      if (error) throw error
+      toast({ title: 'Cancelled', description: 'Broadcast job cancelled.' })
+      await loadBroadcastJobs()
+    } catch (err: any) {
+      toast({ title: 'Cancel failed', description: err.message, variant: 'destructive' })
+    }
+  }
+
+  const getJobStatusBadge = (status: string) => {
+    switch (status) {
+      case 'queued': return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200"><Clock className="h-3 w-3 mr-1" /> Queued</Badge>
+      case 'processing': return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200"><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Processing</Badge>
+      case 'completed': return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><CheckCircle2 className="h-3 w-3 mr-1" /> Completed</Badge>
+      case 'cancelled': return <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200"><XCircle className="h-3 w-3 mr-1" /> Cancelled</Badge>
+      case 'failed': return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Failed</Badge>
+      default: return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
   // Load real data
   useEffect(() => {
     loadAllData()
+    loadBroadcastJobs()
   }, [])
 
   const loadAllData = async () => {
@@ -1314,13 +1473,14 @@ export default function AdminPage() {
           {/* Main Content */}
           <Tabs defaultValue="templates" className="space-y-6">
             <div className="w-full overflow-x-auto pb-2">
-              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-6">
+              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-7">
                 <TabsTrigger value="templates" className="flex-shrink-0">Templates</TabsTrigger>
                 <TabsTrigger value="products" className="flex-shrink-0">Products</TabsTrigger>
                 <TabsTrigger value="add-product" className="flex-shrink-0">Add Product</TabsTrigger>
                 <TabsTrigger value="bulk-upload" className="flex-shrink-0">Bulk Upload</TabsTrigger>
                 <TabsTrigger value="categories" className="flex-shrink-0">Categories</TabsTrigger>
                 <TabsTrigger value="users" className="flex-shrink-0">Users</TabsTrigger>
+                <TabsTrigger value="email" className="flex-shrink-0">Email</TabsTrigger>
               </TabsList>
             </div>
 
@@ -1979,6 +2139,196 @@ export default function AdminPage() {
                       <p className="text-sm text-muted-foreground">Admins</p>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Email / Broadcast */}
+            <TabsContent value="email" className="space-y-6">
+              {/* Compose Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="h-5 w-5" />
+                    Compose Email
+                  </CardTitle>
+                  <p className="text-muted-foreground">Send targeted emails or broadcast to all users</p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Subject */}
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Subject</label>
+                    <Input value={emailSubject} onChange={e => setEmailSubject(e.target.value)} placeholder="Email subject line" />
+                  </div>
+
+                  {/* Message */}
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Message</label>
+                    <Textarea
+                      value={emailMessage}
+                      onChange={e => setEmailMessage(e.target.value)}
+                      placeholder="Write your email message here... (plain text — will be wrapped in TallyStore branded template)"
+                      rows={8}
+                    />
+                  </div>
+
+                  {/* Recipients for targeted send */}
+                  <div className="border rounded-lg p-4 space-y-3">
+                    <label className="text-sm font-medium block">Targeted Recipients (optional)</label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={emailRecipientInput}
+                        onChange={e => setEmailRecipientInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEmailRecipient() } }}
+                        placeholder="user@example.com"
+                        className="flex-1"
+                      />
+                      <Button variant="outline" size="sm" onClick={addEmailRecipient}><Plus className="h-4 w-4" /></Button>
+                    </div>
+                    {emailRecipients.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          {emailRecipients.map((email, idx) => (
+                            <Badge key={idx} variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                              {email}
+                              <button onClick={() => setEmailRecipients(prev => prev.filter((_, i) => i !== idx))}>
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">{emailRecipients.length} recipient(s)</span>
+                          <Button variant="ghost" size="sm" onClick={() => setEmailRecipients([])}>Clear all</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                    <Button
+                      onClick={handleSendToList}
+                      disabled={isSendingEmail || emailRecipients.length === 0 || !emailMessage.trim()}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      {isSendingEmail ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                      Send to List ({emailRecipients.length})
+                    </Button>
+
+                    <div className="flex items-center gap-2 flex-1">
+                      <Button
+                        onClick={handleBroadcast}
+                        disabled={isBroadcasting || !emailMessage.trim()}
+                        className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                      >
+                        {isBroadcasting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+                        {isDryRun ? 'Dry Run (Preview)' : 'Broadcast to All Users'}
+                      </Button>
+                      <label className="flex items-center gap-1.5 text-xs whitespace-nowrap cursor-pointer">
+                        <input type="checkbox" checked={isDryRun} onChange={e => { setIsDryRun(e.target.checked); setDryRunResult(null) }} className="rounded" />
+                        Test mode
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Dry run result */}
+                  {dryRunResult && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <p className="font-medium text-blue-800 dark:text-blue-200 mb-1">Dry Run Result</p>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">Total recipients: <strong>{dryRunResult.totalRecipients?.toLocaleString()}</strong></p>
+                      {dryRunResult.sampleRecipients?.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer">Sample recipients ({dryRunResult.sampleRecipients.length})</summary>
+                          <div className="mt-1 max-h-32 overflow-y-auto text-xs text-blue-600 dark:text-blue-400 space-y-0.5">
+                            {dryRunResult.sampleRecipients.map((e: string, i: number) => <div key={i}>{e}</div>)}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Broadcast Jobs */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2"><Send className="h-5 w-5" /> Broadcast Jobs</CardTitle>
+                      <p className="text-muted-foreground text-sm mt-1">Track progress of mass email broadcasts</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={loadBroadcastJobs} disabled={isLoadingJobs}>
+                      <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingJobs ? 'animate-spin' : ''}`} /> Refresh
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {broadcastJobs.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Mail className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                      <p>No broadcast jobs yet</p>
+                      <p className="text-sm">Use the compose card above to send your first broadcast</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {broadcastJobs.map(job => {
+                        const processed = job.sent_count + job.failed_count
+                        const total = job.total_recipients || 1
+                        const pct = Math.round((processed / total) * 100)
+                        const isActive = job.status === 'queued' || job.status === 'processing'
+
+                        return (
+                          <div key={job.id} className="border rounded-lg p-4 space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{job.subject}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Created {job.created_at ? formatDistanceToNow(new Date(job.created_at), { addSuffix: true }) : 'unknown'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {getJobStatusBadge(job.status)}
+                                {isActive && (
+                                  <Button variant="ghost" size="sm" onClick={() => handleCancelBroadcast(job.id)}>
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all duration-500 ${
+                                  job.status === 'completed' ? 'bg-green-500' :
+                                  job.status === 'cancelled' ? 'bg-gray-400' :
+                                  job.status === 'failed' ? 'bg-red-500' :
+                                  'bg-blue-500'
+                                }`}
+                                style={{ width: `${Math.min(pct, 100)}%` }}
+                              />
+                            </div>
+
+                            {/* Stats */}
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                              <span className="text-green-600 font-medium">{job.sent_count.toLocaleString()} sent</span>
+                              <span className="text-red-500">{job.failed_count.toLocaleString()} failed</span>
+                              <span>of {total.toLocaleString()} total</span>
+                              <span className="font-medium">{pct}%</span>
+                              {job.started_at && !job.completed_at && (
+                                <span>{formatDistanceToNow(new Date(job.started_at))} elapsed</span>
+                              )}
+                              {job.completed_at && (
+                                <span>Completed in {formatDistanceToNow(new Date(job.started_at!), { addSuffix: false })}</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
