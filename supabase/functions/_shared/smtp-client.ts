@@ -42,8 +42,8 @@ export async function sendEmail(options: {
       html: options.html,
     });
 
-    // Fire-and-forget close to avoid Deno Deploy 502
-    client.close().catch(() => {});
+    // Close connection, ignoring errors
+    try { await client.close() } catch { /* ignore */ }
 
     return { success: true };
   } catch (err) {
