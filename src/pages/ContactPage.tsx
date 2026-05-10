@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useState } from 'react'
 import { BackToHome } from '@/components/ui/back-button'
+import { SUPPORT_TELEGRAM_NUMBER, openSupportTelegram } from '@/lib/support'
 
 const ContactPage = () => {
   const [formData, setFormData] = useState({
@@ -177,11 +178,11 @@ const ContactPage = () => {
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">Telegram Support</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">@Tallystore1</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{SUPPORT_TELEGRAM_NUMBER}</p>
                     <Button 
                       variant="outline" 
                       className="mt-2"
-                      onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
+                      onClick={openSupportTelegram}
                     >
                       Message on Telegram
                     </Button>
@@ -316,7 +317,7 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you offer phone support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    We offer Telegram support at @Tallystore1. For email support, use tallystoreorg@gmail.com.
+                    We offer Telegram support at {SUPPORT_TELEGRAM_NUMBER}. For email support, use tallystoreorg@gmail.com.
                   </p>
                 </div>
               </div>
@@ -332,14 +333,14 @@ const ContactPage = () => {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Can I request a callback?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Traditional phone calls are not available. Please contact us via Telegram at @Tallystore1 or email at tallystoreorg@gmail.com.
+                    Traditional phone calls are not available. Please contact us via Telegram at {SUPPORT_TELEGRAM_NUMBER} or email at tallystoreorg@gmail.com.
                   </p>
                 </div>
                 
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Do you have Telegram support?</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Yes! Contact us on Telegram at @Tallystore1 for quick updates and assistance.
+                    Yes! Contact us on Telegram at {SUPPORT_TELEGRAM_NUMBER} for quick updates and assistance.
                   </p>
                 </div>
               </div>

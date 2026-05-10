@@ -10,6 +10,7 @@ import { MessageCircle, Phone, Mail, Clock, CheckCircle, HelpCircle, Send } from
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
+import { SUPPORT_TELEGRAM_NUMBER, openSupportTelegram } from '@/lib/support'
 
 export default function SupportPage() {
   const [formData, setFormData] = useState({
@@ -93,9 +94,9 @@ export default function SupportPage() {
               <Button 
                 className="w-full" 
                 variant="outline"
-                onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
+                onClick={openSupportTelegram}
               >
-                @Tallystore1
+                {SUPPORT_TELEGRAM_NUMBER}
               </Button>
               <div className="absolute top-2 right-2">
                 <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
@@ -128,9 +129,9 @@ export default function SupportPage() {
               <Button 
                 variant="outline" 
                 className="w-full" 
-                onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
+                onClick={openSupportTelegram}
               >
-                @Tallystore1
+                {SUPPORT_TELEGRAM_NUMBER}
               </Button>
               <div className="mt-2">
                 <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
@@ -289,7 +290,7 @@ export default function SupportPage() {
             <Alert>
               <AlertDescription className="text-center">
                 <strong>Urgent Account Issues?</strong> If you're experiencing critical problems with a purchased account, 
-                contact us immediately at <strong>tallystoreorg@gmail.com</strong> or message us on Telegram at <strong>@Tallystore1</strong>.
+                contact us immediately at <strong>tallystoreorg@gmail.com</strong> or message us on Telegram at <strong>{SUPPORT_TELEGRAM_NUMBER}</strong>.
               </AlertDescription>
             </Alert>
           </CardContent>

@@ -69,4 +69,4 @@ Added aggressive no-cache headers to force all users to see the maintenance page
 ---
 
 ## Support During Maintenance
-Users directed to: https://t.me/Tallystore1
+Users directed to: https://t.me/+2347072517332

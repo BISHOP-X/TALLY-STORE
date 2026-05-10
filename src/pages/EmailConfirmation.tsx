@@ -6,6 +6,7 @@ import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+import { openSupportTelegram } from '@/lib/support'
 
 export default function EmailConfirmation() {
   const [searchParams] = useSearchParams()
@@ -122,7 +123,7 @@ export default function EmailConfirmation() {
                     </p>
                     <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                       <p className="text-sm text-red-700 dark:text-red-300">
-                        Need help? Contact our support team via WhatsApp for assistance.
+                        Need help? Contact our support team on Telegram for assistance.
                       </p>
                     </div>
                   </>
@@ -141,7 +142,7 @@ export default function EmailConfirmation() {
                 <div className="text-center">
                   <Button
                     variant="outline"
-                    onClick={() => window.open('https://t.me/Tallystore1', '_blank')}
+                    onClick={openSupportTelegram}
                     className="w-full"
                   >
                     Contact Support via Telegram

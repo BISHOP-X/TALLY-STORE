@@ -25,6 +25,7 @@ import {
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
+import { SUPPORT_TELEGRAM_NUMBER, openSupportTelegram } from '@/lib/support'
 
 // Web service packages
 const webServices = [
@@ -497,12 +498,12 @@ export default function WebServicesPage() {
                 <MessageCircle className="h-8 w-8 text-blue-600" />
                 <div>
                   <p className="font-semibold text-blue-700 dark:text-blue-400 mb-1">Telegram (Fastest)</p>
-                  <p className="text-sm font-mono">@BISHOP_XXX</p>
+                  <p className="text-sm font-mono">{SUPPORT_TELEGRAM_NUMBER}</p>
                   <Button 
                     variant="default" 
                     size="sm"
                     className="mt-3 bg-blue-600 hover:bg-blue-700"
-                    onClick={() => window.open('https://t.me/BISHOP_XXX', '_blank')}
+                    onClick={openSupportTelegram}
                   >
                     Chat Now
                   </Button>
@@ -521,14 +522,14 @@ export default function WebServicesPage() {
               <div className="flex flex-col items-center text-center gap-3 p-4 bg-muted rounded-lg">
                 <MessageCircle className="h-8 w-8 text-blue-500" />
                 <div>
-                  <p className="font-semibold mb-1">Join Telegram</p>
-                  <p className="text-xs text-muted-foreground mb-3">Get tips & updates</p>
+                  <p className="font-semibold mb-1">Telegram Support</p>
+                  <p className="text-xs text-muted-foreground mb-3">Reach support quickly</p>
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => window.open('https://t.me/BISHOP_XXX', '_blank')}
+                    onClick={openSupportTelegram}
                   >
-                    Join Channel
+                    Contact Support
                   </Button>
                 </div>
               </div>
