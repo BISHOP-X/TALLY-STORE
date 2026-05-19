@@ -37,7 +37,11 @@ type SmsApiResponse<T> = {
   data?: T
   error?: string
   configured?: boolean
+  valid?: boolean
   balance?: SmsProviderBalance | null
+  provider_status?: string
+  provider_code?: number
+  provider_message?: string
   waiting?: boolean
   idempotency_hit?: boolean
   new_balance?: number
@@ -388,6 +392,7 @@ function SmsAdminTestingSurface() {
   const [busyAction, setBusyAction] = useState<string | null>(null)
 
   const configured = health?.configured === true
+  const providerReady = configured && health?.valid !== false
   const selectedService = services.find((service) => service.service_id === selectedServiceId)
   const selectedArea = areas.find((area) => area.area_code === selectedAreaCode)
   const activeOrders = useMemo(
@@ -406,7 +411,7 @@ function SmsAdminTestingSurface() {
       setHealth(healthResult)
       setOrders(orderResult.data || [])
 
-      if (healthResult.configured) {
+      if (healthResult.configured && healthResult.valid !== false) {
         const [serviceResult, areaResult] = await Promise.all([
           invokeSms<SmsService[]>('services', { country_code: 'us' }),
           invokeSms<SmsRentalArea[]>('rental_areas'),
@@ -542,7 +547,9 @@ function SmsAdminTestingSurface() {
             <div className="rounded-3xl border border-white/10 bg-white/8 p-5">
               <KeyRound className="h-6 w-6 text-cyan-200" />
               <p className="mt-4 text-sm font-semibold text-slate-300">API secret</p>
-              <p className="mt-1 text-xl font-black">{configured ? 'Configured' : 'Missing'}</p>
+              <p className="mt-1 text-xl font-black">
+                {!configured ? 'Missing' : health?.valid === false ? 'Invalid' : 'Configured'}
+              </p>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/8 p-5">
               <Wallet className="h-6 w-6 text-cyan-200" />
@@ -565,17 +572,21 @@ function SmsAdminTestingSurface() {
         </CardContent>
       </Card>
 
-      {!configured && (
+      {(!configured || health?.valid === false) && (
         <Card className="rounded-[1.75rem] border border-amber-200 bg-amber-50 shadow-card dark:border-amber-500/20 dark:bg-amber-500/10">
           <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-black tracking-tight">SMSBus API key is not configured</h2>
+              <h2 className="text-lg font-black tracking-tight">
+                {!configured ? 'SMSBus API key is not configured' : 'SMSBus API key was rejected'}
+              </h2>
               <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-muted-foreground">
-                Add the `SMSBUS_API_KEY` Supabase secret to enable live provider calls.
+                {!configured
+                  ? 'Add the `SMSBUS_API_KEY` Supabase secret to enable live provider calls.'
+                  : `SMSBus returned ${health.provider_message || health.provider_status || 'an authentication error'}. Paste the full API token and redeploy before buying numbers.`}
               </p>
             </div>
             <Badge className="w-fit rounded-full bg-amber-200 px-4 py-2 text-amber-900 hover:bg-amber-200">
-              Backend ready
+              {!configured ? 'Backend ready' : 'Needs valid token'}
             </Badge>
           </CardContent>
         </Card>
@@ -623,7 +634,7 @@ function SmsAdminTestingSurface() {
                   value={selectedServiceId}
                   onChange={(event) => setSelectedServiceId(event.target.value)}
                   className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-violet-400 dark:border-white/10 dark:bg-background"
-                  disabled={!configured || services.length === 0}
+                  disabled={!providerReady || services.length === 0}
                 >
                   {services.length === 0 ? (
                     <option value="">No services loaded</option>
@@ -649,7 +660,7 @@ function SmsAdminTestingSurface() {
             <Button
               type="button"
               className="mt-6 h-12 rounded-2xl px-6"
-              disabled={!configured || !selectedService || busyAction === 'buy-otp'}
+              disabled={!providerReady || !selectedService || busyAction === 'buy-otp'}
               onClick={buyOtp}
             >
               {busyAction === 'buy-otp' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneCall className="h-4 w-4" />}
@@ -683,7 +694,7 @@ function SmsAdminTestingSurface() {
                   value={selectedAreaCode}
                   onChange={(event) => setSelectedAreaCode(event.target.value)}
                   className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-violet-400 dark:border-white/10 dark:bg-background"
-                  disabled={!configured || areas.length === 0}
+                  disabled={!providerReady || areas.length === 0}
                 >
                   {areas.length === 0 ? (
                     <option value="US">No areas loaded</option>
@@ -725,7 +736,7 @@ function SmsAdminTestingSurface() {
             <Button
               type="button"
               className="mt-6 h-12 rounded-2xl px-6"
-              disabled={!configured || !selectedArea || busyAction === 'rent-number'}
+              disabled={!providerReady || !selectedArea || busyAction === 'rent-number'}
               onClick={rentNumber}
             >
               {busyAction === 'rent-number' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneCall className="h-4 w-4" />}

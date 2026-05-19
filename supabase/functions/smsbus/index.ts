@@ -393,12 +393,28 @@ async function handleRentalAreas() {
 async function handleHealth() {
   const token = getSmsBusToken()
   if (!token) {
-    return json({ success: true, configured: false, balance: null })
+    return json({ success: true, configured: false, valid: false, balance: null })
   }
 
-  const client = createSmsBusClient(token)
-  const balance = await client.getBalance()
-  return json({ success: true, configured: true, balance })
+  try {
+    const client = createSmsBusClient(token)
+    const balance = await client.getBalance()
+    return json({ success: true, configured: true, valid: true, balance })
+  } catch (error) {
+    if (error instanceof SmsBusApiError) {
+      return json({
+        success: true,
+        configured: true,
+        valid: false,
+        balance: null,
+        provider_status: error.status,
+        provider_code: error.code,
+        provider_message: error.providerMessage,
+      })
+    }
+
+    throw error
+  }
 }
 
 async function handleOrders(admin: SupabaseAdmin, userId: string) {
