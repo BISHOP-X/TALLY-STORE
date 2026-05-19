@@ -69,13 +69,13 @@ export default function AnnouncementBanner() {
   const repeatedAnnouncements = [...ANNOUNCEMENTS, ...ANNOUNCEMENTS, ...ANNOUNCEMENTS];
 
   return (
-    <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-primary via-purple-600 to-primary text-white h-8 z-[60] overflow-hidden">
+    <div className="fixed left-0 right-0 top-0 z-[60] h-8 max-w-[100vw] overflow-hidden bg-gradient-to-r from-primary via-purple-600 to-primary text-white">
       {/* Scrolling Marquee Container */}
-      <div className="flex items-center h-full">
+      <div className="flex h-full max-w-full items-center overflow-hidden pr-10">
         {/* Animated scrolling content */}
-        <div className="flex animate-marquee whitespace-nowrap">
+        <div className="flex min-w-max animate-marquee whitespace-nowrap">
           {repeatedAnnouncements.map((announcement, index) => (
-            <div key={`${announcement.id}-${index}`} className="flex items-center mx-8">
+            <div key={`${announcement.id}-${index}`} className="mx-4 flex items-center sm:mx-8">
               <span className="mr-2">{announcement.emoji}</span>
               <span className="font-medium text-sm">{announcement.message}</span>
               {announcement.link && announcement.linkText && (

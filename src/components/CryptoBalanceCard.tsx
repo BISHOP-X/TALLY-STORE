@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bitcoin, TrendingUp, ArrowRightLeft, Loader2, AlertCircle, History as HistoryIcon } from "lucide-react";
@@ -32,32 +32,7 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Fetch user balances
-  useEffect(() => {
-    fetchBalances();
-
-    // Subscribe to balance changes
-    const channel = supabase
-      .channel('crypto_balance_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-        },
-        () => {
-          fetchBalances();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const fetchBalances = async () => {
+  const fetchBalances = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -86,7 +61,32 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  // Fetch user balances
+  useEffect(() => {
+    fetchBalances();
+
+    // Subscribe to balance changes
+    const channel = supabase
+      .channel('crypto_balance_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        () => {
+          fetchBalances();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchBalances]);
 
   const handleTransferClick = () => {
     if (balance === 0) {
@@ -160,11 +160,11 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
       // Close modal and reset
       setShowTransferModal(false);
       setTransferAmount("");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Transfer error:', error);
       toast({
         title: "Transfer Failed",
-        description: error.message || "Failed to transfer funds. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to transfer funds. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -182,22 +182,22 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
 
   return (
     <>
-      <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-none shadow-lg hover:shadow-xl transition-shadow">
+      <Card className="overflow-hidden bg-gradient-to-br from-orange-500 to-orange-600 text-white border-none shadow-lg hover:shadow-xl transition-shadow">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center justify-between text-xl">
-            <div className="flex items-center gap-2">
-              <Bitcoin className="w-6 h-6" />
+          <CardTitle className="flex min-w-0 items-center justify-between gap-3 text-lg sm:text-xl">
+            <div className="flex min-w-0 items-center gap-2">
+              <Bitcoin className="h-6 w-6 shrink-0" />
               <span>Crypto Balance</span>
             </div>
             {loading && (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
             )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Balance Display */}
           <div>
-            <div className="text-4xl font-bold tracking-tight mb-1">
+            <div className="mb-1 break-words text-3xl font-bold tracking-tight sm:text-4xl">
               {loading ? (
                 <span className="text-3xl">Loading...</span>
               ) : (
@@ -222,12 +222,12 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-2 pt-2">
+          <div className="grid gap-2 pt-2 sm:grid-cols-2">
             {balance === 0 ? (
               // When no balance - show Sell Crypto button
               <Button 
                 onClick={() => navigate('/crypto-exchange')}
-                className="w-full bg-white hover:bg-gray-100 text-orange-600 font-semibold shadow-sm"
+                className="w-full bg-white hover:bg-gray-100 text-orange-600 font-semibold shadow-sm sm:col-span-2"
                 disabled={loading}
               >
                 <TrendingUp className="w-4 h-4 mr-2" />
@@ -239,7 +239,7 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
                 <Button 
                   onClick={handleTransferClick}
                   variant="secondary"
-                  className="flex-1 bg-white hover:bg-gray-100 text-orange-600 font-semibold shadow-sm"
+                  className="w-full bg-white hover:bg-gray-100 text-orange-600 font-semibold shadow-sm"
                   disabled={loading}
                 >
                   <ArrowRightLeft className="w-4 h-4 mr-2" />
@@ -247,7 +247,7 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
                 </Button>
                 <Button 
                   onClick={() => navigate('/crypto-withdrawal')}
-                  className="flex-1 bg-white/10 hover:bg-white border-2 border-white/50 hover:border-white text-white hover:text-orange-600 font-semibold backdrop-blur-sm transition-all"
+                  className="w-full border-2 border-white/50 bg-white/10 font-semibold text-white backdrop-blur-sm transition-all hover:border-white hover:bg-white hover:text-orange-600"
                   disabled={loading}
                 >
                   <TrendingUp className="w-4 h-4 mr-2" />
@@ -261,9 +261,9 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
           <div className="flex justify-center pt-2">
             <button
               onClick={() => navigate('/crypto-history')}
-              className="text-xs text-orange-100 hover:text-white underline underline-offset-2 flex items-center gap-1"
+              className="flex max-w-full items-center justify-center gap-1 text-center text-xs leading-5 text-orange-100 underline underline-offset-2 hover:text-white"
             >
-              <HistoryIcon className="w-3 h-3" />
+              <HistoryIcon className="h-3 w-3 shrink-0" />
               View Transaction History
             </button>
           </div>
@@ -271,7 +271,7 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
           {/* Info Footer */}
           {balance > 0 && (
             <div className="pt-2 border-t border-orange-400/30">
-              <p className="text-xs text-orange-100">
+              <p className="break-words text-xs leading-5 text-orange-100">
                 💡 Transfer to TallyStore to buy products, or withdraw to your bank account
               </p>
             </div>
@@ -294,7 +294,7 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
 
           <div className="space-y-4 py-4">
             {/* Current Balances */}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+            <div className="grid grid-cols-1 gap-4 rounded-lg bg-muted p-4 sm:grid-cols-2">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Crypto Balance</p>
                 <p className="text-lg font-bold text-orange-600">

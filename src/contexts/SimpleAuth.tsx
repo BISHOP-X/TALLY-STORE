@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
@@ -23,63 +23,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
   const [walletLoading, setWalletLoading] = useState(true)
+  const lastProfileLoadKey = useRef<string | null>(null)
 
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        checkAdminStatus(session.user.id, session.user.email)
-      }
-      setLoading(false)
-    })
+  const checkAdminStatus = useCallback(async (userId: string, userEmail?: string) => {
+    setWalletLoading(true)
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          checkAdminStatus(session.user.id, session.user.email)
-        } else {
-          setIsAdmin(false)
-        }
-        setLoading(false)
-      }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const checkAdminStatus = async (userId: string, userEmail?: string) => {
     try {
-      // Hardcoded admin check - use passed email or current user email
-      const emailToCheck = userEmail || user?.email
-      if (emailToCheck === 'wisdomthedev@gmail.com') {
-        setIsAdmin(true)
-        return
-      }
-
       const { data, error } = await supabase
         .from('profiles')
         .select('is_admin, wallet_balance')
         .eq('id', userId)
         .single()
 
-      if (!error && data) {
-        setIsAdmin(data.is_admin || false)
-        setWalletBalance(data.wallet_balance || 0)
+      const isHardcodedAdmin = userEmail === 'wisdomthedev@gmail.com'
+
+      if (error) {
+        setIsAdmin(isHardcodedAdmin)
+        setWalletBalance(0)
+        return
       }
-      setWalletLoading(false)
+
+      setIsAdmin(isHardcodedAdmin || data?.is_admin || false)
+      setWalletBalance(data?.wallet_balance || 0)
     } catch (error) {
       console.error('Error checking admin status:', error)
-      setIsAdmin(false)
+      setIsAdmin(userEmail === 'wisdomthedev@gmail.com')
       setWalletBalance(0)
+    } finally {
       setWalletLoading(false)
     }
-  }
+  }, [])
 
-  const refreshWalletBalance = async () => {
-    if (!user) return
+  useEffect(() => {
+    const syncSession = (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) => {
+      const sessionUser = session?.user ?? null
+      setUser(sessionUser)
+
+      if (sessionUser) {
+        const profileLoadKey = `${sessionUser.id}:${sessionUser.email ?? ''}`
+        if (lastProfileLoadKey.current !== profileLoadKey) {
+          lastProfileLoadKey.current = profileLoadKey
+          checkAdminStatus(sessionUser.id, sessionUser.email)
+        }
+      } else {
+        lastProfileLoadKey.current = null
+        setIsAdmin(false)
+        setWalletBalance(0)
+        setWalletLoading(false)
+      }
+
+      setLoading(false)
+    }
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      syncSession(session)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        syncSession(session)
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [checkAdminStatus])
+
+  const refreshWalletBalance = useCallback(async () => {
+    if (!user) {
+      setWalletBalance(0)
+      setWalletLoading(false)
+      return
+    }
+
+    setWalletLoading(true)
     
     try {
       const { data, error } = await supabase
@@ -93,8 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error refreshing wallet balance:', error)
+    } finally {
+      setWalletLoading(false)
     }
-  }
+  }, [user])
 
   const signUp = async (email: string, password: string) => {
     try {
