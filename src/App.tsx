@@ -74,6 +74,7 @@ import CryptoHistory from '@/pages/CryptoHistory'
 import BillsPayment from "./pages/BillsPayment";
 import SocialBoostPage from "./pages/SocialBoostPage";
 import GetIP from "./pages/GetIP";
+import SmsNumbersPage from "./pages/SmsNumbersPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -236,6 +237,14 @@ const App = () => {
                 element={
                   <ProtectedRoute requireRole="user">
                     <SocialBoostPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sms-numbers"
+                element={
+                  <ProtectedRoute requireRole="user">
+                    <SmsNumbersPage />
                   </ProtectedRoute>
                 }
               />

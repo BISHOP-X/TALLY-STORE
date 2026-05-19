@@ -417,9 +417,11 @@ export default function Dashboard() {
                   <p className="mt-2 max-w-sm text-sm leading-6 text-slate-300">
                     Buy US numbers for SMS verification directly from your TallyStore wallet.
                   </p>
-                  <Button disabled className="mt-6 h-11 rounded-2xl bg-white/12 px-5 text-white opacity-100">
-                    <MessageSquareText className="h-4 w-4" />
-                    Launching soon
+                  <Button asChild className="mt-6 h-11 rounded-2xl bg-white px-5 text-slate-950 hover:bg-cyan-50">
+                    <Link to="/sms-numbers">
+                      <MessageSquareText className="h-4 w-4" />
+                      View US SMS
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -580,7 +582,10 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-dashed border-cyan-300 bg-cyan-50/70 p-4 dark:border-cyan-500/30 dark:bg-cyan-500/10">
+                  <Link
+                    to="/sms-numbers"
+                    className="block rounded-3xl border border-dashed border-cyan-300 bg-cyan-50/70 p-4 transition hover:-translate-y-0.5 hover:bg-cyan-50 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:hover:bg-cyan-500/15"
+                  >
                     <div className="flex items-start gap-3">
                       <div className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-white text-cyan-700 dark:bg-background">
                         <PhoneCall className="h-4 w-4" />
@@ -588,11 +593,11 @@ export default function Dashboard() {
                       <div className="min-w-0">
                         <p className="font-bold">SMS US Numbers</p>
                         <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-muted-foreground">
-                          Main dashboard purchase flow is reserved here.
+                          Coming very soon for US verification numbers.
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 </CardContent>
               </Card>
             </aside>
@@ -626,14 +631,13 @@ export default function Dashboard() {
             <ReceiptText className="h-5 w-5" />
             Bills
           </Link>
-          <button
-            type="button"
-            disabled
-            className="flex flex-col items-center gap-1 rounded-2xl p-2 text-slate-400"
+          <Link
+            to="/sms-numbers"
+            className="flex flex-col items-center gap-1 rounded-2xl p-2 text-slate-500"
           >
             <PhoneCall className="h-5 w-5" />
             SMS
-          </button>
+          </Link>
         </div>
       </nav>
     </div>
