@@ -4,7 +4,7 @@ import path from "path";
 import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
   server: {
     host: "::",
     port: 8080,
@@ -86,16 +86,7 @@ export default defineConfig(({ mode }) => ({
       devOptions: {
         enabled: true
       }
-    }),
-    // Only include component tagger in development mode if available
-    ...(mode === 'development' ? (() => {
-      try {
-        const { componentTagger } = require("lovable-tagger");
-        return [componentTagger()];
-      } catch {
-        return [];
-      }
-    })() : [])
+    })
   ],
   resolve: {
     alias: {

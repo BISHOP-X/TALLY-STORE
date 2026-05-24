@@ -3,21 +3,17 @@ import ReactCountryFlag from 'react-country-flag'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
-  Bell,
   CalendarDays,
   ChevronRight,
-  Clock3,
   Copy,
   Inbox,
   Loader2,
-  LockKeyhole,
   MessageSquareText,
   Minus,
   PhoneCall,
   Plus,
   RefreshCw,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Wallet,
@@ -29,11 +25,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { useAuth } from '@/contexts/SimpleAuth'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
-const SMS_TEST_ADMIN_EMAIL = 'wisdomthedev@gmail.com'
 const NAIRA = '\u20a6'
 const SERVICE_BATCH_SIZE = 12
 
@@ -44,9 +38,6 @@ type SmsApiResponse<T> = {
   configured?: boolean
   valid?: boolean
   balance?: SmsProviderBalance | null
-  provider_status?: string
-  provider_code?: number
-  provider_message?: string
   waiting?: boolean
   idempotency_hit?: boolean
   new_balance?: number
@@ -254,105 +245,6 @@ async function invokeSms<T>(action: string, payload: Record<string, unknown> = {
   }
 
   return data
-}
-
-function SmsComingSoonBlocker() {
-  return (
-    <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <Card className="overflow-hidden rounded-[2rem] border-0 bg-slate-950 text-white shadow-[0_28px_80px_rgba(15,23,42,0.28)]">
-        <CardContent className="relative p-6 sm:p-8 lg:p-10">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(103,232,249,0.2),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(167,139,250,0.24),transparent_30%)]" />
-          <div className="relative z-10">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="grid h-14 w-14 place-items-center rounded-3xl bg-white/10">
-                <ReactCountryFlag countryCode="US" svg className="text-3xl" aria-label="United States" />
-              </span>
-              <Badge className="rounded-full bg-cyan-300/15 px-4 py-2 text-cyan-100 hover:bg-cyan-300/15">
-                Coming very soon
-              </Badge>
-            </div>
-
-            <h1 className="mt-10 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
-              US SMS numbers are coming soon.
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-              Buy verification numbers, receive codes, and manage reusable rentals directly from your
-              TallyStore wallet when the feature opens.
-            </p>
-
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              {[
-                { icon: Search, label: 'Search services' },
-                { icon: MessageSquareText, label: 'Receive codes' },
-                { icon: Wallet, label: 'Wallet checkout' },
-              ].map((item) => {
-                const Icon = item.icon
-                return (
-                  <div key={item.label} className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                    <Icon className="h-5 w-5 text-cyan-200" />
-                    <p className="mt-3 text-sm font-bold">{item.label}</p>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild className="h-12 rounded-2xl bg-white px-5 text-slate-950 hover:bg-cyan-50">
-                <Link to="/dashboard">
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to dashboard
-                </Link>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="h-12 rounded-2xl border-white/20 bg-white/10 px-5 text-white hover:bg-white/15 hover:text-white"
-              >
-                <Link to="/wallet">
-                  <Wallet className="h-4 w-4" />
-                  Top up wallet
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4">
-        <Card className="rounded-[1.75rem] border-0 bg-white shadow-card dark:bg-card">
-          <CardContent className="p-6">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200">
-              <LockKeyhole className="h-6 w-6" />
-            </div>
-            <h2 className="mt-5 text-xl font-black tracking-tight">Early access is limited</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-muted-foreground">
-              Your dashboard will show the full buy flow as soon as public access is available.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-[1.75rem] border-0 bg-white shadow-card dark:bg-card">
-          <CardContent className="space-y-4 p-6">
-            {[
-              { icon: Clock3, text: 'Live number availability' },
-              { icon: Bell, text: 'SMS arrival updates' },
-              { icon: ShieldCheck, text: 'Wallet-safe cancellation' },
-            ].map((item) => {
-              const Icon = item.icon
-              return (
-                <div key={item.text} className="flex items-center gap-3 text-sm font-semibold">
-                  <span className="grid h-9 w-9 place-items-center rounded-2xl bg-slate-100 text-slate-700 dark:bg-muted dark:text-muted-foreground">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  {item.text}
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
@@ -1162,9 +1054,6 @@ function SmsNumbersSurface() {
 }
 
 export default function SmsNumbersPage() {
-  const { user } = useAuth()
-  const canAccessSmsNumbers = user?.email?.toLowerCase() === SMS_TEST_ADMIN_EMAIL
-
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden bg-[#f6f7fb] text-slate-950 dark:bg-background dark:text-foreground">
       <NavbarAuth />
@@ -1175,7 +1064,7 @@ export default function SmsNumbersPage() {
           SMS Numbers
         </div>
 
-        {canAccessSmsNumbers ? <SmsNumbersSurface /> : <SmsComingSoonBlocker />}
+        <SmsNumbersSurface />
       </main>
     </div>
   )

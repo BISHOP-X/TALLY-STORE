@@ -8,7 +8,6 @@ import { CreditCard, Loader2, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { initiatePayment, type PaymentData } from '@/services/ercaspay';
 import { useToast } from '@/hooks/use-toast';
-import { createPendingPayment } from '@/lib/supabase';
 
 interface TopUpWalletProps {
   onSuccess?: () => void;
@@ -161,13 +160,6 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
           amount: topUpAmount,
           timestamp: Date.now()
         }));
-
-        // Create pending payment record in database for automatic recovery
-        await createPendingPayment({
-          userId: user.id,
-          transactionReference: response.data.transactionReference,
-          amount: topUpAmount
-        });
 
         // Check if payment window is still open and not blocked
         if (paymentWindow && !paymentWindow.closed) {

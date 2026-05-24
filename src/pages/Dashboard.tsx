@@ -407,20 +407,20 @@ export default function Dashboard() {
             <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-1">
               <Card className="overflow-hidden rounded-[1.75rem] border-0 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
                 <CardContent className="relative p-6">
-                  <div className="absolute right-5 top-5 rounded-full bg-cyan-300/15 px-3 py-1 text-xs font-semibold text-cyan-100">
-                    Coming soon
+                  <div className="absolute right-5 top-5 rounded-full bg-emerald-300/15 px-3 py-1 text-xs font-semibold text-emerald-100">
+                    Live now
                   </div>
                   <div className="grid h-14 w-14 place-items-center rounded-3xl bg-cyan-300/15 text-cyan-200">
                     <PhoneCall className="h-6 w-6" />
                   </div>
-                  <h2 className="mt-7 text-2xl font-black tracking-tight">US Number SMS</h2>
+                  <h2 className="mt-7 text-2xl font-black tracking-tight">SMS Numbers</h2>
                   <p className="mt-2 max-w-sm text-sm leading-6 text-slate-300">
                     Buy US numbers for SMS verification directly from your TallyStore wallet.
                   </p>
                   <Button asChild className="mt-6 h-11 rounded-2xl bg-white px-5 text-slate-950 hover:bg-cyan-50">
                     <Link to="/sms-numbers">
                       <MessageSquareText className="h-4 w-4" />
-                      View US SMS
+                      Buy SMS Numbers
                     </Link>
                   </Button>
                 </CardContent>
@@ -577,8 +577,8 @@ export default function Dashboard() {
                       <Bitcoin className="h-5 w-5" />
                     </div>
                     <div>
-                      <h2 className="font-black">New Features</h2>
-                      <p className="text-xs text-slate-500 dark:text-muted-foreground">Rolling out next.</p>
+                      <h2 className="font-black">SMS Numbers</h2>
+                      <p className="text-xs text-slate-500 dark:text-muted-foreground">Ready from your wallet.</p>
                     </div>
                   </div>
 
@@ -591,9 +591,9 @@ export default function Dashboard() {
                         <PhoneCall className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
-                        <p className="font-bold">SMS US Numbers</p>
+                        <p className="font-bold">US SMS Numbers</p>
                         <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-muted-foreground">
-                          Coming very soon for US verification numbers.
+                          Buy verification numbers directly from your balance.
                         </p>
                       </div>
                     </div>

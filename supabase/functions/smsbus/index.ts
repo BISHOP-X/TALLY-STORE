@@ -14,8 +14,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const SMS_TEST_ADMIN_EMAIL = 'wisdomthedev@gmail.com'
 const TERMINAL_STATUSES = ['completed', 'cancelled', 'expired', 'failed']
+
+const RATE_LIMITS: Record<string, { limit: number; windowSeconds: number }> = {
+  health: { limit: 30, windowSeconds: 60 },
+  countries: { limit: 30, windowSeconds: 60 },
+  services: { limit: 30, windowSeconds: 60 },
+  rental_areas: { limit: 30, windowSeconds: 60 },
+  orders: { limit: 60, windowSeconds: 60 },
+  create_otp: { limit: 5, windowSeconds: 60 },
+  rent_number: { limit: 5, windowSeconds: 60 },
+  renew_rental: { limit: 5, windowSeconds: 60 },
+  check_otp: { limit: 30, windowSeconds: 60 },
+  cancel_otp: { limit: 20, windowSeconds: 60 },
+  rental_sms: { limit: 30, windowSeconds: 60 },
+  cancel_rental: { limit: 20, windowSeconds: 60 },
+}
+
+const memoryRateLimits = new Map<string, { count: number; resetAt: number }>()
 
 type SupabaseAdmin = ReturnType<typeof createClient>
 
@@ -90,17 +106,15 @@ function friendlyError(error: unknown) {
       too_many_waiting_requests: 'Too many SMS requests are pending. Please try again later.',
       insufficient_provider_balance: 'SMS number purchases are temporarily unavailable.',
       provider_account_not_activated: 'SMS number purchases are temporarily unavailable.',
-      provider_service_blocked: 'This SMS service is temporarily blocked by the provider.',
-      minimum_rent_not_met: 'The selected rental period is below the provider minimum.',
+      provider_service_blocked: 'This SMS service is temporarily unavailable.',
+      minimum_rent_not_met: 'The selected rental period is below the minimum.',
       sms_received_cannot_cancel: 'This rental cannot be cancelled because an SMS has already been received.',
       cancel_limit_reached: 'This number can no longer be cancelled.',
     }
 
     return {
       status: error.status,
-      message: publicMessages[error.status] || 'SMS provider request failed.',
-      provider_code: error.code,
-      provider_message: error.providerMessage,
+      message: publicMessages[error.status] || 'SMS request failed.',
     }
   }
 
@@ -108,7 +122,106 @@ function friendlyError(error: unknown) {
   return { status: 'app_error', message }
 }
 
-async function requireSmsTester(req: Request) {
+function rateLimitError() {
+  const error = new Error('Too many SMS requests. Please wait a moment and try again.')
+  error.name = 'RateLimited'
+  return error
+}
+
+function enforceMemoryRateLimit(userId: string, action: string, config: { limit: number; windowSeconds: number }) {
+  const now = Date.now()
+  const windowMs = config.windowSeconds * 1000
+  const resetAt = Math.floor(now / windowMs) * windowMs + windowMs
+  const key = `${userId}:${action}:${resetAt}`
+  const current = memoryRateLimits.get(key)
+
+  for (const [itemKey, item] of memoryRateLimits.entries()) {
+    if (item.resetAt <= now) memoryRateLimits.delete(itemKey)
+  }
+
+  if (!current) {
+    memoryRateLimits.set(key, { count: 1, resetAt })
+    return
+  }
+
+  if (current.count >= config.limit) {
+    throw rateLimitError()
+  }
+
+  current.count += 1
+}
+
+function isMissingRateLimitTable(error: { code?: string; message?: string } | null | undefined) {
+  return error?.code === '42P01' || /sms_rate_limits|does not exist|schema cache/i.test(error?.message || '')
+}
+
+async function enforceRateLimit(admin: SupabaseAdmin, userId: string, action: string) {
+  const config = RATE_LIMITS[action]
+  if (!config) return
+
+  const windowMs = config.windowSeconds * 1000
+  const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs).toISOString()
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data: row, error: selectError } = await admin
+      .from('sms_rate_limits')
+      .select('id,count')
+      .eq('user_id', userId)
+      .eq('action', action)
+      .eq('window_start', windowStart)
+      .maybeSingle()
+
+    if (selectError) {
+      if (isMissingRateLimitTable(selectError)) {
+        enforceMemoryRateLimit(userId, action, config)
+        return
+      }
+      throw new Error('Unable to check SMS request limits')
+    }
+
+    if (!row) {
+      const { error: insertError } = await admin
+        .from('sms_rate_limits')
+        .insert({
+          user_id: userId,
+          action,
+          window_start: windowStart,
+          count: 1,
+        })
+
+      if (!insertError) return
+      if (isMissingRateLimitTable(insertError)) {
+        enforceMemoryRateLimit(userId, action, config)
+        return
+      }
+      if (insertError.code !== '23505') throw new Error('Unable to reserve SMS request limit')
+      continue
+    }
+
+    const currentCount = Number(row.count || 0)
+    if (currentCount >= config.limit) {
+      throw rateLimitError()
+    }
+
+    const { data: updated, error: updateError } = await admin
+      .from('sms_rate_limits')
+      .update({ count: currentCount + 1, updated_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .eq('count', currentCount)
+      .select('id')
+      .maybeSingle()
+
+    if (!updateError && updated) return
+    if (isMissingRateLimitTable(updateError)) {
+      enforceMemoryRateLimit(userId, action, config)
+      return
+    }
+  }
+
+  throw rateLimitError()
+}
+
+async function requireAuthenticatedUser(req: Request) {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) {
     throw new Error('Missing authorization header')
@@ -126,12 +239,6 @@ async function requireSmsTester(req: Request) {
   const { data: { user }, error } = await supabaseUser.auth.getUser(authHeader.replace('Bearer ', ''))
   if (error || !user) {
     throw new Error('Unauthorized')
-  }
-
-  if (user.email?.toLowerCase() !== SMS_TEST_ADMIN_EMAIL) {
-    const gateError = new Error('SMS feature is in private testing')
-    gateError.name = 'Forbidden'
-    throw gateError
   }
 
   const supabaseAdmin = createClient(
@@ -407,9 +514,6 @@ async function handleHealth() {
         configured: true,
         valid: false,
         balance: null,
-        provider_status: error.status,
-        provider_code: error.code,
-        provider_message: error.providerMessage,
       })
     }
 
@@ -946,9 +1050,10 @@ serve(async (req) => {
   }
 
   try {
-    const { user, supabaseAdmin } = await requireSmsTester(req)
+    const { user, supabaseAdmin } = await requireAuthenticatedUser(req)
     const body = req.method === 'GET' ? {} : await req.json().catch(() => ({}))
     const action = String((body as Record<string, unknown>).action || '')
+    await enforceRateLimit(supabaseAdmin, user.id, action)
 
     switch (action) {
       case 'health':
@@ -983,8 +1088,8 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : ''
     const status = message === 'Unauthorized'
       ? 401
-      : error instanceof Error && error.name === 'Forbidden'
-        ? 403
+      : error instanceof Error && error.name === 'RateLimited'
+        ? 429
         : normalized.message === 'SMSBus API key is not configured'
           ? 503
           : 400
@@ -992,9 +1097,8 @@ serve(async (req) => {
     console.error('SMSBus function error:', {
       status: normalized.status,
       message: normalized.message,
-      provider_code: normalized.provider_code,
     })
 
-    return json({ success: false, error: normalized.message, details: normalized }, status)
+    return json({ success: false, error: normalized.message }, status)
   }
 })

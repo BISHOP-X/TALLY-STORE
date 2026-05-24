@@ -39,7 +39,7 @@ export default async function handler(req: any, res: any) {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL!,
-      process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!  // Service role bypasses RLS for webhook operations
+      process.env.SUPABASE_SERVICE_ROLE_KEY!  // Service role bypasses RLS for webhook operations
     );
 
     // Check if transaction already processed (idempotency)
