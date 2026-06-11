@@ -8,6 +8,8 @@ import { Loader2, Mail, Lock } from 'lucide-react'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { useToast } from '@/hooks/use-toast'
 
+const ADMIN_EMAIL = 'wisdomthedev@gmail.com'
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,7 +41,7 @@ export default function LoginPage() {
           description: "You have been logged in successfully"
         })
         
-        navigate('/dashboard')
+        navigate(email.trim().toLowerCase() === ADMIN_EMAIL ? '/admin' : '/dashboard')
       } else {
         toast({
           title: "Login failed",

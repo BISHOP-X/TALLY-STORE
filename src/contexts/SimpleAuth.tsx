@@ -16,6 +16,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const ADMIN_EMAIL = 'wisdomthedev@gmail.com'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -25,8 +26,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [walletLoading, setWalletLoading] = useState(true)
   const lastProfileLoadKey = useRef<string | null>(null)
 
-  const checkAdminStatus = useCallback(async (userId: string) => {
+  const checkAdminStatus = useCallback(async (userId: string, userEmail?: string) => {
     setWalletLoading(true)
+    const isWisdomAdmin = userEmail?.toLowerCase() === ADMIN_EMAIL
 
     try {
       const { data, error } = await supabase
@@ -36,16 +38,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        setIsAdmin(false)
+        setIsAdmin(isWisdomAdmin)
         setWalletBalance(0)
         return
       }
 
-      setIsAdmin(data?.is_admin || false)
+      setIsAdmin(isWisdomAdmin)
       setWalletBalance(data?.wallet_balance || 0)
     } catch (error) {
       console.error('Error checking admin status:', error)
-      setIsAdmin(false)
+      setIsAdmin(isWisdomAdmin)
       setWalletBalance(0)
     } finally {
       setWalletLoading(false)
@@ -61,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profileLoadKey = `${sessionUser.id}:${sessionUser.email ?? ''}`
         if (lastProfileLoadKey.current !== profileLoadKey) {
           lastProfileLoadKey.current = profileLoadKey
-          checkAdminStatus(sessionUser.id)
+          checkAdminStatus(sessionUser.id, sessionUser.email)
         }
       } else {
         lastProfileLoadKey.current = null

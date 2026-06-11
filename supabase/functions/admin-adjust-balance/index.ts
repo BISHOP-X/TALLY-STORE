@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const ADMIN_EMAIL = 'wisdomthedev@gmail.com';
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -37,6 +39,12 @@ serve(async (req) => {
     if (userError || !user) {
       throw new Error('Unauthorized');
     }
+
+    if (user.email?.toLowerCase() !== ADMIN_EMAIL) {
+      console.error(`Admin access denied for ${user.email}`);
+      throw new Error('Admin access required');
+    }
+
     // Initialize admin client (bypasses RLS)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
