@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Copy, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SUPPORT_WHATSAPP_NUMBER, SUPPORT_WHATSAPP_URL } from "@/lib/support";
 
 export default function GetIP() {
   const [loading, setLoading] = useState(false);
@@ -129,8 +130,13 @@ export default function GetIP() {
               <h3 className="font-semibold mb-2">Next Steps:</h3>
               <ol className="list-decimal list-inside space-y-1 text-sm">
                 <li>Copy all IP addresses above (comma-separated)</li>
-                <li>Email support@capiflex.ng</li>
-                <li>Request to add these IPs to your SageCloud whitelist</li>
+                <li>
+                  Message support on WhatsApp at{' '}
+                  <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">
+                    {SUPPORT_WHATSAPP_NUMBER}
+                  </a>
+                </li>
+                <li>Request help adding these IPs to your SageCloud whitelist</li>
                 <li>Format: {ips.join(', ')}</li>
                 <li>Once whitelisted, data plans and purchases will work!</li>
               </ol>

@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { BackToHome } from '@/components/ui/back-button'
+import { SUPPORT_WHATSAPP_NUMBER, SUPPORT_WHATSAPP_URL } from '@/lib/support'
 
 const PrivacyPage = () => {
   return (
@@ -188,7 +189,7 @@ const PrivacyPage = () => {
                 <strong>How to Exercise Your Rights:</strong>
               </p>
               <ul>
-                <li>Contact our Data Protection Officer at privacy@tallystore.com</li>
+                <li>Contact support on WhatsApp at <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">{SUPPORT_WHATSAPP_NUMBER}</a></li>
                 <li>Use the privacy controls in your account settings</li>
                 <li>Submit a request through our support center</li>
               </ul>
@@ -318,10 +319,14 @@ const PrivacyPage = () => {
                 For any privacy-related questions or concerns:
               </p>
               <div className="mt-4 space-y-2 text-green-700 dark:text-green-300">
-                <p>• <strong>Data Protection Officer:</strong> privacy@tallystore.com</p>
-                <p>• <strong>General Support:</strong> <Link to="/support" className="underline hover:no-underline">Visit Support Center</Link></p>
-                <p>• <strong>Mail:</strong> TallyStore Privacy Team, 123 Digital Street, Tech City, TC 12345</p>
-                <p>• <strong>Response Time:</strong> Within 30 days of your request</p>
+                <p>
+                  - <strong>WhatsApp:</strong>{' '}
+                  <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                    {SUPPORT_WHATSAPP_NUMBER}
+                  </a>
+                </p>
+                <p>- <strong>General Support:</strong> <Link to="/support" className="underline hover:no-underline">Visit Support Center</Link></p>
+                <p>- <strong>Response Time:</strong> Within 30 days of your request</p>
               </div>
             </CardContent>
           </Card>

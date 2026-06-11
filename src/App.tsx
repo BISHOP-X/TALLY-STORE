@@ -10,7 +10,7 @@ import InstallPromptBanner from '@/components/InstallPromptBanner'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 import MaintenancePage from '@/components/MaintenancePage'
 import GlobalPaymentChecker from '@/components/GlobalPaymentChecker'
-import TelegramSupportUpdateDialog from '@/components/TelegramSupportUpdateDialog'
+import WhatsAppSupportUpdateDialog from '@/components/WhatsAppSupportUpdateDialog'
 
 // ⚠️ MAINTENANCE MODE - Set to false to restore normal site
 const MAINTENANCE_MODE = false;
@@ -18,7 +18,7 @@ const MAINTENANCE_MODE = false;
 const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 // Version tracking for cache busting
-const MAINTENANCE_VERSION = "1.2-telegram-update";
+const MAINTENANCE_VERSION = "1.3-whatsapp-support";
 
 // Force cache clear on version change
 if (typeof window !== 'undefined' && !isLocalDev) {
@@ -97,7 +97,7 @@ const App = () => {
           <Toaster />
           <Sonner />
           <AnnouncementBanner />
-          <TelegramSupportUpdateDialog />
+          <WhatsAppSupportUpdateDialog />
           <InstallPromptBanner />
           <AuthProvider>
             <GlobalPaymentChecker />

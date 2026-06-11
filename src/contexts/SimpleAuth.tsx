@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [walletLoading, setWalletLoading] = useState(true)
   const lastProfileLoadKey = useRef<string | null>(null)
 
-  const checkAdminStatus = useCallback(async (userId: string, userEmail?: string) => {
+  const checkAdminStatus = useCallback(async (userId: string) => {
     setWalletLoading(true)
 
     try {
@@ -35,19 +35,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .single()
 
-      const isHardcodedAdmin = userEmail === 'wisdomthedev@gmail.com'
-
       if (error) {
-        setIsAdmin(isHardcodedAdmin)
+        setIsAdmin(false)
         setWalletBalance(0)
         return
       }
 
-      setIsAdmin(isHardcodedAdmin || data?.is_admin || false)
+      setIsAdmin(data?.is_admin || false)
       setWalletBalance(data?.wallet_balance || 0)
     } catch (error) {
       console.error('Error checking admin status:', error)
-      setIsAdmin(userEmail === 'wisdomthedev@gmail.com')
+      setIsAdmin(false)
       setWalletBalance(0)
     } finally {
       setWalletLoading(false)
@@ -63,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profileLoadKey = `${sessionUser.id}:${sessionUser.email ?? ''}`
         if (lastProfileLoadKey.current !== profileLoadKey) {
           lastProfileLoadKey.current = profileLoadKey
-          checkAdminStatus(sessionUser.id, sessionUser.email)
+          checkAdminStatus(sessionUser.id)
         }
       } else {
         lastProfileLoadKey.current = null

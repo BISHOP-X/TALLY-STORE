@@ -39,12 +39,7 @@ export default function LoginPage() {
           description: "You have been logged in successfully"
         })
         
-        // Check if admin email and redirect immediately
-        if (email === 'wisdomthedev@gmail.com') {
-          navigate('/admin')
-        } else {
-          navigate('/dashboard')
-        }
+        navigate('/dashboard')
       } else {
         toast({
           title: "Login failed",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
+import { SUPPORT_WHATSAPP_URL } from '@/lib/support';
 
 // Set the target time: 36 hours from when maintenance started
 // Change this timestamp to when you want maintenance to end
@@ -78,12 +78,12 @@ export default function MaintenancePage() {
           <p className="text-yellow-100 text-sm">
             <span className="font-semibold">⚠️ Top-up Issues?</span> Please report your issue along with your email and payment receipt to our{' '}
             <a
-              href={SUPPORT_TELEGRAM_URL}
+              href={SUPPORT_WHATSAPP_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="text-white font-semibold underline hover:text-yellow-200"
             >
-              Telegram Channel
+              WhatsApp support
             </a>
             . Thank you for your patience!
           </p>
@@ -92,8 +92,8 @@ export default function MaintenancePage() {
         {/* Contact */}
         <p className="mt-6 text-purple-300 text-sm">
           Questions?{' '}
-          <a href={SUPPORT_TELEGRAM_URL} target="_blank" rel="noopener noreferrer" className="text-white underline hover:text-purple-200">
-            Join our Telegram
+          <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="text-white underline hover:text-purple-200">
+            Message us on WhatsApp
           </a>
         </p>
       </div>

@@ -17,15 +17,13 @@ import {
   Check, 
   Star, 
   MessageCircle,
-  Phone,
-  Mail,
   Clock,
   Award
 } from 'lucide-react'
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
-import { SUPPORT_TELEGRAM_NUMBER, openSupportTelegram } from '@/lib/support'
+import { SUPPORT_WHATSAPP_NUMBER, SUPPORT_WHATSAPP_URL } from '@/lib/support'
 
 // Web service packages
 const webServices = [
@@ -493,43 +491,29 @@ export default function WebServicesPage() {
           </CardHeader>
           
           <CardContent>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="flex flex-col items-center text-center gap-3 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                <MessageCircle className="h-8 w-8 text-blue-600" />
+            <div className="grid sm:grid-cols-2 gap-6">
+              <div className="flex flex-col items-center text-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-950 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                <MessageCircle className="h-8 w-8 text-emerald-600" />
                 <div>
-                  <p className="font-semibold text-blue-700 dark:text-blue-400 mb-1">Telegram (Fastest)</p>
-                  <p className="text-sm font-mono">{SUPPORT_TELEGRAM_NUMBER}</p>
-                  <Button 
-                    variant="default" 
-                    size="sm"
-                    className="mt-3 bg-blue-600 hover:bg-blue-700"
-                    onClick={openSupportTelegram}
-                  >
-                    Chat Now
+                  <p className="font-semibold text-emerald-700 dark:text-emerald-400 mb-1">WhatsApp Support</p>
+                  <p className="text-sm font-mono">{SUPPORT_WHATSAPP_NUMBER}</p>
+                  <Button asChild variant="default" size="sm" className="mt-3 bg-emerald-600 hover:bg-emerald-700">
+                    <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
+                      Chat Now
+                    </a>
                   </Button>
                 </div>
               </div>
               
               <div className="flex flex-col items-center text-center gap-3 p-4 bg-muted rounded-lg">
-                <Mail className="h-8 w-8 text-primary" />
+                <Clock className="h-8 w-8 text-primary" />
                 <div>
-                  <p className="font-semibold mb-1">Email Us</p>
-                  <p className="text-sm font-mono break-all">wisdomthedev@gmail.com</p>
-                  <p className="text-xs text-muted-foreground mt-2">Response in 24hrs</p>
-                </div>
-              </div>
-              
-              <div className="flex flex-col items-center text-center gap-3 p-4 bg-muted rounded-lg">
-                <MessageCircle className="h-8 w-8 text-blue-500" />
-                <div>
-                  <p className="font-semibold mb-1">Telegram Support</p>
-                  <p className="text-xs text-muted-foreground mb-3">Reach support quickly</p>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={openSupportTelegram}
-                  >
-                    Contact Support
+                  <p className="font-semibold mb-1">Project Questions</p>
+                  <p className="text-xs text-muted-foreground mb-3">Send your business name, project type, and timeline.</p>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
+                      Message WhatsApp
+                    </a>
                   </Button>
                 </div>
               </div>

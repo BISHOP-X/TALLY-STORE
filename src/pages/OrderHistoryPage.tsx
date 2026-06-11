@@ -7,13 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Download, Search, Filter, Package, Clock, CheckCircle, XCircle, RefreshCw, Eye, Loader2, Mail } from 'lucide-react'
+import { Download, Search, Package, Clock, CheckCircle, XCircle, RefreshCw, Loader2 } from 'lucide-react'
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { getUserOrders } from '@/lib/supabase'
-import { sendCredentialsEmail } from '@/lib/email'
 import { useToast } from '@/hooks/use-toast'
 
 const statusColors = {
@@ -41,7 +40,6 @@ export default function OrderHistoryPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
-  const [emailingSending, setEmailSending] = useState<string | null>(null)
 
   // Check for purchase success message
   useEffect(() => {
@@ -164,81 +162,6 @@ export default function OrderHistoryPage() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }
-
-  const handleEmailCredentials = async (order: any) => {
-    if (!user?.email) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "User email not found"
-      })
-      return
-    }
-
-    // Get credentials data same as download
-    const accountsData = order.account_details?.accounts 
-      ? order.account_details.accounts
-      : order.account_details?.username
-        ? [{
-            username: order.account_details.username,
-            password: order.account_details.password,
-            email: order.account_details.email,
-            email_password: order.account_details.email_password,
-            two_fa_code: order.account_details.two_fa_code,
-            additional_info: order.account_details.additional_info
-          }]
-        : []
-
-    if (!accountsData || accountsData.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No account credentials found for this order"
-      })
-      return
-    }
-
-    const credentials = {
-      accounts: accountsData.map((account, index) => ({
-        accountNumber: index + 1,
-        username: account.username,
-        password: account.password,
-        email: account.email,
-        email_password: account.email_password,
-        two_fa_code: account.two_fa_code,
-        additional_info: account.additional_info
-      }))
-    }
-
-    setEmailSending(order.id)
-
-    try {
-      const result = await sendCredentialsEmail({
-        userEmail: user.email,
-        userName: user.email.split('@')[0],
-        credentials,
-        orderId: order.id
-      })
-
-      if (result.success) {
-        toast({
-          title: "Email Sent! 📧",
-          description: `Credentials have been sent to ${user.email}`
-        })
-      } else {
-        throw new Error(result.error || 'Failed to send email')
-      }
-    } catch (error) {
-      console.error('Failed to send credentials email:', error)
-      toast({
-        variant: "destructive",
-        title: "Email Failed",
-        description: "Failed to send credentials email. Please try again or use download."
-      })
-    } finally {
-      setEmailSending(null)
-    }
   }
 
   const formatDate = (dateString: string) => {
@@ -509,20 +432,6 @@ export default function OrderHistoryPage() {
                         >
                           <Download className="h-4 w-4 mr-2" />
                           Download Credentials
-                        </Button>
-                        
-                        <Button
-                          variant="outline"
-                          size="default"
-                          onClick={() => handleEmailCredentials(order)}
-                          disabled={order.status !== 'completed' || emailingSending === order.id}
-                        >
-                          {emailingSending === order.id ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Mail className="h-4 w-4 mr-2" />
-                          )}
-                          {emailingSending === order.id ? 'Sending...' : 'Email'}
                         </Button>
                       </div>
                     </div>

@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { BackToHome } from "@/components/ui/back-button"
+import { SUPPORT_WHATSAPP_NUMBER, SUPPORT_WHATSAPP_URL } from '@/lib/support'
 
 const TermsPage = () => {
   return (
@@ -270,9 +271,14 @@ const TermsPage = () => {
                 If you have any questions about these Terms of Service, please contact us:
               </p>
               <div className="mt-4 space-y-2 text-blue-700 dark:text-blue-300">
-                <p>• Email: legal@tallystore.com</p>
-                <p>• Support: <Link to="/support" className="underline hover:no-underline">Visit Support Center</Link></p>
-                <p>• Business Hours: Monday - Friday, 9:00 AM - 6:00 PM EST</p>
+                <p>
+                  - WhatsApp:{' '}
+                  <a href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                    {SUPPORT_WHATSAPP_NUMBER}
+                  </a>
+                </p>
+                <p>- Support: <Link to="/support" className="underline hover:no-underline">Visit Support Center</Link></p>
+                <p>- Business Hours: Monday - Friday, 9:00 AM - 6:00 PM WAT</p>
               </div>
             </CardContent>
           </Card>

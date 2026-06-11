@@ -6,9 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Hardcoded admin email for extra security
-const ADMIN_EMAIL = 'wisdomthedev@gmail.com';
-
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -40,20 +37,13 @@ serve(async (req) => {
     if (userError || !user) {
       throw new Error('Unauthorized');
     }
-
-    // CRITICAL: Verify admin status (both email check AND database check)
-    if (user.email !== ADMIN_EMAIL) {
-      console.error(`❌ Non-admin attempted balance adjustment: ${user.email}`);
-      throw new Error('Admin access required');
-    }
-
     // Initialize admin client (bypasses RLS)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Double-check admin status in database
+    // Verify admin status in database
     const { data: adminProfile } = await supabaseAdmin
       .from('profiles')
       .select('is_admin')

@@ -7,6 +7,7 @@ import { CheckCircle2, Loader2, XCircle, ArrowLeft, Wallet } from 'lucide-react'
 import { useAuth } from '@/contexts/SimpleAuth';
 import { useToast } from '@/hooks/use-toast';
 import { verifyAndCreditWalletSecure } from '@/lib/supabase';
+import { SUPPORT_WHATSAPP_URL } from '@/lib/support';
 
 export default function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
@@ -192,8 +193,16 @@ export default function PaymentSuccessPage() {
             )}
           </div>
 
-          <div className="text-xs text-muted-foreground text-center">
-            Need help? Contact us at tallystoreorg@gmail.com
+          <div className="text-center text-xs text-muted-foreground">
+            Need help?{' '}
+            <a
+              href={SUPPORT_WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Message support on WhatsApp
+            </a>
           </div>
         </CardContent>
       </Card>
