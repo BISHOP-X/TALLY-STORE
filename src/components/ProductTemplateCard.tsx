@@ -39,18 +39,16 @@ export default function ProductTemplateCard({
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
       <CardHeader className="pb-2.5 px-3.5 pt-3.5">
-        <div className="flex items-center gap-1.5 mb-1">
-          <CardTitle
-            className="min-w-0 flex-1 truncate text-sm leading-snug transition-colors group-hover:text-primary"
-            title={productGroup.name}
-          >
-            {productGroup.name}
-          </CardTitle>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-            {category.name}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground line-clamp-2">
+        <CardTitle
+          className="min-h-[2.5em] overflow-hidden text-sm leading-snug transition-colors group-hover:text-primary [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+          title={productGroup.name}
+        >
+          {productGroup.name}
+        </CardTitle>
+        <Badge variant="outline" className="mt-1 w-fit text-[10px] px-1.5 py-0">
+          {category.name}
+        </Badge>
+        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
           {productGroup.description}
         </p>
       </CardHeader>
