@@ -160,7 +160,7 @@ export default function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold mb-1">
-                  ₦{totalSpent.toLocaleString()}
+                  {formatPrice(totalSpent)}
                 </div>
                 <p className="text-muted-foreground text-sm">
                   On purchases

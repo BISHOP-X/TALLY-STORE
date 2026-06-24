@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowDownRight, ShoppingCart, X, ChevronDown, ChevronUp, Activity } from 'lucide-react'
 import { getGlobalActivityFeed, type GlobalActivityItem } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { useCurrency } from '@/contexts/CurrencyContext'
 
 // Site-wide "social proof" activity feed shown on every page. Mixes real,
 // masked activity (deposits + completed orders, fetched via the
@@ -84,6 +85,7 @@ function formatRelativeTime(ts: number): string {
 const MAX_ROWS = 9
 
 export default function GlobalActivityFeed() {
+  const { formatPrice } = useCurrency()
   const [rows, setRows] = useState<FeedRow[]>([])
   const [dismissed, setDismissed] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
@@ -159,8 +161,8 @@ export default function GlobalActivityFeed() {
   if (dismissed) return null
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 w-[300px] max-w-[calc(100vw-2rem)]">
-      <div className="rounded-2xl border bg-card shadow-lg overflow-hidden">
+    <div className="container mx-auto px-6 pt-10">
+      <div className="mx-auto w-full max-w-md rounded-2xl border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-primary/5">
           <div className="flex items-center gap-2 min-w-0">
             <span className="relative flex h-2 w-2 shrink-0">
@@ -215,7 +217,7 @@ export default function GlobalActivityFeed() {
                     {row.maskedName}{' '}
                     <span className="font-normal text-muted-foreground">
                       {row.kind === 'deposit'
-                        ? `funded ₦${row.amount.toLocaleString()} ${row.label}`
+                        ? `funded ${formatPrice(row.amount)} ${row.label}`
                         : `purchased ${row.label}`}
                     </span>
                   </p>

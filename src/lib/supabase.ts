@@ -549,6 +549,40 @@ export async function getIndividualAccountsCount(): Promise<number> {
   }
 }
 
+// Returns product_group_ids ordered by most-recently-restocked (i.e. the
+// most recent individual_accounts inventory was added), deduped, most
+// recent first. Used to power the "Refilled" section on the Products page.
+export async function getRecentlyRestockedProductGroupIds(limit: number = 4): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('individual_accounts')
+      .select('product_group_id, created_at')
+      .eq('status', 'available')
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    if (error) {
+      console.error('❌ Error fetching recently restocked accounts:', error)
+      throw error
+    }
+
+    const seen = new Set<string>()
+    const orderedIds: string[] = []
+    for (const row of data || []) {
+      if (!seen.has(row.product_group_id)) {
+        seen.add(row.product_group_id)
+        orderedIds.push(row.product_group_id)
+      }
+      if (orderedIds.length >= limit) break
+    }
+
+    return orderedIds
+  } catch (error) {
+    console.error('❌ Failed to fetch recently restocked product groups:', error)
+    return []
+  }
+}
+
 export async function deleteIndividualAccount(id: string): Promise<boolean> {
   try {
     // Get the account to know which product group to update

@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/SimpleAuth";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ interface CryptoBalanceCardProps {
 
 export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
   const { isAdmin } = useAuth();
+  const { formatPrice } = useCurrency();
   const [balance, setBalance] = useState<number>(0);
   const [tallyStoreBalance, setTallyStoreBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -201,7 +203,7 @@ export function CryptoBalanceCard({ onWithdrawClick }: CryptoBalanceCardProps) {
               {loading ? (
                 <span className="text-3xl">Loading...</span>
               ) : (
-                <>₦{balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
+                <>{formatPrice(balance)}</>
               )}
             </div>
             <p className="text-sm text-orange-100">

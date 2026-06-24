@@ -8,7 +8,14 @@ import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import ProductTemplateCard from '@/components/ProductTemplateCard'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
-import { getCategories, getAllProductGroups, testConnection, type Category, type ProductGroup } from '@/lib/supabase'
+import {
+  getCategories,
+  getAllProductGroups,
+  testConnection,
+  getRecentlyRestockedProductGroupIds,
+  type Category,
+  type ProductGroup,
+} from '@/lib/supabase'
 import CategorySidebar from '@/components/CategorySidebar'
 
 export default function ProductsPage() {
@@ -19,7 +26,8 @@ export default function ProductsPage() {
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
+  const [restockedIds, setRestockedIds] = useState<string[]>([])
+
   // Existing UI state
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
@@ -62,7 +70,12 @@ export default function ProductsPage() {
         setCategories(categoriesData)
         setProductGroups(productGroupsData)
         setError(null)
-        
+
+        // Load recently restocked product groups for the "Refilled" section
+        getRecentlyRestockedProductGroupIds(4).then(setRestockedIds).catch(err => {
+          console.error('Error loading restocked product groups:', err)
+        })
+
       } catch (err) {
         console.error('❌ Error loading data:', err)
         setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -181,40 +194,149 @@ export default function ProductsPage() {
     return matchesSearch && matchesCategory && productGroup.is_active
   })
 
+  // Popular Products: active, in-stock products with the lowest remaining
+  // stock (a reasonable proxy for "selling fast" / most popular), capped at 8.
+  const popularProductGroups = [...productGroups]
+    .filter((pg) => pg.is_active && pg.stock_count > 0)
+    .sort((a, b) => a.stock_count - b.stock_count)
+    .slice(0, 8)
+
+  // Popular Categories: ranked by number of active products, capped at 8.
+  const popularCategories = [...categories]
+    .map((category) => ({
+      category,
+      productCount: productGroups.filter((pg) => pg.category_id === category.id && pg.is_active).length,
+    }))
+    .filter((entry) => entry.productCount > 0)
+    .sort((a, b) => b.productCount - a.productCount)
+    .slice(0, 8)
+
+  // New: most recently created active product groups, capped at 4.
+  const newProductGroups = [...productGroups]
+    .filter((pg) => pg.is_active)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 4)
+
+  // Refilled: product groups whose stock was most recently topped up, capped at 4.
+  const restockedProductGroups = restockedIds
+    .map((id) => productGroups.find((pg) => pg.id === id))
+    .filter((pg): pg is ProductGroup => !!pg && pg.is_active)
+    .slice(0, 4)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       <Navbar />
       
       {/* Wallet Balance Widget */}
-      <div className="container mx-auto px-6 pt-24 pb-4">
+      <div className="container mx-auto px-6 pt-24 pb-2">
         <WalletBalanceWidget showRefresh={true} />
       </div>
 
-      {/* Hero Section */}
+      {/* Hero Section: Popular Products + Popular Categories (ranked tiles) */}
       <div className="bg-gradient-to-r from-primary to-primary/80 text-white">
-        <div className="container mx-auto px-6 py-16">
-          <div className="max-w-3xl">
-            <h1 className="text-4xl font-bold mb-4">
-              Premium Social Media Accounts
-            </h1>
-            <p className="text-xl text-white/90 mb-8">
-              Discover high-quality, authentic social media accounts across all major platforms. 
-              Each account is carefully verified and comes with full credentials.
-            </p>
-            
-            {/* Search Bar */}
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search categories..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/60"
-              />
+        <div className="container mx-auto px-6 py-10">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Popular Products</h2>
+              {popularProductGroups.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {popularProductGroups.map((productGroup, index) => (
+                    <button
+                      key={productGroup.id}
+                      type="button"
+                      onClick={() => navigate(`/product/${productGroup.id}`)}
+                      className="flex flex-col items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors p-2 text-center"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-primary shrink-0">
+                        {index + 1}
+                      </span>
+                      <span className="text-[11px] leading-tight line-clamp-2 break-words">
+                        {productGroup.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-white/80 text-sm">No products available yet.</p>
+              )}
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Popular Categories</h2>
+              {popularCategories.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {popularCategories.map(({ category }, index) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => navigate(`/category/${category.id}`)}
+                      className="flex flex-col items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors p-2 text-center"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-primary shrink-0">
+                        {index + 1}
+                      </span>
+                      <span className="text-[11px] leading-tight line-clamp-2 break-words">
+                        {category.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-white/80 text-sm">No categories available yet.</p>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Refilled + New */}
+      {(restockedProductGroups.length > 0 || newProductGroups.length > 0) && (
+        <div className="container mx-auto px-6 pt-10">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Refilled</h2>
+              {restockedProductGroups.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {restockedProductGroups.map((productGroup) => {
+                    const category = categories.find((cat) => cat.id === productGroup.category_id)
+                    return category ? (
+                      <ProductTemplateCard
+                        key={productGroup.id}
+                        productGroup={productGroup}
+                        category={category}
+                        onAddToCart={handleAddToCart}
+                      />
+                    ) : null
+                  })}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">No recent restocks yet.</p>
+              )}
+            </div>
+
+            <div>
+              <h2 className="text-xl font-semibold mb-4">New</h2>
+              {newProductGroups.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {newProductGroups.map((productGroup) => {
+                    const category = categories.find((cat) => cat.id === productGroup.category_id)
+                    return category ? (
+                      <ProductTemplateCard
+                        key={productGroup.id}
+                        productGroup={productGroup}
+                        category={category}
+                        onAddToCart={handleAddToCart}
+                      />
+                    ) : null
+                  })}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">No new products yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters and Controls */}
       <div className="container mx-auto px-6 py-8">
@@ -257,6 +379,17 @@ export default function ProductsPage() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-48"
+              />
+            </div>
+
             {/* Category Filter */}
             <select
               value={selectedCategory}

@@ -12,7 +12,6 @@ import AnnouncementBanner from '@/components/AnnouncementBanner'
 import MaintenancePage from '@/components/MaintenancePage'
 import GlobalPaymentChecker from '@/components/GlobalPaymentChecker'
 import WhatsAppSupportUpdateDialog from '@/components/WhatsAppSupportUpdateDialog'
-import GlobalActivityFeed from '@/components/GlobalActivityFeed'
 
 // ⚠️ MAINTENANCE MODE - Set to false to restore normal site
 const MAINTENANCE_MODE = false;
@@ -106,7 +105,6 @@ const App = () => {
           <AuthProvider>
           <CurrencyProvider>
             <GlobalPaymentChecker />
-            <GlobalActivityFeed />
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Index />} />

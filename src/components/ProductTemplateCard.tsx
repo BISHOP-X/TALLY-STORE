@@ -38,21 +38,24 @@ export default function ProductTemplateCard({
 
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
-      <CardHeader className="pb-2 px-3 pt-3">
+      <CardHeader className="pb-2.5 px-3.5 pt-3.5">
         <div className="flex items-center gap-1.5 mb-1">
-          <CardTitle className="group-hover:text-primary transition-colors text-sm truncate">
+          <CardTitle
+            className="min-w-0 flex-1 truncate text-sm leading-snug transition-colors group-hover:text-primary"
+            title={productGroup.name}
+          >
             {productGroup.name}
           </CardTitle>
           <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
             {category.name}
           </Badge>
         </div>
-        <p className="text-xs text-muted-foreground line-clamp-1">
+        <p className="text-xs text-muted-foreground line-clamp-2">
           {productGroup.description}
         </p>
       </CardHeader>
 
-      <CardContent className="pt-0 px-3 pb-3 space-y-2">
+      <CardContent className="pt-0 px-3.5 pb-3.5 space-y-2.5">
         {/* Stock and Price Info */}
         <div className="flex justify-between items-center">
           <span className="text-xs">
@@ -112,12 +115,12 @@ export default function ProductTemplateCard({
 
         {/* Action Button */}
         {isOutOfStock ? (
-          <Button disabled size="sm" className="w-full h-8 text-xs">
+          <Button disabled size="sm" className="w-full h-9 text-xs">
             <Package className="h-3.5 w-3.5 mr-1.5" />
             Out of Stock
           </Button>
         ) : (
-          <Button type="button" size="sm" onClick={handleAddToCart} className="w-full h-8 text-xs">
+          <Button type="button" size="sm" onClick={handleAddToCart} className="w-full h-9 text-xs">
             <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
             Purchase Now
           </Button>

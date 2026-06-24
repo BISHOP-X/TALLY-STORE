@@ -125,7 +125,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Spent</span>
-                    <span className="font-medium">₦{totalSpent.toLocaleString()}</span>
+                    <span className="font-medium">{formatPrice(totalSpent)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Top-ups</span>
