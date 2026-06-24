@@ -13,6 +13,7 @@ import {
   getAllProductGroups,
   testConnection,
   getRecentlyRestockedProductGroupIds,
+  getAvailableAccountIdsByProductGroup,
   type Category,
   type ProductGroup,
 } from '@/lib/supabase'
@@ -27,6 +28,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [restockedIds, setRestockedIds] = useState<string[]>([])
+  const [accountMap, setAccountMap] = useState<Record<string, string>>({})
 
   // Existing UI state
   const [searchTerm, setSearchTerm] = useState('')
@@ -47,6 +49,18 @@ export default function ProductsPage() {
           isBulkPurchase: quantity > 1
         }
       })
+    }
+  }
+
+  // Navigate to a product's detail page. Detail page is keyed by individual
+  // account id, not product group id, so look up a real available account;
+  // fall back to the category page if the product is out of stock.
+  const goToProduct = (productGroup: ProductGroup) => {
+    const accountId = accountMap[productGroup.id]
+    if (accountId) {
+      navigate(`/product/${accountId}`)
+    } else {
+      navigate(`/category/${productGroup.category_id}`)
     }
   }
 
@@ -74,6 +88,13 @@ export default function ProductsPage() {
         // Load recently restocked product groups for the "Refilled" section
         getRecentlyRestockedProductGroupIds(4).then(setRestockedIds).catch(err => {
           console.error('Error loading restocked product groups:', err)
+        })
+
+        // Map product_group_id -> a real available account id, so the
+        // ranked tiles (Popular Products / Refilled / New) can link to an
+        // actual purchasable product detail page instead of a 404.
+        getAvailableAccountIdsByProductGroup().then(setAccountMap).catch(err => {
+          console.error('Error loading available account map:', err)
         })
 
       } catch (err) {
@@ -239,18 +260,19 @@ export default function ProductsPage() {
             <div>
               <h2 className="text-2xl font-bold mb-4">Popular Products</h2>
               {popularProductGroups.length > 0 ? (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {popularProductGroups.map((productGroup, index) => (
                     <button
                       key={productGroup.id}
                       type="button"
-                      onClick={() => navigate(`/product/${productGroup.id}`)}
-                      className="flex flex-col items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors p-2 text-center"
+                      title={productGroup.name}
+                      onClick={() => goToProduct(productGroup)}
+                      className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
                     >
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-primary shrink-0">
                         {index + 1}
                       </span>
-                      <span className="text-[11px] leading-tight line-clamp-2 break-words">
+                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
                         {productGroup.name}
                       </span>
                     </button>
@@ -264,18 +286,19 @@ export default function ProductsPage() {
             <div>
               <h2 className="text-2xl font-bold mb-4">Popular Categories</h2>
               {popularCategories.length > 0 ? (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {popularCategories.map(({ category }, index) => (
                     <button
                       key={category.id}
                       type="button"
+                      title={category.name}
                       onClick={() => navigate(`/category/${category.id}`)}
-                      className="flex flex-col items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors p-2 text-center"
+                      className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
                     >
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-primary shrink-0">
                         {index + 1}
                       </span>
-                      <span className="text-[11px] leading-tight line-clamp-2 break-words">
+                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
                         {category.name}
                       </span>
                     </button>
@@ -286,57 +309,59 @@ export default function ProductsPage() {
               )}
             </div>
           </div>
+
+          {/* Refilled + New: same ranked-tile style, same purple band */}
+          {(restockedProductGroups.length > 0 || newProductGroups.length > 0) && (
+            <div className="grid md:grid-cols-2 gap-8 mt-10 pt-8 border-t border-white/15">
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Refilled</h2>
+                {restockedProductGroups.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {restockedProductGroups.map((productGroup) => (
+                      <button
+                        key={productGroup.id}
+                        type="button"
+                        title={productGroup.name}
+                        onClick={() => goToProduct(productGroup)}
+                        className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
+                          {productGroup.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-white/80 text-sm">No recent restocks yet.</p>
+                )}
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold mb-4">New</h2>
+                {newProductGroups.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {newProductGroups.map((productGroup) => (
+                      <button
+                        key={productGroup.id}
+                        type="button"
+                        title={productGroup.name}
+                        onClick={() => goToProduct(productGroup)}
+                        className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
+                          {productGroup.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-white/80 text-sm">No new products yet.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Refilled + New */}
-      {(restockedProductGroups.length > 0 || newProductGroups.length > 0) && (
-        <div className="container mx-auto px-6 pt-10">
-          <div className="grid md:grid-cols-2 gap-8">
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Refilled</h2>
-              {restockedProductGroups.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {restockedProductGroups.map((productGroup) => {
-                    const category = categories.find((cat) => cat.id === productGroup.category_id)
-                    return category ? (
-                      <ProductTemplateCard
-                        key={productGroup.id}
-                        productGroup={productGroup}
-                        category={category}
-                        onAddToCart={handleAddToCart}
-                      />
-                    ) : null
-                  })}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">No recent restocks yet.</p>
-              )}
-            </div>
-
-            <div>
-              <h2 className="text-xl font-semibold mb-4">New</h2>
-              {newProductGroups.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {newProductGroups.map((productGroup) => {
-                    const category = categories.find((cat) => cat.id === productGroup.category_id)
-                    return category ? (
-                      <ProductTemplateCard
-                        key={productGroup.id}
-                        productGroup={productGroup}
-                        category={category}
-                        onAddToCart={handleAddToCart}
-                      />
-                    ) : null
-                  })}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">No new products yet.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filters and Controls */}
       <div className="container mx-auto px-6 py-8">

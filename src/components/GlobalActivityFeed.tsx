@@ -162,7 +162,7 @@ export default function GlobalActivityFeed() {
 
   return (
     <div className="container mx-auto px-6 pt-10">
-      <div className="mx-auto w-full max-w-md rounded-2xl border bg-card shadow-sm overflow-hidden">
+      <div className="w-full rounded-2xl border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-primary/5">
           <div className="flex items-center gap-2 min-w-0">
             <span className="relative flex h-2 w-2 shrink-0">

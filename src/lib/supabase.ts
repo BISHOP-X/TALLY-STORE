@@ -583,6 +583,36 @@ export async function getRecentlyRestockedProductGroupIds(limit: number = 4): Pr
   }
 }
 
+// Maps product_group_id -> one available individual_account id, so UI tiles
+// (Popular Products, New, Refilled) that only know the product GROUP can
+// still link to a real, clickable account on the Product Detail page (which
+// is keyed by individual account id, not product group id).
+export async function getAvailableAccountIdsByProductGroup(): Promise<Record<string, string>> {
+  try {
+    const { data, error } = await supabase
+      .from('individual_accounts')
+      .select('id, product_group_id')
+      .eq('status', 'available')
+      .limit(2000)
+
+    if (error) {
+      console.error('❌ Error fetching available account map:', error)
+      throw error
+    }
+
+    const map: Record<string, string> = {}
+    for (const row of data || []) {
+      if (!map[row.product_group_id]) {
+        map[row.product_group_id] = row.id
+      }
+    }
+    return map
+  } catch (error) {
+    console.error('❌ Failed to fetch available account map:', error)
+    return {}
+  }
+}
+
 export async function deleteIndividualAccount(id: string): Promise<boolean> {
   try {
     // Get the account to know which product group to update
