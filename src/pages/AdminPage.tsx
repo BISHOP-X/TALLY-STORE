@@ -59,7 +59,9 @@ import {
   getUserTransactions,
   getUserOrdersAdmin,
   adminAdjustBalance,
-  type Category, 
+  getAppSetting,
+  upsertAppSetting,
+  type Category,
   type ProductGroup,
   type IndividualAccount,
   type ProductTemplate,
@@ -123,6 +125,16 @@ export default function AdminPage() {
   const [userTransactions, setUserTransactions] = useState<any[]>([])
   const [userOrders, setUserOrders] = useState<any[]>([])
   const [isAdjusting, setIsAdjusting] = useState(false)
+
+  // Referral commission setting
+  const [referralCommissionPct, setReferralCommissionPct] = useState('5')
+  const [savingReferralPct, setSavingReferralPct] = useState(false)
+  const [loadingReferralPct, setLoadingReferralPct] = useState(true)
+
+  // NGN/USD rate override setting
+  const [ngnUsdRate, setNgnUsdRate] = useState('')
+  const [savingNgnUsdRate, setSavingNgnUsdRate] = useState(false)
+  const [loadingNgnUsdRate, setLoadingNgnUsdRate] = useState(true)
 
   // UI state
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -190,6 +202,91 @@ export default function AdminPage() {
     }
     return () => { if (broadcastPollRef.current) clearInterval(broadcastPollRef.current) }
   }, [broadcastJobs, loadBroadcastJobs])
+
+  // ==================== REFERRAL SETTINGS ====================
+
+  useEffect(() => {
+    const loadReferralPct = async () => {
+      setLoadingReferralPct(true)
+      try {
+        const value = await getAppSetting('referral_commission_pct')
+        if (value) setReferralCommissionPct(value)
+      } catch (err) {
+        console.error('Failed to load referral commission %:', err)
+      } finally {
+        setLoadingReferralPct(false)
+      }
+    }
+    loadReferralPct()
+  }, [])
+
+  const handleSaveReferralPct = async () => {
+    const pct = parseFloat(referralCommissionPct)
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      toast({ title: 'Invalid value', description: 'Enter a percentage between 0 and 100', variant: 'destructive' })
+      return
+    }
+    setSavingReferralPct(true)
+    try {
+      const ok = await upsertAppSetting('referral_commission_pct', pct.toString())
+      if (ok) {
+        toast({ title: 'Saved', description: `Referral commission set to ${pct}%` })
+      } else {
+        toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' })
+      }
+    } finally {
+      setSavingReferralPct(false)
+    }
+  }
+
+  // ==================== NGN/USD RATE SETTINGS ====================
+
+  useEffect(() => {
+    const loadRate = async () => {
+      setLoadingNgnUsdRate(true)
+      try {
+        const value = await getAppSetting('ngn_usd_rate')
+        if (value) setNgnUsdRate(value)
+      } catch (err) {
+        console.error('Failed to load NGN/USD rate override:', err)
+      } finally {
+        setLoadingNgnUsdRate(false)
+      }
+    }
+    loadRate()
+  }, [])
+
+  const handleSaveNgnUsdRate = async () => {
+    const rate = parseFloat(ngnUsdRate)
+    if (isNaN(rate) || rate <= 0) {
+      toast({ title: 'Invalid value', description: 'Enter a positive NGN-per-USD rate', variant: 'destructive' })
+      return
+    }
+    setSavingNgnUsdRate(true)
+    try {
+      const ok = await upsertAppSetting('ngn_usd_rate', rate.toString())
+      if (ok) {
+        toast({ title: 'Saved', description: `NGN/USD rate set to ₦${rate} per $1` })
+      } else {
+        toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' })
+      }
+    } finally {
+      setSavingNgnUsdRate(false)
+    }
+  }
+
+  const handleClearNgnUsdRate = async () => {
+    setSavingNgnUsdRate(true)
+    try {
+      const ok = await upsertAppSetting('ngn_usd_rate', '')
+      if (ok) {
+        setNgnUsdRate('')
+        toast({ title: 'Cleared', description: 'Now using the live exchange rate' })
+      }
+    } finally {
+      setSavingNgnUsdRate(false)
+    }
+  }
 
   const buildEmailHtml = (message: string) =>
     `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
@@ -545,7 +642,9 @@ export default function AdminPage() {
         name: updatedTemplate.name,
         description: updatedTemplate.description,
         price: updatedTemplate.price,
-        category_id: updatedTemplate.category_id
+        category_id: updatedTemplate.category_id,
+        muabanvia_product_id: updatedTemplate.muabanvia_product_id || null,
+        auto_fulfill_enabled: !!updatedTemplate.auto_fulfill_enabled
       })
 
       if (result) {
@@ -931,6 +1030,66 @@ export default function AdminPage() {
               </p>
             </div>
 
+            {/* Referral Settings */}
+            <Card className="mb-6 sm:mb-8">
+              <CardHeader>
+                <CardTitle className="text-lg">Referral Settings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="flex-1">
+                    <Label htmlFor="referralPct">Commission % (per referred purchase)</Label>
+                    <Input
+                      id="referralPct"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={referralCommissionPct}
+                      onChange={(e) => setReferralCommissionPct(e.target.value)}
+                      disabled={loadingReferralPct}
+                    />
+                  </div>
+                  <Button onClick={handleSaveReferralPct} disabled={savingReferralPct || loadingReferralPct}>
+                    {savingReferralPct ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* NGN/USD Exchange Rate Settings */}
+            <Card className="mb-6 sm:mb-8">
+              <CardHeader>
+                <CardTitle className="text-lg">Exchange Rate Settings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="flex-1">
+                    <Label htmlFor="ngnUsdRate">NGN per $1 (leave blank to use the live rate)</Label>
+                    <Input
+                      id="ngnUsdRate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 1600"
+                      value={ngnUsdRate}
+                      onChange={(e) => setNgnUsdRate(e.target.value)}
+                      disabled={loadingNgnUsdRate}
+                    />
+                  </div>
+                  <Button onClick={handleSaveNgnUsdRate} disabled={savingNgnUsdRate || loadingNgnUsdRate}>
+                    {savingNgnUsdRate ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button variant="outline" onClick={handleClearNgnUsdRate} disabled={savingNgnUsdRate || loadingNgnUsdRate}>
+                    Use Live Rate
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  When set, this overrides the live rate everywhere USD prices are shown to customers.
+                </p>
+              </CardContent>
+            </Card>
+
           {/* View Account Modal */}
           {viewingAccount && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1128,6 +1287,30 @@ export default function AdminPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium block mb-1">MuaBanVia Auto-Fulfillment</label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      When enabled, if pre-stocked accounts run out, the shortfall is purchased
+                      live from MuaBanVia using the product ID below.
+                    </p>
+                    <Input
+                      placeholder="MuaBanVia product ID (optional)"
+                      value={editingTemplate.muabanvia_product_id || ''}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, muabanvia_product_id: e.target.value})}
+                      className="mb-2"
+                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="auto_fulfill_enabled"
+                        checked={!!editingTemplate.auto_fulfill_enabled}
+                        onChange={(e) => setEditingTemplate({...editingTemplate, auto_fulfill_enabled: e.target.checked})}
+                      />
+                      <label htmlFor="auto_fulfill_enabled" className="text-sm">
+                        Enable auto-fulfillment for this product
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2 mt-6">

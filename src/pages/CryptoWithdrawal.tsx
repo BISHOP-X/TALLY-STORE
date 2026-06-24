@@ -54,7 +54,41 @@ const NIGERIAN_BANKS = [
   { code: "090097", name: "Ekondo Microfinance Bank" },
 ].sort((a, b) => a.name.localeCompare(b.name));
 
-export default function CryptoWithdrawal() {
+interface CryptoWithdrawalProps {
+  // Which balance this withdrawal screen operates on. 'crypto' (default) preserves all
+  // existing behavior exactly. 'referral' re-points the same SageCloud bank-transfer flow
+  // at the user's referral_balance instead, so referral earnings can be cashed out directly
+  // without first moving them into the wallet.
+  source?: 'crypto' | 'referral';
+}
+
+const SOURCE_CONFIG = {
+  crypto: {
+    balanceColumn: 'crypto_balance',
+    title: 'Withdraw to Bank',
+    heading: 'Cash Out to Your Bank',
+    subheading: "Powered by SageCloud • Transfer your balance directly to your Nigerian bank account",
+    balanceLabel: 'Available Balance',
+    emptyBalanceCta: { label: 'Sell Crypto First', route: '/crypto-exchange' },
+    backRoute: '/dashboard',
+    historyRoute: '/crypto-history',
+    successRoute: '/crypto-history',
+  },
+  referral: {
+    balanceColumn: 'referral_balance',
+    title: 'Withdraw Referral Earnings',
+    heading: 'Cash Out Your Referral Earnings',
+    subheading: "Powered by SageCloud • Transfer your referral commission directly to your Nigerian bank account",
+    balanceLabel: 'Referral Balance',
+    emptyBalanceCta: { label: 'Invite Friends', route: '/referrals' },
+    backRoute: '/referrals',
+    historyRoute: '/referrals',
+    successRoute: '/referrals',
+  },
+} as const;
+
+export default function CryptoWithdrawal({ source = 'crypto' }: CryptoWithdrawalProps) {
+  const config = SOURCE_CONFIG[source];
   const [cryptoBalance, setCryptoBalance] = useState<number>(0);
   const [amount, setAmount] = useState("");
   const [bankCode, setBankCode] = useState("");
@@ -84,18 +118,18 @@ export default function CryptoWithdrawal() {
 
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('crypto_balance')
+        .select(config.balanceColumn)
         .eq('id', user.id)
         .single();
 
       if (error) throw error;
 
-      setCryptoBalance(profile?.crypto_balance || 0);
+      setCryptoBalance((profile as any)?.[config.balanceColumn] || 0);
     } catch (error) {
       console.error('Error fetching balance:', error);
       toast({
         title: "Error",
-        description: "Failed to load crypto balance",
+        description: `Failed to load ${config.balanceLabel.toLowerCase()}`,
         variant: "destructive",
       });
     } finally {
@@ -234,6 +268,7 @@ export default function CryptoWithdrawal() {
           account_name: accountName,
           bank_name: bankName,
           narration: narration || `Withdrawal to ${accountName}`,
+          source,
         },
       });
 
@@ -272,9 +307,9 @@ export default function CryptoWithdrawal() {
       // Refresh balance
       await fetchBalance();
 
-      // Navigate to crypto history page after 2 seconds
+      // Navigate to the relevant history/summary page after 2 seconds
       setTimeout(() => {
-        navigate('/crypto-history');
+        navigate(config.successRoute);
       }, 2000);
 
     } catch (error: any) {
@@ -311,22 +346,22 @@ export default function CryptoWithdrawal() {
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-5 flex justify-between items-center">
           <Button
             variant="ghost"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(config.backRoute)}
             className="gap-1 sm:gap-2 text-white hover:bg-white/20 hover:text-white font-medium text-sm sm:text-base"
           >
-            ← <span className="hidden sm:inline">Back to Dashboard</span><span className="sm:hidden">Back</span>
+            ← <span className="hidden sm:inline">Back</span><span className="sm:hidden">Back</span>
           </Button>
           <div className="flex items-center gap-3">
             <Wallet className="w-7 h-7 text-white" />
-            <h1 className="text-2xl font-bold text-white">Withdraw to Bank</h1>
+            <h1 className="text-2xl font-bold text-white">{config.title}</h1>
           </div>
           <Button
             variant="ghost"
-            onClick={() => navigate('/crypto-history')}
+            onClick={() => navigate(config.historyRoute)}
             className="gap-1 sm:gap-2 text-white hover:bg-white/20 hover:text-white font-medium text-sm sm:text-base"
           >
             <History className="w-4 h-4" />
-            <span className="hidden sm:inline">Transaction History</span><span className="sm:hidden">History</span>
+            <span className="hidden sm:inline">History</span><span className="sm:hidden">History</span>
           </Button>
         </div>
       </nav>
@@ -336,10 +371,10 @@ export default function CryptoWithdrawal() {
         {/* Hero Section */}
         <div className="text-center mb-6 sm:mb-8 pt-2 sm:pt-4">
           <h2 className="text-3xl font-bold text-foreground mb-2">
-            Cash Out to Your Bank
+            {config.heading}
           </h2>
           <p className="text-muted-foreground">
-            Powered by SageCloud • Transfer your balance directly to your Nigerian bank account
+            {config.subheading}
           </p>
         </div>
 
@@ -347,7 +382,7 @@ export default function CryptoWithdrawal() {
         <Card className="mb-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-sm text-green-700 mb-1">Available Balance</p>
+              <p className="text-sm text-green-700 mb-1">{config.balanceLabel}</p>
               {loadingBalance ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin text-green-700" />
@@ -366,10 +401,10 @@ export default function CryptoWithdrawal() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => navigate('/crypto-exchange')}
+                    onClick={() => navigate(config.emptyBalanceCta.route)}
                     className="border-green-600 text-green-700 hover:bg-green-100"
                   >
-                    Sell Crypto First
+                    {config.emptyBalanceCta.label}
                   </Button>
                 </div>
               )}

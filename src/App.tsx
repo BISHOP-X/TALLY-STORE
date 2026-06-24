@@ -60,6 +60,7 @@ import OrderHistoryPage from '@/pages/OrderHistoryPage'
 import PaymentCallbackPage from '@/pages/PaymentCallbackPage'
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage'
 import WalletPage from '@/pages/WalletPage'
+import ReferralsPage from '@/pages/ReferralsPage'
 import SupportPage from '@/pages/SupportPage'
 import TermsPage from '@/pages/TermsPage'
 import PrivacyPage from '@/pages/PrivacyPage'
@@ -70,6 +71,7 @@ import AdminPage from '@/pages/AdminPage'
 import EmailConfirmation from '@/pages/EmailConfirmation'
 import CryptoExchange from '@/pages/CryptoExchange'
 import CryptoWithdrawal from '@/pages/CryptoWithdrawal'
+import ReferralWithdrawal from '@/pages/ReferralWithdrawal'
 import CryptoHistory from '@/pages/CryptoHistory'
 import BillsPayment from "./pages/BillsPayment";
 import SocialBoostPage from "./pages/SocialBoostPage";
@@ -177,6 +179,14 @@ const App = () => {
                 }
               />
               <Route
+                path="/referrals"
+                element={
+                  <ProtectedRoute requireRole="user">
+                    <ReferralsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/payment-callback"
                 element={
                   <ProtectedRoute requireRole="user">
@@ -213,6 +223,14 @@ const App = () => {
                 element={
                   <ProtectedRoute requireRole="user">
                     <CryptoWithdrawal />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/referral-withdrawal"
+                element={
+                  <ProtectedRoute requireRole="user">
+                    <ReferralWithdrawal />
                   </ProtectedRoute>
                 }
               />

@@ -107,16 +107,113 @@ serve(async (req) => {
 
     console.log(`📦 Found ${availableAccounts?.length || 0} available accounts for product_group_id: ${product_group_id}`);
 
-    if (!availableAccounts || availableAccounts.length < quantity) {
-      const available = availableAccounts?.length || 0;
-      
-      // Log the issue for debugging
-      console.error(`❌ Stock mismatch: product_group_id=${product_group_id}, found=${available}, requested=${quantity}`);
-      
-      if (available === 0) {
-        throw new Error(`OUT_OF_STOCK: ${productGroup.name} is currently out of stock. Please check back later or contact support.`);
-      } else {
-        throw new Error(`INSUFFICIENT_STOCK: Only ${available} account(s) available for ${productGroup.name}. You requested ${quantity}.`);
+    let workingAccounts = availableAccounts || [];
+
+    if (workingAccounts.length < quantity) {
+      const shortfall = quantity - workingAccounts.length;
+      const available = workingAccounts.length;
+
+      // Auto-fulfillment fallback: if this product group is configured to auto-fulfill
+      // from MuaBanVia, try to live-purchase the shortfall instead of failing outright.
+      if (productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id) {
+        console.log(`🔄 Stock shortfall (${shortfall}) — attempting MuaBanVia auto-fulfillment for product_group_id: ${product_group_id}`);
+
+        try {
+          const muabanviaApiKey = Deno.env.get('MUABANVIA_API_KEY');
+          const muabanviaBaseUrl = Deno.env.get('MUABANVIA_BASE_URL') || 'https://api.muabanvia.com/api/v1';
+
+          if (!muabanviaApiKey) {
+            throw new Error('MUABANVIA_API_KEY not configured');
+          }
+
+          const fulfillResponse = await fetch(
+            `${muabanviaBaseUrl}/products/${productGroup.muabanvia_product_id}/buy`,
+            {
+              method: 'POST',
+              headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${muabanviaApiKey}`,
+              },
+              body: JSON.stringify({ quantity: shortfall }),
+            }
+          );
+
+          const fulfillResult = await fulfillResponse.json().catch(() => null) as any;
+
+          if (!fulfillResponse.ok || fulfillResult?.success === false || fulfillResult?.status === false) {
+            throw new Error(fulfillResult?.message || fulfillResult?.error || 'MuaBanVia could not fulfill the shortfall');
+          }
+
+          const rawAccounts = fulfillResult?.data?.accounts ?? fulfillResult?.accounts ?? fulfillResult?.data ?? [];
+          const fulfilledRaw: any[] = Array.isArray(rawAccounts) ? rawAccounts : [];
+
+          const fulfilledAccounts = fulfilledRaw.slice(0, shortfall).map((item: any) => {
+            if (typeof item === 'string') {
+              const parts = item.split('|').map((p: string) => p.trim());
+              return {
+                username: parts[0] || '',
+                password: parts[1] || '',
+                email: parts[2] || null,
+                email_password: parts[3] || null,
+                two_fa_code: parts[4] || null,
+              };
+            }
+            return {
+              username: item.username || item.user || item.login || '',
+              password: item.password || item.pass || '',
+              email: item.email || null,
+              email_password: item.email_password || item.emailPass || null,
+              two_fa_code: item.two_fa_code || item.twofa || item['2fa'] || null,
+              additional_info: item,
+            };
+          });
+
+          if (fulfilledAccounts.length < shortfall) {
+            throw new Error(`MuaBanVia only returned ${fulfilledAccounts.length} of ${shortfall} needed accounts`);
+          }
+
+          // Insert the live-fulfilled accounts as available stock, tagged with their source,
+          // so the rest of the purchase flow (reserve -> sell) treats them identically to
+          // pre-stocked accounts.
+          const { data: insertedAccounts, error: insertError } = await supabaseAdmin
+            .from('individual_accounts')
+            .insert(
+              fulfilledAccounts.map((acc) => ({
+                product_group_id: product_group_id,
+                username: acc.username,
+                password: acc.password,
+                email: acc.email,
+                email_password: acc.email_password,
+                two_fa_code: acc.two_fa_code,
+                additional_info: acc.additional_info || null,
+                status: 'available',
+                fulfillment_source: 'muabanvia',
+              }))
+            )
+            .select('*');
+
+          if (insertError || !insertedAccounts) {
+            throw new Error(insertError?.message || 'Failed to record auto-fulfilled accounts');
+          }
+
+          console.log(`✅ MuaBanVia auto-fulfillment succeeded: ${insertedAccounts.length} account(s)`);
+          workingAccounts = [...workingAccounts, ...insertedAccounts];
+        } catch (fulfillErr) {
+          console.error('❌ MuaBanVia auto-fulfillment failed:', fulfillErr);
+          // Fall through to the standard out-of-stock error below.
+        }
+      }
+
+      if (workingAccounts.length < quantity) {
+        const stillAvailable = workingAccounts.length;
+        console.error(`❌ Stock mismatch: product_group_id=${product_group_id}, found=${stillAvailable}, requested=${quantity}`);
+
+        if (stillAvailable === 0) {
+          throw new Error(`OUT_OF_STOCK: ${productGroup.name} is currently out of stock. Please check back later or contact support.`);
+        } else {
+          throw new Error(`INSUFFICIENT_STOCK: Only ${stillAvailable} account(s) available for ${productGroup.name}. You requested ${quantity}.`);
+        }
       }
     }
 
@@ -138,8 +235,10 @@ serve(async (req) => {
       throw new Error(`Insufficient balance. Required: ₦${totalPrice.toLocaleString()}, Available: ₦${walletBalance.toLocaleString()}`);
     }
 
-    // 4. Reserve accounts atomically
-    const accountIds = availableAccounts.map((acc: any) => acc.id);
+    // 4. Reserve accounts atomically (workingAccounts includes any MuaBanVia auto-fulfilled
+    // accounts inserted above, already in 'available' status alongside the pre-stocked ones)
+    const accountIds = workingAccounts.slice(0, quantity).map((acc: any) => acc.id);
+    const purchasedAccounts = workingAccounts.slice(0, quantity);
 
     const { data: reservedAccounts, error: reserveError } = await supabaseAdmin
       .from('individual_accounts')
@@ -184,7 +283,7 @@ serve(async (req) => {
       status: 'completed',
       idempotency_key: idempotency_key,
       account_details: {
-        accounts: availableAccounts.map((acc: any) => ({
+        accounts: purchasedAccounts.map((acc: any) => ({
           username: acc.username,
           password: acc.password,
           email: acc.email,

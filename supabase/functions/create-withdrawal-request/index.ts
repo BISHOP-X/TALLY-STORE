@@ -102,7 +102,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { amount, bank_code, bank_name, account_number, account_name, narration } = await req.json();
+    const { amount, bank_code, bank_name, account_number, account_name, narration, source } = await req.json();
 
     // Validate required fields
     if (!amount || !bank_code || !bank_name || !account_number || !account_name) {
@@ -115,10 +115,16 @@ serve(async (req) => {
       throw new Error('Invalid amount');
     }
 
-    // Check user's crypto balance
+    // `source` selects which balance this withdrawal draws from. Defaults to 'crypto' to
+    // preserve existing behavior exactly. 'referral' lets users cash out referral_balance
+    // straight to their bank via the same SageCloud transfer flow below.
+    const balanceSource: 'crypto' | 'referral' = source === 'referral' ? 'referral' : 'crypto';
+    const balanceColumn = balanceSource === 'referral' ? 'referral_balance' : 'crypto_balance';
+
+    // Check user's balance
     const { data: userData, error: userFetchError } = await supabaseClient
       .from('profiles')
-      .select('crypto_balance')
+      .select(balanceColumn)
       .eq('id', user.id)
       .single();
 
@@ -126,7 +132,7 @@ serve(async (req) => {
       throw new Error('Failed to fetch user balance');
     }
 
-    const currentBalance = parseFloat(userData.crypto_balance || '0');
+    const currentBalance = parseFloat((userData as any)[balanceColumn] || '0');
     if (currentBalance < withdrawalAmount) {
       throw new Error(`Insufficient balance. Available: ₦${currentBalance.toLocaleString()}, Requested: ₦${withdrawalAmount.toLocaleString()}`);
     }
@@ -223,6 +229,7 @@ serve(async (req) => {
         account_name: validatedAccountName,
         status: 'pending',
         withdrawal_provider: 'sagecloud',
+        balance_source: balanceSource,
         sagecloud_reference: reference,
         sagecloud_narration: narration || `Withdrawal to ${validatedAccountName}`,
       })
@@ -242,12 +249,12 @@ serve(async (req) => {
       // Re-fetch balance to ensure we have latest value (use admin client to bypass RLS)
       const { data: freshUserData } = await supabaseAdmin
         .from('profiles')
-        .select('crypto_balance')
+        .select(balanceColumn)
         .eq('id', user.id)
         .single();
-      
-      actualCurrentBalance = parseFloat(freshUserData?.crypto_balance || '0');
-      
+
+      actualCurrentBalance = parseFloat((freshUserData as any)?.[balanceColumn] || '0');
+
       // Re-check balance is sufficient
       if (actualCurrentBalance < withdrawalAmount) {
         // Rollback withdrawal record
@@ -257,13 +264,13 @@ serve(async (req) => {
           .eq('id', withdrawalRecord.id);
         throw new Error(`Insufficient balance. Available: ₦${actualCurrentBalance.toLocaleString()}, Requested: ₦${withdrawalAmount.toLocaleString()}`);
       }
-      
+
       // Optimistic lock: only update if balance matches what we read (use admin client)
       const { data: updateData, error: balanceError } = await supabaseAdmin
         .from('profiles')
-        .update({ crypto_balance: actualCurrentBalance - withdrawalAmount })
+        .update({ [balanceColumn]: actualCurrentBalance - withdrawalAmount })
         .eq('id', user.id)
-        .eq('crypto_balance', actualCurrentBalance)
+        .eq(balanceColumn, actualCurrentBalance)
         .select()
         .single();
 
@@ -275,7 +282,7 @@ serve(async (req) => {
 
       if (updateData) {
         balanceDeducted = true;
-        console.log(`✅ Deducted ₦${withdrawalAmount} from user ${user.id}, new balance: ₦${updateData.crypto_balance}`);
+        console.log(`✅ Deducted ₦${withdrawalAmount} (${balanceColumn}) from user ${user.id}, new balance: ₦${(updateData as any)[balanceColumn]}`);
       } else {
         console.warn(`🔁 No rows updated on attempt ${attempt + 1}, retrying...`);
         await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
@@ -345,18 +352,18 @@ serve(async (req) => {
       for (let attempt = 0; attempt < 5 && !refunded; attempt++) {
         const { data: currentUserData } = await supabaseAdmin
           .from('profiles')
-          .select('crypto_balance')
+          .select(balanceColumn)
           .eq('id', user.id)
           .single();
-        
-        const currentBal = parseFloat(currentUserData?.crypto_balance || '0');
+
+        const currentBal = parseFloat((currentUserData as any)?.[balanceColumn] || '0');
         const refundedBalance = currentBal + withdrawalAmount;
-        
+
         const { data: refundData } = await supabaseAdmin
           .from('profiles')
-          .update({ crypto_balance: refundedBalance })
+          .update({ [balanceColumn]: refundedBalance })
           .eq('id', user.id)
-          .eq('crypto_balance', currentBal)
+          .eq(balanceColumn, currentBal)
           .select()
           .single();
         
