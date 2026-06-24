@@ -285,7 +285,7 @@ export default function ProductsPage() {
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
                         {index + 1}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-gray-900">
                         {productGroup.name}
                       </span>
                     </button>
@@ -311,7 +311,7 @@ export default function ProductsPage() {
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
                         {index + 1}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-gray-900">
                         {category.name}
                       </span>
                     </button>
@@ -341,7 +341,7 @@ export default function ProductsPage() {
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
                           {index + 1}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-gray-900">
                           {productGroup.name}
                         </span>
                       </button>
@@ -367,7 +367,7 @@ export default function ProductsPage() {
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
                           {index + 1}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-gray-900">
                           {productGroup.name}
                         </span>
                       </button>

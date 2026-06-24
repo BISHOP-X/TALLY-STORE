@@ -555,7 +555,7 @@ export async function getIndividualAccountsCount(): Promise<number> {
 export async function getRecentlyRestockedProductGroupIds(limit: number = 4): Promise<string[]> {
   try {
     const { data, error } = await supabase
-      .from('individual_accounts')
+      .from('individual_accounts_public')
       .select('product_group_id, created_at')
       .eq('status', 'available')
       .order('created_at', { ascending: false })
@@ -590,7 +590,7 @@ export async function getRecentlyRestockedProductGroupIds(limit: number = 4): Pr
 export async function getAvailableAccountIdsByProductGroup(): Promise<Record<string, string>> {
   try {
     const { data, error } = await supabase
-      .from('individual_accounts')
+      .from('individual_accounts_public')
       .select('id, product_group_id, status')
       .limit(5000)
 
@@ -1673,11 +1673,16 @@ export async function recordTopUpTransaction(
   }
 }
 
-// Get individual account by ID
+// Get individual account by ID. Reads from individual_accounts_public (a
+// safe view exposing only id/product_group_id/username/status/created_at)
+// since this is used for pre-purchase browsing (Product Detail / Checkout
+// preview) where the actual credentials must never be fetched client-side.
+// Run supabase/migrations/20260624000000_add_individual_accounts_public_view.sql
+// in Supabase for this view to exist.
 export async function getIndividualAccountById(accountId: string): Promise<IndividualAccount | null> {
   try {
     const { data, error } = await supabase
-      .from('individual_accounts')
+      .from('individual_accounts_public')
       .select('*')
       .eq('id', accountId)
       .eq('status', 'available')
