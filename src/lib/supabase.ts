@@ -2090,6 +2090,44 @@ export async function withdrawReferralBalance(userId: string): Promise<{ success
   }
 }
 
+// Global "Recent Activity" social-proof feed item (masked, safe to show to
+// logged-out visitors too — see get_recent_activity_feed() in
+// add-global-activity-feed.sql for what's actually exposed).
+export interface GlobalActivityItem {
+  kind: 'deposit' | 'order'
+  maskedName: string
+  amount: number
+  label: string
+  createdAt: string
+}
+
+// Fetches real, masked site-wide activity via the get_recent_activity_feed
+// Postgres function (SECURITY DEFINER — never exposes raw user rows). Safe to
+// call from anon (logged-out) context.
+export async function getGlobalActivityFeed(limit = 12): Promise<GlobalActivityItem[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_recent_activity_feed', { p_limit: limit })
+    if (error) throw error
+
+    return ((data || []) as Array<{
+      kind: 'deposit' | 'order'
+      masked_name: string
+      amount: number
+      label: string
+      created_at: string
+    }>).map((row) => ({
+      kind: row.kind,
+      maskedName: row.masked_name,
+      amount: Number(row.amount) || 0,
+      label: row.label,
+      createdAt: row.created_at,
+    }))
+  } catch (error) {
+    console.error('Error loading global activity feed:', error)
+    return []
+  }
+}
+
 // Get total user count, formatted for stat displays (e.g. "1,204" or "12.3K")
 export function formatCount(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
