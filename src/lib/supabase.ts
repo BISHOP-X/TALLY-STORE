@@ -591,22 +591,30 @@ export async function getAvailableAccountIdsByProductGroup(): Promise<Record<str
   try {
     const { data, error } = await supabase
       .from('individual_accounts')
-      .select('id, product_group_id')
-      .eq('status', 'available')
-      .limit(2000)
+      .select('id, product_group_id, status')
+      .limit(5000)
 
     if (error) {
       console.error('❌ Error fetching available account map:', error)
       throw error
     }
 
-    const map: Record<string, string> = {}
+    // Prefer an 'available' account per product group, but fall back to
+    // ANY account (sold/reserved) if that's all that exists, so tiles can
+    // still link straight to the product detail page instead of bouncing
+    // to the category page just because the only known account isn't
+    // currently in stock.
+    const availableMap: Record<string, string> = {}
+    const anyMap: Record<string, string> = {}
     for (const row of data || []) {
-      if (!map[row.product_group_id]) {
-        map[row.product_group_id] = row.id
+      if (!anyMap[row.product_group_id]) {
+        anyMap[row.product_group_id] = row.id
+      }
+      if (row.status === 'available' && !availableMap[row.product_group_id]) {
+        availableMap[row.product_group_id] = row.id
       }
     }
-    return map
+    return { ...anyMap, ...availableMap }
   } catch (error) {
     console.error('❌ Failed to fetch available account map:', error)
     return {}

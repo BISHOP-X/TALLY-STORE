@@ -75,26 +75,23 @@ export default function ProductsPage() {
           throw new Error('Failed to connect to database')
         }
 
-        // Load categories and product groups
-        const [categoriesData, productGroupsData] = await Promise.all([
+        // Load categories, product groups, and the account map together so
+        // the ranked tiles can link straight to a product on first render
+        // instead of racing ahead of the account lookup.
+        const [categoriesData, productGroupsData, accountMapData] = await Promise.all([
           getCategories(),
-          getAllProductGroups()
+          getAllProductGroups(),
+          getAvailableAccountIdsByProductGroup(),
         ])
 
         setCategories(categoriesData)
         setProductGroups(productGroupsData)
+        setAccountMap(accountMapData)
         setError(null)
 
         // Load recently restocked product groups for the "Refilled" section
         getRecentlyRestockedProductGroupIds(4).then(setRestockedIds).catch(err => {
           console.error('Error loading restocked product groups:', err)
-        })
-
-        // Map product_group_id -> a real available account id, so the
-        // ranked tiles (Popular Products / Refilled / New) can link to an
-        // actual purchasable product detail page instead of a 404.
-        getAvailableAccountIdsByProductGroup().then(setAccountMap).catch(err => {
-          console.error('Error loading available account map:', err)
         })
 
       } catch (err) {
@@ -267,12 +264,12 @@ export default function ProductsPage() {
                       type="button"
                       title={productGroup.name}
                       onClick={() => goToProduct(productGroup)}
-                      className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
+                      className="flex items-center gap-2 rounded-lg bg-white hover:bg-white/90 transition-colors px-2.5 py-2 text-left overflow-hidden"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-primary shrink-0">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
                         {index + 1}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
+                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
                         {productGroup.name}
                       </span>
                     </button>
@@ -293,12 +290,12 @@ export default function ProductsPage() {
                       type="button"
                       title={category.name}
                       onClick={() => navigate(`/category/${category.id}`)}
-                      className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
+                      className="flex items-center gap-2 rounded-lg bg-white hover:bg-white/90 transition-colors px-2.5 py-2 text-left overflow-hidden"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-primary shrink-0">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
                         {index + 1}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
+                      <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
                         {category.name}
                       </span>
                     </button>
