@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Plus, Minus, ShoppingCart, Package, Star } from 'lucide-react'
 import { type ProductGroup, type Category } from '@/lib/supabase'
-import UsdPrice from '@/components/UsdPrice'
+import { useCurrency } from '@/contexts/CurrencyContext'
 
 interface ProductTemplateCardProps {
   productGroup: ProductGroup
@@ -19,6 +19,7 @@ export default function ProductTemplateCard({
   onAddToCart 
 }: ProductTemplateCardProps) {
   const [quantity, setQuantity] = useState(1)
+  const { formatPrice } = useCurrency()
 
   const handleQuantityChange = (newQuantity: number) => {
     if (newQuantity >= 1 && newQuantity <= productGroup.stock_count) {
@@ -37,145 +38,90 @@ export default function ProductTemplateCard({
 
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
-      <CardHeader className="pb-4">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <CardTitle className="group-hover:text-primary transition-colors text-lg">
-                {productGroup.name}
-              </CardTitle>
-              <Badge variant="outline" className="text-xs">
-                {category.name}
-              </Badge>
-            </div>
-            
-            <p className="text-sm text-muted-foreground mb-3">
-              {productGroup.description}
-            </p>
-
-            {/* Features */}
-            {productGroup.features && productGroup.features.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-3">
-                {productGroup.features.slice(0, 3).map((feature, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs">
-                    {feature}
-                  </Badge>
-                ))}
-                {productGroup.features.length > 3 && (
-                  <Badge variant="secondary" className="text-xs">
-                    +{productGroup.features.length - 3} more
-                  </Badge>
-                )}
-              </div>
-            )}
-          </div>
+      <CardHeader className="pb-2 px-3 pt-3">
+        <div className="flex items-center gap-1.5 mb-1">
+          <CardTitle className="group-hover:text-primary transition-colors text-sm truncate">
+            {productGroup.name}
+          </CardTitle>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+            {category.name}
+          </Badge>
         </div>
+        <p className="text-xs text-muted-foreground line-clamp-1">
+          {productGroup.description}
+        </p>
       </CardHeader>
-      
-      <CardContent className="pt-0 space-y-4">
+
+      <CardContent className="pt-0 px-3 pb-3 space-y-2">
         {/* Stock and Price Info */}
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Package className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">
-              {isOutOfStock ? (
-                <Badge variant="destructive">Out of Stock</Badge>
-              ) : (
-                <>
-                  <span className={isLowStock ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
-                    {productGroup.stock_count} available
-                  </span>
-                  {isLowStock && <Badge variant="outline" className="ml-2">Low Stock</Badge>}
-                </>
-              )}
-            </span>
-          </div>
+          <span className="text-xs">
+            {isOutOfStock ? (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Out of Stock</Badge>
+            ) : (
+              <span className={isLowStock ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
+                {productGroup.stock_count} available
+              </span>
+            )}
+          </span>
           <div className="text-right">
-            <div className="text-2xl font-bold text-primary">
-              ₦{productGroup.price.toLocaleString()}
+            <div className="text-base font-bold text-primary leading-tight">
+              {formatPrice(productGroup.price)}
             </div>
-            <UsdPrice ngnAmount={productGroup.price} />
-            <div className="text-xs text-muted-foreground">per account</div>
           </div>
         </div>
 
         {/* Quantity Selection */}
         {!isOutOfStock && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Quantity:</label>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => handleQuantityChange(quantity - 1)}
-                  disabled={quantity <= 1}
-                >
-                  <Minus className="h-3 w-3" />
-                </Button>
-                
-                <Input
-                  type="number"
-                  min="1"
-                  max={productGroup.stock_count}
-                  value={quantity}
-                  onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
-                  className="w-16 h-8 text-center"
-                />
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => handleQuantityChange(quantity + 1)}
-                  disabled={quantity >= productGroup.stock_count}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => handleQuantityChange(quantity - 1)}
+                disabled={quantity <= 1}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
 
-            {/* Total Price */}
-            <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-              <span className="text-sm font-medium">Total:</span>
-              <span className="text-lg font-bold text-primary">
-                ₦{(productGroup.price * quantity).toLocaleString()}
-              </span>
+              <Input
+                type="number"
+                min="1"
+                max={productGroup.stock_count}
+                value={quantity}
+                onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                className="w-10 h-6 text-center px-1 text-xs"
+              />
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => handleQuantityChange(quantity + 1)}
+                disabled={quantity >= productGroup.stock_count}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
             </div>
+            <span className="text-xs font-semibold text-primary">
+              {formatPrice(productGroup.price * quantity)}
+            </span>
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="space-y-2">
-          {isOutOfStock ? (
-            <Button disabled className="w-full">
-              <Package className="h-4 w-4 mr-2" />
-              Out of Stock
-            </Button>
-          ) : (
-            <Button type="button" onClick={handleAddToCart} className="w-full">
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              Purchase Now
-            </Button>
-          )}
-        </div>
-
-        {/* Quality Indicators */}
-        <div className="flex justify-center gap-4 text-xs text-muted-foreground pt-2 border-t">
-          <span className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            Verified
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            Instant Delivery
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-            Premium Quality
-          </span>
-        </div>
+        {/* Action Button */}
+        {isOutOfStock ? (
+          <Button disabled size="sm" className="w-full h-8 text-xs">
+            <Package className="h-3.5 w-3.5 mr-1.5" />
+            Out of Stock
+          </Button>
+        ) : (
+          <Button type="button" size="sm" onClick={handleAddToCart} className="w-full h-8 text-xs">
+            <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
+            Purchase Now
+          </Button>
+        )}
       </CardContent>
     </Card>
   )

@@ -12,10 +12,12 @@ import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { useAuth } from '@/contexts/SimpleAuth'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import { getUserTransactions } from '@/lib/supabase'
 
 export default function ProfilePage() {
   const { user, walletBalance } = useAuth()
+  const { formatPrice } = useCurrency()
   const [transactions, setTransactions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -119,7 +121,7 @@ export default function ProfilePage() {
                 <CardContent className="space-y-4">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Wallet Balance</span>
-                    <span className="font-medium text-green-600">₦{walletBalance.toLocaleString()}</span>
+                    <span className="font-medium text-green-600">{formatPrice(walletBalance)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Spent</span>

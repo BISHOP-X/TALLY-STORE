@@ -211,7 +211,7 @@ export default function CategoryPage() {
         </div>
 
         {/* Product Templates */}
-        <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 grid-cols-2 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredProductGroups.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <ShoppingCart className="h-16 w-16 mx-auto text-muted-foreground mb-4 opacity-50" />

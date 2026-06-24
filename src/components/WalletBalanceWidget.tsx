@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/SimpleAuth'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Wallet, RefreshCw, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,7 @@ export default function WalletBalanceWidget({
   size = 'md' 
 }: WalletBalanceWidgetProps) {
   const { walletBalance, walletLoading, refreshWalletBalance, isAdmin } = useAuth()
+  const { formatPrice } = useCurrency()
 
   // Don't show for admin users
   if (isAdmin) return null
@@ -43,7 +45,7 @@ export default function WalletBalanceWidget({
             {walletLoading ? (
               <Loader2 className="h-5 w-5 animate-spin inline" />
             ) : (
-              <>₦{walletBalance?.toLocaleString() || '0.00'}</>
+              <>{formatPrice(walletBalance || 0)}</>
             )}
           </span>
         </div>

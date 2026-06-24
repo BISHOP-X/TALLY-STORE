@@ -5,12 +5,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from '@/contexts/SimpleAuth'
+import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { ProtectedRoute, PublicRoute } from '@/components/SimpleProtectedRoute'
 import InstallPromptBanner from '@/components/InstallPromptBanner'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 import MaintenancePage from '@/components/MaintenancePage'
 import GlobalPaymentChecker from '@/components/GlobalPaymentChecker'
 import WhatsAppSupportUpdateDialog from '@/components/WhatsAppSupportUpdateDialog'
+import GlobalActivityFeed from '@/components/GlobalActivityFeed'
 
 // ⚠️ MAINTENANCE MODE - Set to false to restore normal site
 const MAINTENANCE_MODE = false;
@@ -102,7 +104,9 @@ const App = () => {
           <WhatsAppSupportUpdateDialog />
           <InstallPromptBanner />
           <AuthProvider>
+          <CurrencyProvider>
             <GlobalPaymentChecker />
+            <GlobalActivityFeed />
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Index />} />
@@ -278,6 +282,7 @@ const App = () => {
               {/* Catch all route */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+          </CurrencyProvider>
           </AuthProvider>
         </TooltipProvider>
       </ThemeProvider>

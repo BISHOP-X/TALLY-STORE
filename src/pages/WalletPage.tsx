@@ -18,11 +18,13 @@ import Footer from '@/components/Footer'
 import { TopUpWallet } from '@/components/TopUpWallet'
 import { PaymentVerificationCard } from '@/components/PaymentVerificationCard'
 import { useAuth } from '@/contexts/SimpleAuth'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import { useToast } from '@/hooks/use-toast'
 import { getUserTransactions } from '@/lib/supabase'
 
 export default function WalletPage() {
   const { user, walletBalance, walletLoading, refreshWalletBalance } = useAuth()
+  const { formatPrice } = useCurrency()
   const { toast } = useToast()
   const [transactions, setTransactions] = useState<any[]>([])
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
@@ -123,7 +125,7 @@ export default function WalletPage() {
                   {walletLoading ? (
                     <span className="inline-block h-8 w-32 bg-white/20 rounded animate-pulse" />
                   ) : (
-                    <>₦{walletBalance.toLocaleString()}</>
+                    <>{formatPrice(walletBalance)}</>
                   )}
                 </div>
                 <p className="text-white/80 text-sm">

@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Search, Grid, List, Star, Shield, TrendingUp, Loader2, ShoppingCart } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Search, Grid, List, Loader2, ShoppingCart } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import ProductTemplateCard from '@/components/ProductTemplateCard'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { getCategories, getAllProductGroups, testConnection, type Category, type ProductGroup } from '@/lib/supabase'
-import StatsBar from '@/components/StatsBar'
 import CategorySidebar from '@/components/CategorySidebar'
 
 export default function ProductsPage() {
@@ -171,22 +169,6 @@ export default function ProductsPage() {
     )
   }
 
-  // Filter categories based on search AND available products
-  const filteredCategories = categories.filter(category => {
-    // Check if category matches search
-    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (category.description && category.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    
-    // Check if category has available products
-    const hasAvailableProducts = productGroups.some(pg => 
-      pg.category_id === category.id && 
-      pg.is_active && 
-      pg.stock_count > 0
-    )
-    
-    return matchesSearch && hasAvailableProducts
-  })
-
   // Filter product groups for direct product template display
   const filteredProductGroups = productGroups.filter(productGroup => {
     const category = categories.find(cat => cat.id === productGroup.category_id)
@@ -206,11 +188,6 @@ export default function ProductsPage() {
       {/* Wallet Balance Widget */}
       <div className="container mx-auto px-6 pt-24 pb-4">
         <WalletBalanceWidget showRefresh={true} />
-      </div>
-
-      {/* Stats */}
-      <div className="container mx-auto px-6 pb-4">
-        <StatsBar />
       </div>
 
       {/* Hero Section */}
@@ -314,9 +291,9 @@ export default function ProductsPage() {
         </div>
 
         {/* Product Templates Grid */}
-        <div className={`grid gap-6 mb-12 ${
-          viewMode === 'grid' 
-            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' 
+        <div className={`grid gap-3 sm:gap-4 mb-12 ${
+          viewMode === 'grid'
+            ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
             : 'grid-cols-1 max-w-4xl mx-auto'
         }`}>
           {filteredProductGroups.length === 0 ? (
@@ -343,110 +320,6 @@ export default function ProductsPage() {
         </div>
         </div>
         </div>
-
-        {/* Categories Overview */}
-        <div className="mb-8">
-          <h3 className="text-xl font-semibold mb-4">Browse by Category</h3>
-        </div>
-
-        {/* Trust Indicators */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <Card className="text-center">
-            <CardContent className="pt-6">
-              <Shield className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Verified Accounts</h3>
-              <p className="text-sm text-muted-foreground">
-                All accounts are thoroughly verified before listing
-              </p>
-            </CardContent>
-          </Card>
-          
-          <Card className="text-center">
-            <CardContent className="pt-6">
-              <Star className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Premium Quality</h3>
-              <p className="text-sm text-muted-foreground">
-                High-engagement accounts with real followers
-              </p>
-            </CardContent>
-          </Card>
-          
-          <Card className="text-center">
-            <CardContent className="pt-6">
-              <TrendingUp className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Instant Delivery</h3>
-              <p className="text-sm text-muted-foreground">
-                Receive account credentials immediately after purchase
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Categories Grid */}
-        <div className={`grid gap-6 ${
-          viewMode === 'grid' 
-            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' 
-            : 'grid-cols-1'
-        }`}>
-          {filteredCategories.map((category) => (
-              <Card key={category.id} className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/20">
-                <CardHeader className="pb-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CardTitle className="group-hover:text-primary transition-colors">
-                          {category.name}
-                        </CardTitle>
-                        {/* Show popular badge if category has product groups */}
-                        {productGroups.filter(pg => pg.category_id === category.id).length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            Available
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {category.description || 'Premium social media accounts'}
-                      </p>
-                    </div>
-                  </div>
-                </CardHeader>
-                
-                <CardContent className="pt-0">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">
-                      {productGroups.filter(pg => pg.category_id === category.id).length} product types
-                    </span>
-                    <span className="font-semibold text-primary">
-                      {productGroups
-                        .filter(pg => pg.category_id === category.id)
-                        .map(pg => `₦${pg.price}`)
-                        .slice(0, 1)[0] || 'From ₦25'}+
-                    </span>
-                  </div>
-                  
-                  <Button 
-                    className="w-full mt-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
-                    onClick={() => navigate(`/category/${category.id}`)}
-                  >
-                    Browse Accounts
-                  </Button>
-                </CardContent>
-              </Card>
-          ))}
-        </div>
-
-        {/* No Results */}
-        {filteredCategories.length === 0 && (
-          <div className="text-center py-12">
-            <h3 className="text-lg font-semibold mb-2">No categories found</h3>
-            <p className="text-muted-foreground mb-4">
-              Try adjusting your search terms
-            </p>
-            <Button variant="outline" onClick={() => setSearchTerm('')}>
-              Clear Search
-            </Button>
-          </div>
-        )}
       </div>
 
       <Footer />

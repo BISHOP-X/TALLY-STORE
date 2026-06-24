@@ -4,6 +4,7 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 import { Menu, X, User, LogOut, Wallet, Download, Bitcoin, Gift } from "lucide-react"
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
+import { useCurrency } from '@/contexts/CurrencyContext'
 import InstallAppDialog from '@/components/InstallAppDialog'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { useToast } from '@/hooks/use-toast'
@@ -16,6 +17,7 @@ export default function Navbar() {
   const [showInstallDialog, setShowInstallDialog] = useState(false)
   const [announcementVisible, setAnnouncementVisible] = useState(true)
   const { user, signOut, isAdmin, walletBalance, walletLoading } = useAuth()
+  const { currency, toggleCurrency, formatPrice } = useCurrency()
   const { canInstall, isInstalled, isAndroid, isIOS, installApp } = usePWAInstall()
   const { toast } = useToast()
   const navigate = useNavigate()
@@ -223,7 +225,7 @@ export default function Navbar() {
                     {walletLoading ? (
                       <span className="inline-block h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
                     ) : (
-                      <>₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}</>
+                      <>{formatPrice(mockProfile.wallet_balance || 0)}</>
                     )}
                   </Link>
                 )}
@@ -250,12 +252,29 @@ export default function Navbar() {
                 </Link>
               </div>
             )}
-            
+
+            <button
+              type="button"
+              onClick={toggleCurrency}
+              title={currency === 'NGN' ? 'Switch to USD' : 'Switch to NGN'}
+              className="h-9 px-2.5 rounded-md border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              {currency === 'NGN' ? '₦ NGN' : '$ USD'}
+            </button>
+
             <ThemeToggle />
           </div>
 
           {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={toggleCurrency}
+              title={currency === 'NGN' ? 'Switch to USD' : 'Switch to NGN'}
+              className="h-9 px-2 rounded-md border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              {currency === 'NGN' ? '₦' : '$'}
+            </button>
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -344,7 +363,7 @@ export default function Navbar() {
                         {walletLoading ? (
                           <span className="inline-block h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
                         ) : (
-                          <>Balance: ₦{mockProfile.wallet_balance?.toLocaleString() || '0.00'}</>
+                          <>Balance: {formatPrice(mockProfile.wallet_balance || 0)}</>
                         )}
                       </div>
                     )}
