@@ -621,6 +621,43 @@ export async function getAvailableAccountIdsByProductGroup(): Promise<Record<str
   }
 }
 
+// Real "most bought" ranking for the Popular Products section, computed from
+// completed orders rather than a stock-count proxy. Sums the quantity stored
+// in each order's account_details JSON (falls back to 1 per order if missing)
+// per product_group_id, and returns the top N ids, highest units-sold first.
+export async function getTopSellingProductGroupIds(limit: number = 8): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('product_group_id, account_details')
+      .eq('status', 'completed')
+      .limit(5000)
+
+    if (error) {
+      console.error('❌ Error fetching orders for top sellers:', error)
+      throw error
+    }
+
+    const totals: Record<string, number> = {}
+    for (const row of data || []) {
+      if (!row.product_group_id) continue
+      const details = row.account_details as { quantity?: number } | null
+      const qty = details && typeof details.quantity === 'number' && details.quantity > 0
+        ? details.quantity
+        : 1
+      totals[row.product_group_id] = (totals[row.product_group_id] || 0) + qty
+    }
+
+    return Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([id]) => id)
+  } catch (error) {
+    console.error('❌ Failed to fetch top selling product groups:', error)
+    return []
+  }
+}
+
 export async function deleteIndividualAccount(id: string): Promise<boolean> {
   try {
     // Get the account to know which product group to update

@@ -14,6 +14,7 @@ import {
   testConnection,
   getRecentlyRestockedProductGroupIds,
   getAvailableAccountIdsByProductGroup,
+  getTopSellingProductGroupIds,
   type Category,
   type ProductGroup,
 } from '@/lib/supabase'
@@ -29,6 +30,7 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null)
   const [restockedIds, setRestockedIds] = useState<string[]>([])
   const [accountMap, setAccountMap] = useState<Record<string, string>>({})
+  const [topSellingIds, setTopSellingIds] = useState<string[]>([])
 
   // Existing UI state
   const [searchTerm, setSearchTerm] = useState('')
@@ -78,15 +80,17 @@ export default function ProductsPage() {
         // Load categories, product groups, and the account map together so
         // the ranked tiles can link straight to a product on first render
         // instead of racing ahead of the account lookup.
-        const [categoriesData, productGroupsData, accountMapData] = await Promise.all([
+        const [categoriesData, productGroupsData, accountMapData, topSellingData] = await Promise.all([
           getCategories(),
           getAllProductGroups(),
           getAvailableAccountIdsByProductGroup(),
+          getTopSellingProductGroupIds(8),
         ])
 
         setCategories(categoriesData)
         setProductGroups(productGroupsData)
         setAccountMap(accountMapData)
+        setTopSellingIds(topSellingData)
         setError(null)
 
         // Load recently restocked product groups for the "Refilled" section
@@ -212,12 +216,24 @@ export default function ProductsPage() {
     return matchesSearch && matchesCategory && productGroup.is_active
   })
 
-  // Popular Products: active, in-stock products with the lowest remaining
-  // stock (a reasonable proxy for "selling fast" / most popular), capped at 8.
-  const popularProductGroups = [...productGroups]
-    .filter((pg) => pg.is_active && pg.stock_count > 0)
+  // Popular Products: real "most bought" ranking computed from completed
+  // orders (topSellingIds), in rank order. If there isn't enough real sales
+  // data yet to fill 8 slots, top up the rest with a stock-count proxy
+  // ("selling fast" = low remaining stock) so the section is never sparse.
+  const topSellingProductGroups = topSellingIds
+    .map((id) => productGroups.find((pg) => pg.id === id))
+    .filter((pg): pg is ProductGroup => !!pg && pg.is_active && pg.stock_count > 0)
+
+  const stockProxyFillIns = [...productGroups]
+    .filter(
+      (pg) =>
+        pg.is_active &&
+        pg.stock_count > 0 &&
+        !topSellingProductGroups.some((p) => p.id === pg.id),
+    )
     .sort((a, b) => a.stock_count - b.stock_count)
-    .slice(0, 8)
+
+  const popularProductGroups = [...topSellingProductGroups, ...stockProxyFillIns].slice(0, 8)
 
   // Popular Categories: ranked by number of active products, capped at 8.
   const popularCategories = [...categories]
@@ -314,15 +330,18 @@ export default function ProductsPage() {
                 <h2 className="text-2xl font-bold mb-4">Refilled</h2>
                 {restockedProductGroups.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2">
-                    {restockedProductGroups.map((productGroup) => (
+                    {restockedProductGroups.map((productGroup, index) => (
                       <button
                         key={productGroup.id}
                         type="button"
                         title={productGroup.name}
                         onClick={() => goToProduct(productGroup)}
-                        className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
+                        className="flex items-center gap-2 rounded-lg bg-white hover:bg-white/90 transition-colors px-2.5 py-2 text-left overflow-hidden"
                       >
-                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
                           {productGroup.name}
                         </span>
                       </button>
@@ -337,15 +356,18 @@ export default function ProductsPage() {
                 <h2 className="text-2xl font-bold mb-4">New</h2>
                 {newProductGroups.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2">
-                    {newProductGroups.map((productGroup) => (
+                    {newProductGroups.map((productGroup, index) => (
                       <button
                         key={productGroup.id}
                         type="button"
                         title={productGroup.name}
                         onClick={() => goToProduct(productGroup)}
-                        className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-2.5 py-2 text-left overflow-hidden"
+                        className="flex items-center gap-2 rounded-lg bg-white hover:bg-white/90 transition-colors px-2.5 py-2 text-left overflow-hidden"
                       >
-                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary shrink-0">
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] leading-tight text-foreground">
                           {productGroup.name}
                         </span>
                       </button>
