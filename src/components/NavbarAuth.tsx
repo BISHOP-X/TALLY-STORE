@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
-import { Menu, X, User, LogOut, Wallet, Download, Bitcoin } from "lucide-react"
+import { Menu, X, User, LogOut, Wallet, Download, Bitcoin, Gift } from "lucide-react"
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/SimpleAuth'
 import InstallAppDialog from '@/components/InstallAppDialog'
@@ -178,6 +178,12 @@ export default function Navbar() {
                           Wallet
                         </Link>
                       )}
+                      {!isAdmin && (
+                        <Link to="/referrals" className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                          <Gift className="h-4 w-4" />
+                          Referrals
+                        </Link>
+                      )}
                       <Link to="/crypto-exchange" className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                         <Bitcoin className="h-4 w-4" />
                         Crypto Exchange
@@ -343,13 +349,22 @@ export default function Navbar() {
                       </div>
                     )}
                     
+                    {!isAdmin && (
+                      <Link to="/referrals" onClick={() => setIsMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start gap-2">
+                          <Gift className="h-4 w-4" />
+                          Referrals
+                        </Button>
+                      </Link>
+                    )}
+
                     <Link to="/crypto-exchange" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="ghost" className="w-full justify-start gap-2">
                         <Bitcoin className="h-4 w-4" />
                         Crypto Exchange
                       </Button>
                     </Link>
-                    
+
                     <Link to="/bills" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="ghost" className="w-full justify-start gap-2">
                         Bills Payment

@@ -1,7 +1,21 @@
 import { useEffect, useRef } from 'react';
-import { verifyAndCreditWalletSecure } from '@/lib/supabase';
+import { verifyAndCreditWalletSecure, checkTransactionByReference } from '@/lib/supabase';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { useToast } from '@/hooks/use-toast';
+
+// Ercas Pay has a server-side "verify and credit" edge function the client can call
+// directly. PocketFi credits the wallet via webhook (api/webhook-pocketfi.ts) instead, so
+// for PocketFi we just poll the transactions table to see if that webhook has landed yet.
+async function checkPocketFiTransaction(transactionRef: string) {
+  const result = await checkTransactionByReference(transactionRef)
+  if (result.found && result.status === 'completed') {
+    return { success: true, amount: result.amount, already_processed: false }
+  }
+  if (result.found) {
+    return { success: false, error: result.status || 'failed' }
+  }
+  return { success: false, error: 'PENDING' }
+}
 
 export function usePaymentStatusChecker() {
   const { user, refreshWalletBalance } = useAuth();
@@ -55,9 +69,11 @@ export function usePaymentStatusChecker() {
         processingTransactionsRef.current.add(transactionRef);
         isCheckingRef.current = true;
         
-        // SECURE: Use Edge Function to verify AND credit wallet server-side
-        const result = await verifyAndCreditWalletSecure(transactionRef);
-        console.log('📊 Secure verification result:', result);
+        // Use the right verification path for the gateway this top-up was started with
+        const result = transaction.gateway === 'pocketfi'
+          ? await checkPocketFiTransaction(transactionRef)
+          : await verifyAndCreditWalletSecure(transactionRef);
+        console.log('📊 Verification result:', result);
         
         if (result.success) {
           // Payment successful and wallet credited
@@ -177,9 +193,11 @@ export function usePaymentStatusChecker() {
             processingTransactionsRef.current.add(transactionRef);
             isCheckingRef.current = true;
             
-            // SECURE: Use Edge Function to verify AND credit wallet server-side
-            const result = await verifyAndCreditWalletSecure(transactionRef);
-            console.log('📋 Focus secure verification result:', result);
+            // Use the right verification path for the gateway this top-up was started with
+            const result = transaction.gateway === 'pocketfi'
+              ? await checkPocketFiTransaction(transactionRef)
+              : await verifyAndCreditWalletSecure(transactionRef);
+            console.log('📋 Focus verification result:', result);
             
             if (result.success) {
               console.log('💰 Focus check: Payment verified and wallet credited:', result.amount);

@@ -9,6 +9,7 @@ import { ArrowLeft, ShoppingCart, Shield, Clock, Star, Check, AlertTriangle, Loa
 import NavbarAuth from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import { BackButton, BackToProducts } from '@/components/ui/back-button'
+import UsdPrice from '@/components/UsdPrice'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { 
   getIndividualAccountById,
@@ -190,6 +191,7 @@ export default function ProductDetailPage() {
             {/* Price */}
             <div className="flex items-center gap-3">
               <span className="text-3xl font-bold text-primary">₦{productGroup.price.toLocaleString()}</span>
+              <UsdPrice ngnAmount={productGroup.price} className="text-sm text-muted-foreground" />
             </div>
 
             {/* Account Features */}

@@ -7,11 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CreditCard, Loader2, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { initiatePayment, type PaymentData } from '@/services/ercaspay';
+import { initiatePocketFiPayment } from '@/services/pocketfi';
 import { useToast } from '@/hooks/use-toast';
+import { useExchangeRate } from '@/hooks/useExchangeRate';
 
 interface TopUpWalletProps {
   onSuccess?: () => void;
 }
+
+type Gateway = 'ercaspay' | 'pocketfi';
 
 const QUICK_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 
@@ -19,8 +23,10 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [gateway, setGateway] = useState<Gateway>('ercaspay');
   const { user } = useAuth();
   const { toast } = useToast();
+  const { ngnToUsd } = useExchangeRate();
 
   const handleQuickAmount = (quickAmount: number) => {
     setAmount(quickAmount.toString());
@@ -133,9 +139,11 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
         }
       };
 
-      console.log('🚀 Initiating wallet top-up...', paymentData);
+      console.log(`🚀 Initiating wallet top-up via ${gateway}...`, paymentData);
 
-      const response = await initiatePayment(paymentData);
+      const response = gateway === 'pocketfi'
+        ? await initiatePocketFiPayment(paymentData)
+        : await initiatePayment(paymentData);
 
       if (response.success && response.data?.checkoutUrl) {
         // Validate checkout URL for security
@@ -158,7 +166,8 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
         localStorage.setItem('pending_topup', JSON.stringify({
           transactionReference: response.data.transactionReference,
           amount: topUpAmount,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          gateway
         }));
 
         // Check if payment window is still open and not blocked
@@ -236,6 +245,29 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Payment Gateway Selection */}
+          <div className="space-y-3">
+            <Label>Payment Gateway</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={gateway === 'ercaspay' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setGateway('ercaspay')}
+              >
+                Ercas Pay
+              </Button>
+              <Button
+                type="button"
+                variant={gateway === 'pocketfi' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setGateway('pocketfi')}
+              >
+                PocketFi
+              </Button>
+            </div>
+          </div>
+
           {/* Quick Amount Buttons */}
           <div className="space-y-3">
             <Label>Quick Amounts</Label>
@@ -284,6 +316,14 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
                     <span className="font-medium">{formatCurrency(parseInt(amount))}</span>
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>USD Equivalent:</span>
+                    <span>≈ ${ngnToUsd(parseInt(amount)).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Gateway:</span>
+                    <span>{gateway === 'pocketfi' ? 'PocketFi' : 'Ercas Pay'}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Payment Methods:</span>
                     <span>Card, Bank Transfer, USSD</span>
                   </div>
@@ -320,7 +360,7 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
 
           {/* Security Note */}
           <div className="text-xs text-muted-foreground text-center">
-            🔒 Secure payment powered by Ercas Pay
+            🔒 Secure payment powered by {gateway === 'pocketfi' ? 'PocketFi' : 'Ercas Pay'}
           </div>
         </div>
       </DialogContent>

@@ -8,11 +8,12 @@ import { Search, ArrowLeft, Loader2, ShoppingCart } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import ProductTemplateCard from '@/components/ProductTemplateCard'
+import CategorySidebar from '@/components/CategorySidebar'
 import { useAuth } from '@/contexts/SimpleAuth'
-import { 
-  getCategories, 
+import {
+  getCategories,
   getAllProductGroups,
-  type Category, 
+  type Category,
   type ProductGroup
 } from '@/lib/supabase'
 
@@ -20,10 +21,12 @@ export default function CategoryPage() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  
+
   // State for real Supabase data
   const [category, setCategory] = useState<Category | null>(null)
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([])
+  const [allCategories, setAllCategories] = useState<Category[]>([])
+  const [allProductGroups, setAllProductGroups] = useState<ProductGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
@@ -77,6 +80,8 @@ export default function CategoryPage() {
 
         setCategory(currentCategory)
         setProductGroups(categoryProductGroups)
+        setAllCategories(categoriesData)
+        setAllProductGroups(productGroupsData)
         setLoading(false)
         
         console.log('✅ Category data loaded:', {
@@ -184,6 +189,15 @@ export default function CategoryPage() {
 
       {/* Content */}
       <div className="container mx-auto px-6 py-8">
+      <div className="md:flex md:gap-8">
+        <aside className="hidden md:block md:w-56 shrink-0">
+          <CategorySidebar
+            categories={allCategories}
+            productGroups={allProductGroups}
+            selectedCategory={categoryId}
+          />
+        </aside>
+        <div className="flex-1">
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div className="relative flex-1 max-w-md">
@@ -233,6 +247,8 @@ export default function CategoryPage() {
               />
             ))
           )}
+        </div>
+        </div>
         </div>
       </div>
 

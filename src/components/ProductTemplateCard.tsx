@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Plus, Minus, ShoppingCart, Package, Star } from 'lucide-react'
 import { type ProductGroup, type Category } from '@/lib/supabase'
+import UsdPrice from '@/components/UsdPrice'
 
 interface ProductTemplateCardProps {
   productGroup: ProductGroup
@@ -93,6 +94,7 @@ export default function ProductTemplateCard({
             <div className="text-2xl font-bold text-primary">
               ₦{productGroup.price.toLocaleString()}
             </div>
+            <UsdPrice ngnAmount={productGroup.price} />
             <div className="text-xs text-muted-foreground">per account</div>
           </div>
         </div>

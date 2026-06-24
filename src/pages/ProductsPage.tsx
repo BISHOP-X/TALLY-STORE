@@ -10,6 +10,8 @@ import Footer from '@/components/Footer'
 import ProductTemplateCard from '@/components/ProductTemplateCard'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { getCategories, getAllProductGroups, testConnection, type Category, type ProductGroup } from '@/lib/supabase'
+import StatsBar from '@/components/StatsBar'
+import CategorySidebar from '@/components/CategorySidebar'
 
 export default function ProductsPage() {
   const navigate = useNavigate()
@@ -205,7 +207,12 @@ export default function ProductsPage() {
       <div className="container mx-auto px-6 pt-24 pb-4">
         <WalletBalanceWidget showRefresh={true} />
       </div>
-      
+
+      {/* Stats */}
+      <div className="container mx-auto px-6 pb-4">
+        <StatsBar />
+      </div>
+
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-primary to-primary/80 text-white">
         <div className="container mx-auto px-6 py-16">
@@ -234,6 +241,16 @@ export default function ProductsPage() {
 
       {/* Filters and Controls */}
       <div className="container mx-auto px-6 py-8">
+      <div className="md:flex md:gap-8">
+        <aside className="hidden md:block md:w-56 shrink-0">
+          <CategorySidebar
+            categories={categories}
+            productGroups={productGroups}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+          />
+        </aside>
+        <div className="flex-1">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-semibold">Available Products</h2>
@@ -323,6 +340,8 @@ export default function ProductsPage() {
               ) : null
             })
           )}
+        </div>
+        </div>
         </div>
 
         {/* Categories Overview */}

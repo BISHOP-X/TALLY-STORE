@@ -109,6 +109,9 @@ export interface Profile {
   is_admin: boolean
   created_at: string
   updated_at: string
+  referral_code?: string
+  referred_by?: string | null
+  referral_balance?: number
 }
 
 export interface Category {
@@ -130,6 +133,8 @@ export interface ProductGroup {
   is_active: boolean
   created_at: string
   categories?: { name: string }
+  muabanvia_product_id?: string | null
+  auto_fulfill_enabled?: boolean
 }
 
 export interface Product {
@@ -1279,6 +1284,9 @@ export async function processBulkPurchase(
         reference: `ORD-${order.id.substring(0, 8).toUpperCase()}`
       }])
 
+    // Reward the referrer (if any) for this purchase - non-blocking
+    rewardReferrerForPurchase(userId, totalPrice)
+
     console.log('✅ Bulk purchase completed successfully!')
     
     // Update product group stock count
@@ -1851,5 +1859,263 @@ export async function createPendingPayment(params: {
     console.error('Error in createPendingPayment:', error)
     // Don't throw - this is optional tracking, shouldn't block payment
     return null
+  }
+}
+
+// ============================================================
+// App settings (key/value store for admin-configurable values)
+// ============================================================
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', key)
+      .single()
+
+    if (error || !data) return null
+    return data.value
+  } catch (error) {
+    console.error(`Error getting app setting "${key}":`, error)
+    return null
+  }
+}
+
+export async function upsertAppSetting(key: string, value: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+
+    if (error) {
+      console.error(`Error setting app setting "${key}":`, error)
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error(`Error setting app setting "${key}":`, error)
+    return false
+  }
+}
+
+// ============================================================
+// Referral system
+// ============================================================
+
+// Generate a short, deterministic referral code from a user id
+export function generateReferralCode(userId: string): string {
+  return userId.replace(/-/g, '').substring(0, 8).toUpperCase()
+}
+
+// Called right after a successful signup. Generates this user's own
+// referral_code, and if they signed up with someone else's code,
+// records who referred them.
+export async function applyReferralOnSignup(
+  userId: string,
+  referralCodeInput?: string
+): Promise<void> {
+  try {
+    const ownCode = generateReferralCode(userId)
+    const update: Record<string, any> = { referral_code: ownCode }
+
+    if (referralCodeInput && referralCodeInput.trim()) {
+      const cleanCode = referralCodeInput.trim().toUpperCase()
+
+      // Don't let someone refer themselves
+      if (cleanCode !== ownCode) {
+        const { data: referrer } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('referral_code', cleanCode)
+          .maybeSingle()
+
+        if (referrer) {
+          update.referred_by = referrer.id
+        }
+      }
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update(update)
+      .eq('id', userId)
+
+    if (error) {
+      console.error('Error applying referral on signup:', error)
+    }
+  } catch (error) {
+    console.error('Error in applyReferralOnSignup:', error)
+  }
+}
+
+// Called after a purchase completes. If the buyer was referred by
+// someone, credits that referrer's referral_balance and logs the
+// reward to referral_earnings for audit purposes.
+export async function rewardReferrerForPurchase(
+  userId: string,
+  orderAmount: number
+): Promise<void> {
+  try {
+    const { data: buyerProfile, error: buyerError } = await supabase
+      .from('profiles')
+      .select('referred_by')
+      .eq('id', userId)
+      .single()
+
+    if (buyerError || !buyerProfile?.referred_by) return
+
+    const referrerId = buyerProfile.referred_by
+
+    const pctSetting = await getAppSetting('referral_commission_pct')
+    const commissionPct = pctSetting ? parseFloat(pctSetting) : 5
+    const commissionAmount = (orderAmount * commissionPct) / 100
+
+    if (commissionAmount <= 0) return
+
+    const { data: referrerProfile, error: referrerError } = await supabase
+      .from('profiles')
+      .select('referral_balance')
+      .eq('id', referrerId)
+      .single()
+
+    if (referrerError || !referrerProfile) return
+
+    const newBalance = (referrerProfile.referral_balance || 0) + commissionAmount
+
+    await supabase
+      .from('profiles')
+      .update({ referral_balance: newBalance })
+      .eq('id', referrerId)
+
+    await supabase
+      .from('referral_earnings')
+      .insert([{
+        referrer_id: referrerId,
+        referred_user_id: userId,
+        order_amount: orderAmount,
+        commission_pct: commissionPct,
+        commission_amount: commissionAmount
+      }])
+
+    console.log(`✅ Referral reward: ₦${commissionAmount} credited to referrer ${referrerId}`)
+  } catch (error) {
+    console.error('Error rewarding referrer for purchase:', error)
+    // Don't throw - referral rewards shouldn't block a purchase
+  }
+}
+
+// Get a user's referral stats: their code, balance, and earnings history
+export async function getReferralStats(userId: string): Promise<{
+  referralCode: string | null
+  referralBalance: number
+  totalReferred: number
+  earnings: Array<{ id: string; order_amount: number; commission_amount: number; created_at: string }>
+}> {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('referral_code, referral_balance')
+      .eq('id', userId)
+      .single()
+
+    const { data: earnings } = await supabase
+      .from('referral_earnings')
+      .select('id, order_amount, commission_amount, created_at')
+      .eq('referrer_id', userId)
+      .order('created_at', { ascending: false })
+
+    const { count: totalReferred } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('referred_by', userId)
+
+    return {
+      referralCode: profile?.referral_code || null,
+      referralBalance: profile?.referral_balance || 0,
+      totalReferred: totalReferred || 0,
+      earnings: earnings || []
+    }
+  } catch (error) {
+    console.error('Error getting referral stats:', error)
+    return { referralCode: null, referralBalance: 0, totalReferred: 0, earnings: [] }
+  }
+}
+
+// Move referral_balance into the user's main wallet_balance so it can be
+// spent or withdrawn through existing flows.
+export async function withdrawReferralBalance(userId: string): Promise<{ success: boolean; error?: string; amount?: number }> {
+  try {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('referral_balance, wallet_balance')
+      .eq('id', userId)
+      .single()
+
+    if (profileError || !profile) {
+      return { success: false, error: 'Could not load profile' }
+    }
+
+    const amount = profile.referral_balance || 0
+    if (amount <= 0) {
+      return { success: false, error: 'No referral balance to withdraw' }
+    }
+
+    const newWalletBalance = (profile.wallet_balance || 0) + amount
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ referral_balance: 0, wallet_balance: newWalletBalance })
+      .eq('id', userId)
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    await supabase
+      .from('transactions')
+      .insert([{
+        user_id: userId,
+        type: 'referral_withdrawal',
+        amount: amount,
+        balance_after: newWalletBalance,
+        description: 'Referral earnings moved to wallet balance',
+        reference: `REF-${Date.now()}`
+      }])
+
+    return { success: true, amount }
+  } catch (error) {
+    console.error('Error withdrawing referral balance:', error)
+    return { success: false, error: 'Failed to withdraw referral balance' }
+  }
+}
+
+// Get total user count, formatted for stat displays (e.g. "1,204" or "12.3K")
+export function formatCount(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+  return n.toString()
+}
+
+// Used by PocketFi top-up polling: PocketFi credits the wallet via webhook
+// (api/webhook-pocketfi.ts) rather than a client-callable verify endpoint, so the
+// client just checks whether a transaction row with this reference has shown up yet.
+export async function checkTransactionByReference(reference: string): Promise<{
+  found: boolean
+  amount?: number
+  status?: string
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('amount, status')
+      .eq('reference', reference)
+      .maybeSingle()
+
+    if (error || !data) return { found: false }
+    return { found: true, amount: data.amount, status: data.status }
+  } catch (error) {
+    console.error('Error checking transaction by reference:', error)
+    return { found: false }
   }
 }

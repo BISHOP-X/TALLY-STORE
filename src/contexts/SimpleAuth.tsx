@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { supabase, applyReferralOnSignup } from '@/lib/supabase'
 
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  signUp: (email: string, password: string, referralCode?: string) => Promise<{ success: boolean; error?: string }>
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   signOut: () => Promise<void>
   resendConfirmation: (email: string) => Promise<{ success: boolean; error?: string }>
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user])
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, referralCode?: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -132,12 +132,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         // If user already exists but isn't confirmed, offer to resend confirmation
         if (error.message.includes('already registered') || error.message.includes('User already registered')) {
-          return { 
-            success: false, 
-            error: 'User already exists. Please check your email for the confirmation link, or we can resend it.' 
+          return {
+            success: false,
+            error: 'User already exists. Please check your email for the confirmation link, or we can resend it.'
           }
         }
         return { success: false, error: error.message }
+      }
+
+      // Generate this user's own referral code and link them to a referrer
+      // if they entered one. Non-blocking - shouldn't fail signup.
+      if (data.user) {
+        applyReferralOnSignup(data.user.id, referralCode)
       }
 
       return { success: true }
