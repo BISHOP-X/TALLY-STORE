@@ -1,38 +1,39 @@
 import { supabase } from '@/lib/supabase'
 
-// PocketFi is the second wallet top-up gateway (alongside Ercas Pay). The client-side
-// shape intentionally matches src/services/ercaspay.ts so TopUpWallet.tsx can treat both
-// gateways interchangeably.
+// PocketFi uses a PERMANENT VIRTUAL ACCOUNT model, not a hosted checkout like Ercas Pay.
+// There is no "amount in, checkoutUrl out" call — instead we ask once for a dedicated bank
+// account number tied to the user, and they manually bank-transfer into it (any amount,
+// any time). The edge function returns that account's details, not a redirect URL.
 
-export interface PaymentData {
-  amount: number
-  customerName: string
-  customerEmail: string
+export interface GetOrCreateAccountInput {
+  customerName?: string
   customerPhoneNumber?: string
-  description?: string
-  redirectUrl?: string
-  metadata?: Record<string, any>
 }
 
-export interface PaymentResponse {
+export interface PocketFiAccount {
+  accountNumber: string
+  accountName: string
+  bankName: string
+}
+
+export interface PocketFiAccountResponse {
   success: boolean
   message: string
-  data?: {
-    paymentReference: string
-    transactionReference: string
-    checkoutUrl: string
-  }
+  data?: PocketFiAccount
   error?: string
 }
 
-export const initiatePocketFiPayment = async (paymentData: PaymentData): Promise<PaymentResponse> => {
+export const getOrCreatePocketFiAccount = async (
+  input: GetOrCreateAccountInput = {}
+): Promise<PocketFiAccountResponse> => {
   try {
-    const { data, error } = await supabase.functions.invoke<PaymentResponse>('create-pocketfi-topup', {
-      body: paymentData,
-    })
+    const { data, error } = await supabase.functions.invoke<PocketFiAccountResponse>(
+      'create-pocketfi-topup',
+      { body: input }
+    )
 
     if (error) {
-      throw new Error(error.message || 'Failed to initiate payment')
+      throw new Error(error.message || 'Failed to set up bank transfer account')
     }
 
     if (!data) {
@@ -43,7 +44,7 @@ export const initiatePocketFiPayment = async (paymentData: PaymentData): Promise
   } catch (error: any) {
     return {
       success: false,
-      message: error.message || 'Failed to initiate payment',
+      message: error.message || 'Failed to set up bank transfer account',
       error: error.message,
     }
   }

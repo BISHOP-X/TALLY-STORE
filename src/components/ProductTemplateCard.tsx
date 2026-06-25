@@ -21,8 +21,22 @@ export default function ProductTemplateCard({
   const [quantity, setQuantity] = useState(1)
   const { formatPrice } = useCurrency()
 
+  // A product is purchasable if it has pre-stocked accounts, OR it's configured
+  // to auto-fulfill live from MuaBanVia once stock runs out. In the auto-fulfill
+  // case stock_count can legitimately read 0 while still being buyable -
+  // process-purchase attempts a live MuaBanVia fulfillment server-side and only
+  // fails the request if that genuinely can't deliver. Gating purely on
+  // stock_count was blocking the buy button (and therefore the auto-fulfill
+  // call itself) from ever firing for these products.
+  const canAutoFulfill = !!(productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id)
+  const isOutOfStock = productGroup.stock_count === 0 && !canAutoFulfill
+  const isLowStock = productGroup.stock_count > 0 && productGroup.stock_count < 5
+  // Quantity controls need an upper bound; use the pre-stocked count if any,
+  // otherwise allow a small default range since MuaBanVia fulfills on demand.
+  const maxQuantity = productGroup.stock_count > 0 ? productGroup.stock_count : 10
+
   const handleQuantityChange = (newQuantity: number) => {
-    if (newQuantity >= 1 && newQuantity <= productGroup.stock_count) {
+    if (newQuantity >= 1 && newQuantity <= maxQuantity) {
       setQuantity(newQuantity)
     }
   }
@@ -32,9 +46,6 @@ export default function ProductTemplateCard({
     e.stopPropagation()
     onAddToCart(productGroup.id, quantity)
   }
-
-  const isOutOfStock = productGroup.stock_count === 0
-  const isLowStock = productGroup.stock_count > 0 && productGroup.stock_count < 5
 
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
@@ -59,10 +70,12 @@ export default function ProductTemplateCard({
           <span className="text-xs">
             {isOutOfStock ? (
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Out of Stock</Badge>
-            ) : (
+            ) : productGroup.stock_count > 0 ? (
               <span className={isLowStock ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
                 {productGroup.stock_count} available
               </span>
+            ) : (
+              <span className="text-muted-foreground">Instant delivery</span>
             )}
           </span>
           <div className="text-right">
@@ -89,7 +102,7 @@ export default function ProductTemplateCard({
               <Input
                 type="number"
                 min="1"
-                max={productGroup.stock_count}
+                max={maxQuantity}
                 value={quantity}
                 onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                 className="w-10 h-6 text-center px-1 text-xs"
@@ -100,7 +113,7 @@ export default function ProductTemplateCard({
                 size="sm"
                 className="h-6 w-6 p-0"
                 onClick={() => handleQuantityChange(quantity + 1)}
-                disabled={quantity >= productGroup.stock_count}
+                disabled={quantity >= maxQuantity}
               >
                 <Plus className="h-3 w-3" />
               </Button>

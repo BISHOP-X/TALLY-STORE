@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreditCard, Loader2, Plus } from 'lucide-react';
+import { CreditCard, Loader2, Plus, Copy, Check, Landmark } from 'lucide-react';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { initiatePayment, type PaymentData } from '@/services/ercaspay';
-import { initiatePocketFiPayment } from '@/services/pocketfi';
+import { getOrCreatePocketFiAccount, type PocketFiAccount } from '@/services/pocketfi';
 import { useToast } from '@/hooks/use-toast';
 import { useExchangeRate } from '@/hooks/useExchangeRate';
 
@@ -24,12 +24,121 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [gateway, setGateway] = useState<Gateway>('ercaspay');
-  const { user } = useAuth();
+
+  // PocketFi is a permanent-virtual-account flow, not a checkout redirect — the user gets
+  // a bank account number once and transfers into it directly from their banking app, so
+  // there's no "amount" step or checkoutUrl here.
+  const [pocketfiAccount, setPocketfiAccount] = useState<PocketFiAccount | null>(null);
+  const [loadingAccount, setLoadingAccount] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const { user, walletBalance, refreshWalletBalance } = useAuth();
   const { toast } = useToast();
   const { ngnToUsd } = useExchangeRate();
 
+  // Baseline balance captured when the PocketFi account panel is shown, so we can detect
+  // the webhook crediting the wallet without a transaction reference to poll against.
+  const [pocketfiBaselineBalance, setPocketfiBaselineBalance] = useState<number | null>(null);
+
   const handleQuickAmount = (quickAmount: number) => {
     setAmount(quickAmount.toString());
+  };
+
+  const handleGetPocketFiAccount = async () => {
+    if (!user?.email) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to set up a bank transfer account.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoadingAccount(true);
+    try {
+      const response = await getOrCreatePocketFiAccount({});
+      if (response.success && response.data) {
+        setPocketfiAccount(response.data);
+      } else {
+        toast({
+          title: "Couldn't Set Up Account",
+          description: response.message || "Failed to set up bank transfer account. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Couldn't Set Up Account",
+        description: error.message || "Failed to set up bank transfer account.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAccount(false);
+    }
+  };
+
+  // Auto-fetch (or load the cached) PocketFi account as soon as the user picks that gateway.
+  useEffect(() => {
+    if (isOpen && gateway === 'pocketfi' && !pocketfiAccount && !loadingAccount) {
+      handleGetPocketFiAccount();
+    }
+  }, [isOpen, gateway]);
+
+  // Snapshot the current balance once the account panel is up, so we know what to compare
+  // against while polling for the webhook's credit.
+  useEffect(() => {
+    if (isOpen && gateway === 'pocketfi' && pocketfiAccount && pocketfiBaselineBalance === null) {
+      setPocketfiBaselineBalance(walletBalance);
+    }
+    if (!isOpen || gateway !== 'pocketfi') {
+      setPocketfiBaselineBalance(null);
+    }
+  }, [isOpen, gateway, pocketfiAccount]);
+
+  // PocketFi has no client-side transaction reference to verify — the webhook credits the
+  // wallet server-side whenever a transfer lands. Poll the wallet balance while this panel
+  // is open and surface a success toast the moment it increases.
+  useEffect(() => {
+    if (!isOpen || gateway !== 'pocketfi' || !pocketfiAccount || pocketfiBaselineBalance === null) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      refreshWalletBalance();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, gateway, pocketfiAccount, pocketfiBaselineBalance, refreshWalletBalance]);
+
+  useEffect(() => {
+    if (
+      pocketfiBaselineBalance !== null &&
+      walletBalance > pocketfiBaselineBalance &&
+      gateway === 'pocketfi'
+    ) {
+      const credited = walletBalance - pocketfiBaselineBalance;
+      toast({
+        title: "Payment Received! 🎉",
+        description: `₦${credited.toLocaleString()} has been added to your wallet.`,
+      });
+      window.dispatchEvent(new CustomEvent('transactionAdded'));
+      setPocketfiBaselineBalance(walletBalance);
+      onSuccess?.();
+    }
+  }, [walletBalance, pocketfiBaselineBalance, gateway]);
+
+  const handleCopy = async (value: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch {
+      toast({
+        title: "Copy Failed",
+        description: "Please select and copy the text manually.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleTopUp = async () => {
@@ -139,11 +248,9 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
         }
       };
 
-      console.log(`🚀 Initiating wallet top-up via ${gateway}...`, paymentData);
+      console.log('🚀 Initiating wallet top-up via Ercas Pay...', paymentData);
 
-      const response = gateway === 'pocketfi'
-        ? await initiatePocketFiPayment(paymentData)
-        : await initiatePayment(paymentData);
+      const response = await initiatePayment(paymentData);
 
       if (response.success && response.data?.checkoutUrl) {
         // Validate checkout URL for security
@@ -268,100 +375,190 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
             </div>
           </div>
 
-          {/* Quick Amount Buttons */}
-          <div className="space-y-3">
-            <Label>Quick Amounts</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {QUICK_AMOUNTS.map((quickAmount) => (
-                <Button
-                  key={quickAmount}
-                  variant={amount === quickAmount.toString() ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleQuickAmount(quickAmount)}
-                  className="text-xs"
-                >
-                  {formatCurrency(quickAmount)}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Custom Amount */}
-          <div className="space-y-2">
-            <Label htmlFor="amount">Custom Amount (₦)</Label>
-            <Input
-              id="amount"
-              type="number"
-              placeholder="Enter amount"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              min="100"
-              max="1000000"
-            />
-            <p className="text-xs text-muted-foreground">
-              Minimum: ₦100, Maximum: ₦1,000,000
-            </p>
-          </div>
-
-          {/* Payment Summary */}
-          {amount && parseInt(amount) >= 100 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Payment Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Amount:</span>
-                    <span className="font-medium">{formatCurrency(parseInt(amount))}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>USD Equivalent:</span>
-                    <span>≈ ${ngnToUsd(parseInt(amount)).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Gateway:</span>
-                    <span>{gateway === 'pocketfi' ? 'PocketFi' : 'Ercas Pay'}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Payment Methods:</span>
-                    <span>Card, Bank Transfer, USSD</span>
-                  </div>
+          {gateway === 'ercaspay' && (
+            <>
+              {/* Quick Amount Buttons */}
+              <div className="space-y-3">
+                <Label>Quick Amounts</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {QUICK_AMOUNTS.map((quickAmount) => (
+                    <Button
+                      key={quickAmount}
+                      variant={amount === quickAmount.toString() ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleQuickAmount(quickAmount)}
+                      className="text-xs"
+                    >
+                      {formatCurrency(quickAmount)}
+                    </Button>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+
+              {/* Custom Amount */}
+              <div className="space-y-2">
+                <Label htmlFor="amount">Custom Amount (₦)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder="Enter amount"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  min="100"
+                  max="1000000"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum: ₦100, Maximum: ₦1,000,000
+                </p>
+              </div>
+
+              {/* Payment Summary */}
+              {amount && parseInt(amount) >= 100 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Payment Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Amount:</span>
+                        <span className="font-medium">{formatCurrency(parseInt(amount))}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>USD Equivalent:</span>
+                        <span>≈ ${ngnToUsd(parseInt(amount)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Gateway:</span>
+                        <span>Ercas Pay</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Payment Methods:</span>
+                        <span>Card, Bank Transfer, USSD</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsOpen(false)}
+                  className="flex-1"
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleTopUp}
+                  disabled={!amount || parseInt(amount) < 100 || isLoading}
+                  className="flex-1"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Proceed to Payment'
+                  )}
+                </Button>
+              </div>
+
+              {/* Security Note */}
+              <div className="text-xs text-muted-foreground text-center">
+                🔒 Secure payment powered by Ercas Pay
+              </div>
+            </>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setIsOpen(false)}
-              className="flex-1"
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleTopUp}
-              disabled={!amount || parseInt(amount) < 100 || isLoading}
-              className="flex-1"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                'Proceed to Payment'
+          {gateway === 'pocketfi' && (
+            <>
+              {loadingAccount && (
+                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Setting up your bank transfer account...</p>
+                </div>
               )}
-            </Button>
-          </div>
 
-          {/* Security Note */}
-          <div className="text-xs text-muted-foreground text-center">
-            🔒 Secure payment powered by {gateway === 'pocketfi' ? 'PocketFi' : 'Ercas Pay'}
-          </div>
+              {!loadingAccount && pocketfiAccount && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Landmark className="h-4 w-4" />
+                      Your Bank Transfer Account
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Transfer any amount to this account from your banking app. Your wallet
+                      is credited automatically once the transfer is confirmed — usually within
+                      a minute or two.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0 space-y-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Account Number</Label>
+                      <div className="flex items-center gap-2">
+                        <Input value={pocketfiAccount.accountNumber} readOnly className="font-mono text-base" />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleCopy(pocketfiAccount.accountNumber, 'accountNumber')}
+                        >
+                          {copiedField === 'accountNumber' ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Account Name</Label>
+                      <Input value={pocketfiAccount.accountName} readOnly />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Bank</Label>
+                      <Input value={pocketfiAccount.bankName} readOnly className="capitalize" />
+                    </div>
+
+                    <p className="text-xs text-muted-foreground pt-1">
+                      This account is permanently yours — you can reuse it for future top-ups too.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {!loadingAccount && !pocketfiAccount && (
+                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    We couldn't set up your bank transfer account.
+                  </p>
+                  <Button type="button" variant="outline" size="sm" onClick={handleGetPocketFiAccount}>
+                    Try Again
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsOpen(false)}
+                  className="flex-1"
+                >
+                  Close
+                </Button>
+              </div>
+
+              <div className="text-xs text-muted-foreground text-center">
+                🔒 Secure bank transfer powered by PocketFi
+              </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
