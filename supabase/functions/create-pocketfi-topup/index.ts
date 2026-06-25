@@ -90,7 +90,8 @@ serve(async (req) => {
       .single()
 
     if (profileError) {
-      throw new Error('Failed to load profile')
+      console.error('Failed to load profile:', JSON.stringify(profileError))
+      throw new Error(`Failed to load profile: ${profileError.message || profileError.code || 'unknown error'}`)
     }
 
     if (profile?.pocketfi_account_number) {
