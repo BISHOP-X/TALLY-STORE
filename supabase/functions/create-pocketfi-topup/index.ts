@@ -66,7 +66,12 @@ serve(async (req) => {
 
     const user = await getAuthenticatedUser(req)
 
-    const pocketfiToken = Deno.env.get('POCKETFI_SECRET_KEY')
+    // NOTE: PocketFi's naming is the reverse of what you'd expect. The "Secret API Key"
+    // is a plain hex string used only to verify inbound webhook signatures (HMAC) -- it
+    // is NOT a valid bearer token. The "Public API Key" is the Laravel Sanctum-style
+    // `id|token` credential that actually authenticates outbound API calls, so that's
+    // what goes in the Authorization header below.
+    const pocketfiToken = Deno.env.get('POCKETFI_PUBLIC_KEY')
     const pocketfiBusinessId = Deno.env.get('POCKETFI_BUSINESS_ID')
     if (!pocketfiToken || !pocketfiBusinessId) {
       throw new Error('Bank transfer top-up is temporarily unavailable.')
@@ -85,7 +90,7 @@ serve(async (req) => {
     // 1. Return the cached account if we already created one for this user.
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('username, pocketfi_account_number, pocketfi_account_name, pocketfi_bank')
+      .select('full_name, pocketfi_account_number, pocketfi_account_name, pocketfi_bank')
       .eq('id', user.id)
       .single()
 
@@ -108,7 +113,7 @@ serve(async (req) => {
 
     // 2. No cached account yet — create a new PERMANENT virtual account via PocketFi.
     const body = await req.json().catch(() => ({})) as Record<string, any>
-    const { first, last } = splitName(profile?.username || body.customerName)
+    const { first, last } = splitName(profile?.full_name || body.customerName)
 
     const createBody = {
       first_name: first,

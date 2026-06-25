@@ -36,7 +36,13 @@ function extractAccountNumber(payload: any): string | undefined {
 }
 
 function extractAmount(payload: any): number {
+  // Confirmed real PocketFi shape (from a live webhook on a sibling project):
+  // { order: { amount, settlement_amount }, transaction: { reference }, account_number }
   const value = firstDefined(
+    payload.order?.amount,
+    payload.order?.settlement_amount,
+    payload.data?.order?.amount,
+    payload.data?.order?.settlement_amount,
     payload.amount,
     payload.data?.amount,
     payload.transaction?.amount,
@@ -46,6 +52,10 @@ function extractAmount(payload: any): number {
 
 function extractReference(payload: any): string | undefined {
   const value = firstDefined(
+    payload.transaction?.reference,
+    payload.transaction?.id,
+    payload.data?.transaction?.reference,
+    payload.data?.transaction?.id,
     payload.reference,
     payload.transaction_reference,
     payload.transactionReference,
