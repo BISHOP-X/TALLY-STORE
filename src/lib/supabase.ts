@@ -2038,8 +2038,14 @@ export async function applyReferralOnSignup(
 
       // Don't let someone refer themselves
       if (cleanCode !== ownCode) {
+        // Look up the referrer's id via the referral_lookup view, not the
+        // profiles table directly - profiles RLS only allows a user to read
+        // their own row, so a direct cross-user select here silently
+        // returns nothing (no error) and referred_by never gets set. Run
+        // supabase/migrations/20260625000000_add_referral_lookup_view.sql
+        // in Supabase for this view to exist.
         const { data: referrer } = await supabase
-          .from('profiles')
+          .from('referral_lookup')
           .select('id')
           .eq('referral_code', cleanCode)
           .maybeSingle()
@@ -2139,8 +2145,11 @@ export async function getReferralStats(userId: string): Promise<{
       .eq('referrer_id', userId)
       .order('created_at', { ascending: false })
 
+    // Same RLS issue as applyReferralOnSignup: counting OTHER users whose
+    // referred_by = me is a cross-user read that profiles RLS silently
+    // blocks (returns 0, no error). Use the referral_lookup view instead.
     const { count: totalReferred } = await supabase
-      .from('profiles')
+      .from('referral_lookup')
       .select('*', { count: 'exact', head: true })
       .eq('referred_by', userId)
 
