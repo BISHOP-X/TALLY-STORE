@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { User } from '@supabase/supabase-js'
-import { supabase, applyReferralOnSignup } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 interface AuthContextType {
   user: User | null
@@ -141,9 +141,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Generate this user's own referral code and link them to a referrer
-      // if they entered one. Non-blocking - shouldn't fail signup.
+      // if they entered one. Done via the apply-referral edge function
+      // (service role) instead of a direct client-side table write, because
+      // when email confirmation is required there's no active session yet
+      // right after signUp() - RLS would silently block the profiles UPDATE.
+      // Non-blocking - shouldn't fail signup.
       if (data.user) {
-        applyReferralOnSignup(data.user.id, referralCode)
+        supabase.functions.invoke('apply-referral', {
+          body: { userId: data.user.id, referralCode },
+        }).catch((err) => console.error('apply-referral invoke failed:', err))
       }
 
       return { success: true }
