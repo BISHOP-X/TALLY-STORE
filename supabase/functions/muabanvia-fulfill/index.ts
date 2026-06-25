@@ -9,11 +9,22 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 // pre-stocked IndividualAccount row, so the caller can insert them and complete
 // the order exactly as if they'd been in stock all along.
 //
-// NOTE: Confirm the exact MuaBanVia endpoint path / payload / response field names
-// against their current API docs once available (especially once their migration +
-// updated docs land) — this scaffold uses the common "buy product" shape used by most
-// Vietnamese/Nigerian account-marketplace APIs (buy -> list of account strings, often
-// "user|pass|email|emailpass" pipe-delimited or a JSON array of objects).
+// CONFIRMED real MuaBanVia API (from their own docs, https://muabanvia.org/api/buy_product):
+//   POST https://muabanvia.org/api/buy_product
+//   Content-Type: multipart/form-data (NOT JSON), fields:
+//     action=buyProduct
+//     ID=<muabanvia product id>
+//     amount=<quantity>
+//     coupon=<optional discount code>
+//     api_key=<api key>           <- auth goes in the form body, NOT an Authorization header
+//   Response (200):
+//     {
+//       "status": "success",
+//       "msg": "...",
+//       "trans_id": "...",
+//       "data": ["1000040304952|GUTJXYIFPWLHCNDOMBRKVAQESZ", ...]   <- pipe-delimited strings directly under data
+//     }
+//   On failure, "status" is not "success" and "msg" carries the error text.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -110,25 +121,31 @@ serve(async (req) => {
       throw new Error('Auto-fulfillment is temporarily unavailable.')
     }
 
-    const baseUrl = Deno.env.get('MUABANVIA_BASE_URL') || 'https://api.muabanvia.com/api/v1'
+    const baseUrl = Deno.env.get('MUABANVIA_BASE_URL') || 'https://muabanvia.org/api/buy_product'
+    const coupon = body.coupon ? String(body.coupon) : undefined
 
-    const response = await fetch(`${baseUrl}/products/${muabanviaProductId}/buy`, {
+    const form = new FormData()
+    form.set('action', 'buyProduct')
+    // MuaBanVia's own docs are inconsistent about casing ("ID" in one example, "id" in
+    // another) -- send both so this works regardless of which one their backend reads.
+    form.set('ID', muabanviaProductId)
+    form.set('id', muabanviaProductId)
+    form.set('amount', String(quantity))
+    if (coupon) form.set('coupon', coupon)
+    form.set('api_key', apiKey)
+
+    const response = await fetch(baseUrl, {
       method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ quantity }),
+      body: form,
     })
 
     const result = await response.json().catch(() => null) as Record<string, any> | null
-    if (!response.ok || result?.success === false || result?.status === false) {
-      const message = result?.message || result?.error || 'MuaBanVia could not fulfill this order.'
+    if (!response.ok || result?.status !== 'success') {
+      const message = result?.msg || result?.message || result?.error || 'MuaBanVia could not fulfill this order.'
       return json({ success: false, message, error: message }, 400)
     }
 
-    const rawAccounts = result?.data?.accounts ?? result?.accounts ?? result?.data ?? null
+    const rawAccounts = result?.data ?? null
     const accounts = normalizeAccounts(rawAccounts)
 
     if (accounts.length < quantity) {

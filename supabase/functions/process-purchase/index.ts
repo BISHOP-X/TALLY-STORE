@@ -120,32 +120,35 @@ serve(async (req) => {
 
         try {
           const muabanviaApiKey = Deno.env.get('MUABANVIA_API_KEY');
-          const muabanviaBaseUrl = Deno.env.get('MUABANVIA_BASE_URL') || 'https://api.muabanvia.com/api/v1';
+          // CONFIRMED real MuaBanVia API (their own docs, https://muabanvia.org/api/buy_product):
+          // POST as multipart/form-data, NOT JSON. Fields: action=buyProduct, ID/id, amount,
+          // coupon (optional), api_key (auth goes in the form body, not a Bearer header).
+          // Response: { status: "success", msg, trans_id, data: ["user|pass", ...] }
+          const muabanviaBaseUrl = Deno.env.get('MUABANVIA_BASE_URL') || 'https://muabanvia.org/api/buy_product';
 
           if (!muabanviaApiKey) {
             throw new Error('MUABANVIA_API_KEY not configured');
           }
 
-          const fulfillResponse = await fetch(
-            `${muabanviaBaseUrl}/products/${productGroup.muabanvia_product_id}/buy`,
-            {
-              method: 'POST',
-              headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${muabanviaApiKey}`,
-              },
-              body: JSON.stringify({ quantity: shortfall }),
-            }
-          );
+          const muabanviaForm = new FormData();
+          muabanviaForm.set('action', 'buyProduct');
+          muabanviaForm.set('ID', String(productGroup.muabanvia_product_id));
+          muabanviaForm.set('id', String(productGroup.muabanvia_product_id));
+          muabanviaForm.set('amount', String(shortfall));
+          muabanviaForm.set('api_key', muabanviaApiKey);
+
+          const fulfillResponse = await fetch(muabanviaBaseUrl, {
+            method: 'POST',
+            body: muabanviaForm,
+          });
 
           const fulfillResult = await fulfillResponse.json().catch(() => null) as any;
 
-          if (!fulfillResponse.ok || fulfillResult?.success === false || fulfillResult?.status === false) {
-            throw new Error(fulfillResult?.message || fulfillResult?.error || 'MuaBanVia could not fulfill the shortfall');
+          if (!fulfillResponse.ok || fulfillResult?.status !== 'success') {
+            throw new Error(fulfillResult?.msg || fulfillResult?.message || fulfillResult?.error || 'MuaBanVia could not fulfill the shortfall');
           }
 
-          const rawAccounts = fulfillResult?.data?.accounts ?? fulfillResult?.accounts ?? fulfillResult?.data ?? [];
+          const rawAccounts = fulfillResult?.data ?? [];
           const fulfilledRaw: any[] = Array.isArray(rawAccounts) ? rawAccounts : [];
 
           const fulfilledAccounts = fulfilledRaw.slice(0, shortfall).map((item: any) => {

@@ -55,15 +55,34 @@ export default function ProductsPage() {
   }
 
   // Navigate to a product's detail page. Detail page is keyed by individual
-  // account id, not product group id, so look up a real available account;
-  // fall back to the category page if the product is out of stock.
+  // account id, not product group id, so look up a real available account.
+  // Auto-fulfill products (MuaBanVia) legitimately have no pre-stocked
+  // account row when stock_count is 0 - those are still purchasable, so
+  // send straight to checkout instead of bouncing to the category page.
+  // Only fall back to the category page if the product is genuinely
+  // unavailable (no account AND not auto-fulfillable).
   const goToProduct = (productGroup: ProductGroup) => {
     const accountId = accountMap[productGroup.id]
     if (accountId) {
       navigate(`/product/${accountId}`)
-    } else {
-      navigate(`/category/${productGroup.category_id}`)
+      return
     }
+
+    const canAutoFulfill = !!(productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id)
+    if (canAutoFulfill) {
+      const category = categories.find((cat) => cat.id === productGroup.category_id)
+      navigate('/checkout', {
+        state: {
+          productGroup,
+          category,
+          quantity: 1,
+          isBulkPurchase: false,
+        },
+      })
+      return
+    }
+
+    navigate(`/category/${productGroup.category_id}`)
   }
 
   // Load real data from Supabase
