@@ -32,6 +32,17 @@ function writeCache(cache: RateCache) {
   }
 }
 
+// Call this right after an admin saves or clears the ngn_usd_rate override
+// so the change takes effect immediately in the same browser, instead of
+// waiting up to an hour for the sessionStorage cache to expire.
+export function clearExchangeRateCache() {
+  try {
+    sessionStorage.removeItem(CACHE_KEY)
+  } catch {
+    // ignore storage errors
+  }
+}
+
 /**
  * Returns the current NGN-per-USD exchange rate.
  * Priority: admin override (app_settings.ngn_usd_rate) > live API > fallback constant.

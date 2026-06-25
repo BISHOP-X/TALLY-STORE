@@ -70,6 +70,7 @@ import {
 import { format, formatDistanceToNow } from 'date-fns'
 import { useAuth } from '@/contexts/SimpleAuth'
 import { useToast } from '@/hooks/use-toast'
+import { clearExchangeRateCache } from '@/hooks/useExchangeRate'
 import { 
   Table, 
   TableBody, 
@@ -266,6 +267,10 @@ export default function AdminPage() {
     try {
       const ok = await upsertAppSetting('ngn_usd_rate', rate.toString())
       if (ok) {
+        // useExchangeRate caches the rate in sessionStorage for an hour;
+        // clear it so this browser picks up the new rate immediately
+        // instead of appearing to do nothing until the cache expires.
+        clearExchangeRateCache()
         toast({ title: 'Saved', description: `NGN/USD rate set to ₦${rate} per $1` })
       } else {
         toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' })
@@ -280,6 +285,7 @@ export default function AdminPage() {
     try {
       const ok = await upsertAppSetting('ngn_usd_rate', '')
       if (ok) {
+        clearExchangeRateCache()
         setNgnUsdRate('')
         toast({ title: 'Cleared', description: 'Now using the live exchange rate' })
       }
