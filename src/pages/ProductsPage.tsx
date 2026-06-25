@@ -54,35 +54,25 @@ export default function ProductsPage() {
     }
   }
 
-  // Navigate to a product's detail page. Detail page is keyed by individual
-  // account id, not product group id, so look up a real available account.
-  // Auto-fulfill products (MuaBanVia) legitimately have no pre-stocked
-  // account row when stock_count is 0 - those are still purchasable, so
-  // send straight to checkout instead of bouncing to the category page.
-  // Only fall back to the category page if the product is genuinely
-  // unavailable (no account AND not auto-fulfillable).
+  // Navigate from a Popular/Refilled/New tile straight to checkout for that
+  // product group. We previously tried to route these through the per-account
+  // Product Detail page (/product/:accountId), but that depends on looking up
+  // a specific individual_accounts row via accountMap - which is unreliable
+  // (accounts can be sold/reserved/never-stocked for auto-fulfill products),
+  // and silently fell back to the category page whenever the lookup missed.
+  // Going straight to checkout with the product group mirrors the "Purchase
+  // Now" button elsewhere on this page and always opens the actual product,
+  // never a category listing.
   const goToProduct = (productGroup: ProductGroup) => {
-    const accountId = accountMap[productGroup.id]
-    if (accountId) {
-      navigate(`/product/${accountId}`)
-      return
-    }
-
-    const canAutoFulfill = !!(productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id)
-    if (canAutoFulfill) {
-      const category = categories.find((cat) => cat.id === productGroup.category_id)
-      navigate('/checkout', {
-        state: {
-          productGroup,
-          category,
-          quantity: 1,
-          isBulkPurchase: false,
-        },
-      })
-      return
-    }
-
-    navigate(`/category/${productGroup.category_id}`)
+    const category = categories.find((cat) => cat.id === productGroup.category_id)
+    navigate('/checkout', {
+      state: {
+        productGroup,
+        category,
+        quantity: 1,
+        isBulkPurchase: false,
+      },
+    })
   }
 
   // Load real data from Supabase
