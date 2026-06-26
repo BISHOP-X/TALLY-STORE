@@ -13,6 +13,8 @@ import { useAuth } from '@/contexts/SimpleAuth'
 import {
   getCategories,
   getAllProductGroups,
+  getTopSellingProductGroupIds,
+  getUserPurchaseHistory,
   type Category,
   type ProductGroup
 } from '@/lib/supabase'
@@ -32,7 +34,30 @@ export default function CategoryPage() {
   
   // UI state
   const [searchTerm, setSearchTerm] = useState('')
-  const [sortBy, setSortBy] = useState('price-low')
+  const [sortBy, setSortBy] = useState('recommended')
+
+  // Personalization data for "Recommended" sort: global popularity rank (best
+  // overall sellers) plus this user's own purchase history (rebuy signal).
+  // Neither one blocks page load if it fails - sort just falls back to
+  // whatever default ordering came back from the DB.
+  const [globalRank, setGlobalRank] = useState<Record<string, number>>({})
+  const [myPurchaseCounts, setMyPurchaseCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    getTopSellingProductGroupIds(200)
+      .then((ids) => {
+        const rank: Record<string, number> = {}
+        ids.forEach((id, index) => { rank[id] = index })
+        setGlobalRank(rank)
+      })
+      .catch(() => {})
+
+    if (user?.id) {
+      getUserPurchaseHistory(user.id)
+        .then(({ productGroupCounts }) => setMyPurchaseCounts(productGroupCounts))
+        .catch(() => {})
+    }
+  }, [user?.id])
 
   // Handle adding products to cart
   const handleAddToCart = (productGroupId: string, quantity: number) => {
@@ -110,8 +135,28 @@ export default function CategoryPage() {
         return b.price - a.price
       case 'stock-high':
         return b.stock_count - a.stock_count
-      default:
-        return 0
+      case 'az':
+        return a.name.localeCompare(b.name)
+      case 'frequently-bought': {
+        const rankA = globalRank[a.id] ?? Infinity
+        const rankB = globalRank[b.id] ?? Infinity
+        if (rankA !== rankB) return rankA - rankB
+        return a.name.localeCompare(b.name)
+      }
+      case 'recommended':
+      default: {
+        // Rebuy signal first (products this user has personally bought
+        // before), then overall popularity rank, then price as a tiebreaker.
+        const mineA = myPurchaseCounts[a.id] || 0
+        const mineB = myPurchaseCounts[b.id] || 0
+        if (mineA !== mineB) return mineB - mineA
+
+        const rankA = globalRank[a.id] ?? Infinity
+        const rankB = globalRank[b.id] ?? Infinity
+        if (rankA !== rankB) return rankA - rankB
+
+        return a.price - b.price
+      }
     }
   })
 
@@ -216,9 +261,12 @@ export default function CategoryPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="recommended">Recommended for you</SelectItem>
+                <SelectItem value="frequently-bought">Frequently Bought</SelectItem>
                 <SelectItem value="price-low">Price: Low to High</SelectItem>
                 <SelectItem value="price-high">Price: High to Low</SelectItem>
                 <SelectItem value="stock-high">Most Available</SelectItem>
+                <SelectItem value="az">Alphabetical (A-Z)</SelectItem>
               </SelectContent>
             </Select>
           </div>

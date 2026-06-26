@@ -61,10 +61,16 @@ import {
   adminAdjustBalance,
   getAppSetting,
   upsertAppSetting,
+  getProductSuggestions,
+  computeAndUpsertTrendSuggestions,
+  dismissSuggestion,
+  acceptSuggestion,
+  manualRestock,
   type Category,
   type ProductGroup,
   type IndividualAccount,
   type ProductTemplate,
+  type ProductSuggestion,
   supabase
 } from '@/lib/supabase'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -164,6 +170,12 @@ export default function AdminPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null)
 
+  // Product suggestions ("trending category" panel)
+  const [productSuggestions, setProductSuggestions] = useState<ProductSuggestion[]>([])
+  const [isCheckingTrends, setIsCheckingTrends] = useState(false)
+  const [restockingId, setRestockingId] = useState<string | null>(null)
+  const [restockQty, setRestockQty] = useState<Record<string, number>>({})
+
   // Email / Broadcast state
   const [emailSubject, setEmailSubject] = useState('TallyStore Notification')
   const [emailMessage, setEmailMessage] = useState('')
@@ -220,6 +232,88 @@ export default function AdminPage() {
     }
     loadReferralPct()
   }, [])
+
+  // ==================== PRODUCT SUGGESTIONS ====================
+  // "Trending category, want to add a product?" panel - trigger is your own
+  // store's sales velocity (see computeAndUpsertTrendSuggestions). Accepting
+  // a suggestion only creates a draft product; it never spends money by
+  // itself - see handleTestStock for the explicit, separate buy action.
+
+  const loadProductSuggestions = useCallback(async () => {
+    try {
+      const data = await getProductSuggestions('pending')
+      setProductSuggestions(data)
+    } catch (err) {
+      console.error('Failed to load product suggestions:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadProductSuggestions()
+  }, [loadProductSuggestions])
+
+  const handleCheckTrends = async () => {
+    setIsCheckingTrends(true)
+    try {
+      const created = await computeAndUpsertTrendSuggestions()
+      await loadProductSuggestions()
+      toast({
+        title: created.length > 0 ? `${created.length} new trend(s) found` : 'No new trends',
+        description: created.length > 0
+          ? 'Check the Product Suggestions panel below.'
+          : "Nothing crossed the trending threshold since the last check.",
+      })
+    } catch (err) {
+      console.error('Failed to check trends:', err)
+      toast({ title: 'Failed to check trends', variant: 'destructive' })
+    } finally {
+      setIsCheckingTrends(false)
+    }
+  }
+
+  const handleDismissSuggestion = async (id: string) => {
+    const ok = await dismissSuggestion(id)
+    if (ok) {
+      setProductSuggestions(prev => prev.filter(s => s.id !== id))
+      toast({ title: 'Dismissed', description: "Won't resurface for a few days unless the trend continues." })
+    }
+  }
+
+  const handleAcceptSuggestion = async (suggestion: ProductSuggestion) => {
+    const newProduct = await acceptSuggestion(suggestion.id)
+    if (newProduct) {
+      setProductSuggestions(prev => prev.filter(s => s.id !== suggestion.id))
+      const updatedProductGroups = await getAllProductGroups()
+      setProductGroups(updatedProductGroups)
+      setEditingTemplate(newProduct)
+      toast({
+        title: 'Draft product created',
+        description: 'Fill in a provider ID below, then use "Test Stock" to buy a small batch.',
+      })
+    } else {
+      toast({ title: 'Failed to create draft product', variant: 'destructive' })
+    }
+  }
+
+  const handleTestStock = async (productGroupId: string) => {
+    const quantity = restockQty[productGroupId] || 10
+    setRestockingId(productGroupId)
+    try {
+      const result = await manualRestock(productGroupId, quantity)
+      if (result.success) {
+        const updatedProductGroups = await getAllProductGroups()
+        setProductGroups(updatedProductGroups)
+        toast({ title: `Bought ${result.bought} unit(s)`, description: 'Stock count updated.' })
+      } else {
+        toast({ title: 'Test stock purchase failed', description: result.error, variant: 'destructive' })
+      }
+    } catch (err) {
+      console.error('Test stock purchase failed:', err)
+      toast({ title: 'Test stock purchase failed', variant: 'destructive' })
+    } finally {
+      setRestockingId(null)
+    }
+  }
 
   const handleSaveReferralPct = async () => {
     const pct = parseFloat(referralCommissionPct)
@@ -652,7 +746,9 @@ export default function AdminPage() {
         muabanvia_product_id: updatedTemplate.muabanvia_product_id || null,
         auto_fulfill_enabled: !!updatedTemplate.auto_fulfill_enabled,
         shopclone_product_id: updatedTemplate.shopclone_product_id || null,
-        shopviaclone_product_id: updatedTemplate.shopviaclone_product_id || null
+        shopviaclone_product_id: updatedTemplate.shopviaclone_product_id || null,
+        auto_restock_enabled: !!updatedTemplate.auto_restock_enabled,
+        restock_buffer_days: updatedTemplate.restock_buffer_days || 3
       })
 
       if (result) {
@@ -1098,6 +1194,45 @@ export default function AdminPage() {
               </CardContent>
             </Card>
 
+            {/* Product Suggestions ("trending category" panel) */}
+            <Card className="mb-6 sm:mb-8">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg">Product Suggestions</CardTitle>
+                <Button size="sm" onClick={handleCheckTrends} disabled={isCheckingTrends}>
+                  {isCheckingTrends ? 'Checking...' : 'Check Trends'}
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Flags categories whose sales are growing fast in your own store and suggests
+                  adding a new product based on your best template in that category. Accepting
+                  never spends money by itself - it just creates a draft you can fill in and test.
+                </p>
+                {productSuggestions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No pending suggestions. Click "Check Trends" to scan recent sales.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {productSuggestions.map((s) => (
+                      <div key={s.id} className="border rounded-lg p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{s.suggested_name}</p>
+                          <p className="text-xs text-muted-foreground">{s.categories?.name ? `${s.categories.name} · ` : ''}{s.reason}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleDismissSuggestion(s.id)}>
+                            Not now
+                          </Button>
+                          <Button size="sm" onClick={() => handleAcceptSuggestion(s)}>
+                            Add product
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
           {/* View Account Modal */}
           {viewingAccount && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1345,6 +1480,61 @@ export default function AdminPage() {
                       onChange={(e) => setEditingTemplate({...editingTemplate, shopviaclone_product_id: e.target.value})}
                     />
                   </div>
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium block mb-1">Proactive Auto-Restock</label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      When enabled, a scheduled job buys ahead of demand for this product
+                      (based on recent sales speed) instead of waiting for stock to hit zero.
+                      Uses whichever provider IDs above are filled in, in the same order.
+                    </p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="checkbox"
+                        id="auto_restock_enabled"
+                        checked={!!editingTemplate.auto_restock_enabled}
+                        onChange={(e) => setEditingTemplate({...editingTemplate, auto_restock_enabled: e.target.checked})}
+                      />
+                      <label htmlFor="auto_restock_enabled" className="text-sm">
+                        Enable proactive auto-restock for this product
+                      </label>
+                    </div>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Buffer days (default 3)"
+                      value={editingTemplate.restock_buffer_days ?? 3}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, restock_buffer_days: parseFloat(e.target.value) || 3})}
+                    />
+                  </div>
+                  {editingTemplate.id && (
+                    <div className="border-t pt-4">
+                      <label className="text-sm font-medium block mb-1">Test Stock (manual one-off buy)</label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Buys a small batch right now using whichever provider IDs above are
+                        filled in. Useful for testing a brand-new product before turning on
+                        auto-restock. This spends real money - it's a separate, explicit action.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          className="w-28"
+                          placeholder="Qty"
+                          value={restockQty[editingTemplate.id] ?? 10}
+                          onChange={(e) => setRestockQty({...restockQty, [editingTemplate.id]: parseInt(e.target.value) || 10})}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={restockingId === editingTemplate.id}
+                          onClick={() => handleTestStock(editingTemplate.id)}
+                        >
+                          {restockingId === editingTemplate.id ? 'Buying...' : 'Test Stock'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 mt-6">
                   <Button onClick={() => setEditingTemplate(null)} variant="outline" className="flex-1">

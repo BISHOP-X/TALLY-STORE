@@ -137,6 +137,8 @@ export interface ProductGroup {
   auto_fulfill_enabled?: boolean
   shopclone_product_id?: string | null
   shopviaclone_product_id?: string | null
+  auto_restock_enabled?: boolean
+  restock_buffer_days?: number
 }
 
 export interface Product {
@@ -657,6 +659,275 @@ export async function getTopSellingProductGroupIds(limit: number = 8): Promise<s
   } catch (error) {
     console.error('❌ Failed to fetch top selling product groups:', error)
     return []
+  }
+}
+
+// Per-user purchase history, used to power "Recommended for you" ordering on
+// product listing pages: which product groups (and their categories) has
+// this user actually bought before, ranked by how many times. Categories the
+// user already buys from are what "recommended" leans on most; the global
+// top-seller ranking (getTopSellingProductGroupIds) fills in the rest.
+export async function getUserPurchaseHistory(userId: string): Promise<{
+  productGroupCounts: Record<string, number>
+  categoryCounts: Record<string, number>
+}> {
+  const empty = { productGroupCounts: {}, categoryCounts: {} }
+  if (!userId) return empty
+
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('product_group_id, account_details, product_groups(category_id)')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .limit(2000)
+
+    if (error) {
+      console.error('❌ Error fetching user purchase history:', error)
+      return empty
+    }
+
+    const productGroupCounts: Record<string, number> = {}
+    const categoryCounts: Record<string, number> = {}
+
+    for (const row of (data || []) as any[]) {
+      if (!row.product_group_id) continue
+      const details = row.account_details as { quantity?: number } | null
+      const qty = details && typeof details.quantity === 'number' && details.quantity > 0
+        ? details.quantity
+        : 1
+      productGroupCounts[row.product_group_id] = (productGroupCounts[row.product_group_id] || 0) + qty
+
+      const categoryId = row.product_groups?.category_id
+      if (categoryId) {
+        categoryCounts[categoryId] = (categoryCounts[categoryId] || 0) + qty
+      }
+    }
+
+    return { productGroupCounts, categoryCounts }
+  } catch (error) {
+    console.error('❌ Failed to fetch user purchase history:', error)
+    return empty
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Product suggestions ("trending category, want to add a product?" panel)
+// ---------------------------------------------------------------------------
+//
+// Trigger is your own store's sales velocity, NOT a live scan of the
+// supplier sites yet - MuaBanVia/ShopClone/ShopViaClone22 do expose a
+// products.php "list of categories and products" endpoint, but its exact
+// response shape hasn't been confirmed, so matching that against your
+// catalog is a follow-up, not part of this first pass.
+
+export interface ProductSuggestion {
+  id: string
+  category_id: string
+  based_on_product_group_id: string | null
+  created_product_group_id: string | null
+  suggested_name: string
+  reason?: string | null
+  velocity_recent?: number | null
+  velocity_previous?: number | null
+  status: 'pending' | 'accepted' | 'dismissed'
+  snoozed_until?: string | null
+  created_at: string
+  updated_at: string
+  categories?: { name: string }
+}
+
+// Scans the last 14 days of completed orders, splits into two 7-day windows,
+// and flags any category whose unit velocity grew by at least `growthRatio`
+// (default 1.5x = 50% faster) with enough absolute volume to not just be
+// noise. For each flagged category, upserts a 'pending' suggestion based on
+// that category's own best-selling template (skipped if one is already
+// pending or still snoozed for that category).
+export async function computeAndUpsertTrendSuggestions(options?: {
+  growthRatio?: number
+  minRecentUnits?: number
+}): Promise<ProductSuggestion[]> {
+  const growthRatio = options?.growthRatio ?? 1.5
+  const minRecentUnits = options?.minRecentUnits ?? 5
+
+  try {
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('product_group_id, account_details, created_at, status')
+      .eq('status', 'completed')
+      .gte('created_at', fourteenDaysAgo)
+      .limit(5000)
+
+    if (error) throw error
+
+    const productGroups = await getAllProductGroups()
+    const pgById: Record<string, ProductGroup> = {}
+    productGroups.forEach((pg) => { pgById[pg.id] = pg })
+
+    const recentByCategory: Record<string, number> = {}
+    const previousByCategory: Record<string, number> = {}
+    const recentByProduct: Record<string, number> = {}
+
+    for (const row of orders || []) {
+      const pg = pgById[row.product_group_id]
+      if (!pg) continue
+      const details = row.account_details as { quantity?: number } | null
+      const qty = details && typeof details.quantity === 'number' && details.quantity > 0
+        ? details.quantity
+        : 1
+
+      const isRecent = row.created_at >= sevenDaysAgo
+      if (isRecent) {
+        recentByCategory[pg.category_id] = (recentByCategory[pg.category_id] || 0) + qty
+        recentByProduct[pg.id] = (recentByProduct[pg.id] || 0) + qty
+      } else {
+        previousByCategory[pg.category_id] = (previousByCategory[pg.category_id] || 0) + qty
+      }
+    }
+
+    const { data: existing } = await supabase
+      .from('product_suggestions')
+      .select('category_id, status, snoozed_until')
+      .in('status', ['pending', 'dismissed'])
+
+    const blockedCategoryIds = new Set(
+      (existing || [])
+        .filter((s) => s.status === 'pending' || (s.snoozed_until && s.snoozed_until > new Date().toISOString()))
+        .map((s) => s.category_id),
+    )
+
+    const created: ProductSuggestion[] = []
+
+    for (const categoryId of Object.keys(recentByCategory)) {
+      const recent = recentByCategory[categoryId] || 0
+      const previous = previousByCategory[categoryId] || 0
+      if (recent < minRecentUnits) continue
+      if (blockedCategoryIds.has(categoryId)) continue
+      // previous === 0 with real recent volume still counts as "trending" -
+      // treat it as effectively infinite growth rather than dividing by zero.
+      const growth = previous > 0 ? recent / previous : Infinity
+      if (growth < growthRatio) continue
+
+      const bestTemplate = productGroups
+        .filter((pg) => pg.category_id === categoryId && pg.is_active)
+        .sort((a, b) => (recentByProduct[b.id] || 0) - (recentByProduct[a.id] || 0))[0]
+
+      if (!bestTemplate) continue
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('product_suggestions')
+        .insert([{
+          category_id: categoryId,
+          based_on_product_group_id: bestTemplate.id,
+          suggested_name: `${bestTemplate.name} (New)`,
+          reason: `Sales in this category are up ${previous > 0 ? `${Math.round((growth - 1) * 100)}%` : 'sharply'} vs last week (${recent} vs ${previous} units).`,
+          velocity_recent: recent,
+          velocity_previous: previous,
+          status: 'pending',
+        }])
+        .select('*, categories(name)')
+        .single()
+
+      if (!insertError && inserted) {
+        created.push(inserted)
+      }
+    }
+
+    return created
+  } catch (error) {
+    console.error('❌ Failed to compute trend suggestions:', error)
+    return []
+  }
+}
+
+export async function getProductSuggestions(status: 'pending' | 'accepted' | 'dismissed' = 'pending'): Promise<ProductSuggestion[]> {
+  try {
+    const { data, error } = await supabase
+      .from('product_suggestions')
+      .select('*, categories(name)')
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('❌ Failed to fetch product suggestions:', error)
+    return []
+  }
+}
+
+// "Not now" - hides this suggestion until it's re-flagged after the snooze
+// window passes (default 3 days).
+export async function dismissSuggestion(id: string, snoozeDays: number = 3): Promise<boolean> {
+  try {
+    const snoozedUntil = new Date(Date.now() + snoozeDays * 24 * 60 * 60 * 1000).toISOString()
+    const { error } = await supabase
+      .from('product_suggestions')
+      .update({ status: 'dismissed', snoozed_until: snoozedUntil, updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.error('❌ Failed to dismiss suggestion:', error)
+    return false
+  }
+}
+
+// "Add product" - clones the based-on template into a new DRAFT product
+// (is_active: false, no stock, provider IDs blank) and links it to the
+// suggestion. This never spends money by itself - the admin still has to
+// open the new draft, fill in a provider ID, and explicitly trigger a test
+// stock purchase afterwards.
+export async function acceptSuggestion(id: string): Promise<ProductGroup | null> {
+  try {
+    const { data: suggestion, error: fetchError } = await supabase
+      .from('product_suggestions')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !suggestion) throw fetchError || new Error('Suggestion not found')
+
+    const template = suggestion.based_on_product_group_id
+      ? await (async () => {
+          const { data } = await supabase
+            .from('product_groups')
+            .select('*')
+            .eq('id', suggestion.based_on_product_group_id)
+            .single()
+          return data
+        })()
+      : null
+
+    const newProduct = await createProductGroup({
+      category_id: suggestion.category_id,
+      name: suggestion.suggested_name,
+      description: template?.description || '',
+      price: template?.price || 0,
+      features: template?.features || [],
+      stock_count: 0,
+      is_active: false,
+    } as any)
+
+    if (!newProduct) throw new Error('Failed to create draft product')
+
+    await supabase
+      .from('product_suggestions')
+      .update({
+        status: 'accepted',
+        created_product_group_id: newProduct.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    return newProduct
+  } catch (error) {
+    console.error('❌ Failed to accept suggestion:', error)
+    return null
   }
 }
 
@@ -1866,6 +2137,30 @@ export async function searchUsers(query: string) {
 }
 
 // SECURE: Admin adjust user wallet/crypto balance via Edge Function
+// Admin-triggered one-off live purchase, used by the "Test Stock" button on
+// a newly-accepted product suggestion (or any product with a provider ID
+// set). Separate from accepting a suggestion so spending is always its own
+// explicit click - see manual-restock/index.ts for the actual buy logic.
+export async function manualRestock(
+  productGroupId: string,
+  quantity: number,
+): Promise<{ success: boolean; bought?: number; error?: string; attempts?: any[] }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('manual-restock', {
+      body: { product_group_id: productGroupId, quantity },
+    })
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to reach manual-restock function' }
+    }
+
+    return data
+  } catch (error) {
+    console.error('❌ manualRestock failed:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Manual restock failed' }
+  }
+}
+
 export async function adminAdjustBalance(
   userId: string,
   amount: number,
