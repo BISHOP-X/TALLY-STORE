@@ -113,67 +113,112 @@ serve(async (req) => {
       const shortfall = quantity - workingAccounts.length;
       const available = workingAccounts.length;
 
-      // Auto-fulfillment fallback: if this product group is configured to auto-fulfill
-      // from MuaBanVia, try to live-purchase the shortfall instead of failing outright.
-      if (productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id) {
-        console.log(`🔄 Stock shortfall (${shortfall}) — attempting MuaBanVia auto-fulfillment for product_group_id: ${product_group_id}`);
+      // Auto-fulfillment fallback chain: try each configured live-purchase provider in
+      // order until the shortfall is covered or every provider has been tried. Admin
+      // "selects" which provider(s) are active for a product simply by filling in that
+      // provider's product-id column (leave it blank to skip/disable that provider).
+      // MuaBanVia is also gated behind the older auto_fulfill_enabled master switch for
+      // backwards compatibility with existing product configs.
+      //
+      // All three providers share the same API shape (their own docs):
+      // POST multipart/form-data: action=buyProduct, id, amount, api_key
+      // Response: { status: "success", msg, trans_id, data: ["user|pass", ...] }
+      const providers = [
+        {
+          name: 'muabanvia',
+          enabled: !!(productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id),
+          productId: productGroup.muabanvia_product_id,
+          apiKeyEnv: 'MUABANVIA_API_KEY',
+          baseUrlEnv: 'MUABANVIA_BASE_URL',
+          defaultBaseUrl: 'https://muabanvia.org/api/buy_product',
+          // MuaBanVia's own examples send the product id as both ID and id.
+          idFieldNames: ['ID', 'id'],
+        },
+        {
+          name: 'shopclone',
+          enabled: !!productGroup.shopclone_product_id,
+          productId: productGroup.shopclone_product_id,
+          apiKeyEnv: 'SHOPCLONE_API_KEY',
+          baseUrlEnv: 'SHOPCLONE_BASE_URL',
+          defaultBaseUrl: 'https://shopclone.vn/api/buy_product',
+          idFieldNames: ['id'],
+        },
+        {
+          name: 'shopviaclone',
+          enabled: !!productGroup.shopviaclone_product_id,
+          productId: productGroup.shopviaclone_product_id,
+          apiKeyEnv: 'SHOPVIACLONE_API_KEY',
+          baseUrlEnv: 'SHOPVIACLONE_BASE_URL',
+          defaultBaseUrl: 'https://shopviaclone22.com/api/buy_product',
+          idFieldNames: ['id'],
+        },
+      ];
+
+      // Parses the shared response shape all three providers use:
+      // { status: "success", msg, trans_id, data: ["user|pass", ...] }
+      const parseFulfilledAccounts = (rawAccounts: any, limit: number) => {
+        const fulfilledRaw: any[] = Array.isArray(rawAccounts) ? rawAccounts : [];
+        return fulfilledRaw.slice(0, limit).map((item: any) => {
+          if (typeof item === 'string') {
+            const parts = item.split('|').map((p: string) => p.trim());
+            return {
+              username: parts[0] || '',
+              password: parts[1] || '',
+              email: parts[2] || null,
+              email_password: parts[3] || null,
+              two_fa_code: parts[4] || null,
+            };
+          }
+          return {
+            username: item.username || item.user || item.login || '',
+            password: item.password || item.pass || '',
+            email: item.email || null,
+            email_password: item.email_password || item.emailPass || null,
+            two_fa_code: item.two_fa_code || item.twofa || item['2fa'] || null,
+            additional_info: item,
+          };
+        });
+      };
+
+      let remainingShortfall = shortfall;
+
+      for (const provider of providers) {
+        if (remainingShortfall <= 0) break;
+        if (!provider.enabled) continue;
+
+        console.log(`🔄 Stock shortfall (${remainingShortfall}) — attempting ${provider.name} auto-fulfillment for product_group_id: ${product_group_id}`);
 
         try {
-          const muabanviaApiKey = Deno.env.get('MUABANVIA_API_KEY');
-          // CONFIRMED real MuaBanVia API (their own docs, https://muabanvia.org/api/buy_product):
-          // POST as multipart/form-data, NOT JSON. Fields: action=buyProduct, ID/id, amount,
-          // coupon (optional), api_key (auth goes in the form body, not a Bearer header).
-          // Response: { status: "success", msg, trans_id, data: ["user|pass", ...] }
-          const muabanviaBaseUrl = Deno.env.get('MUABANVIA_BASE_URL') || 'https://muabanvia.org/api/buy_product';
-
-          if (!muabanviaApiKey) {
-            throw new Error('MUABANVIA_API_KEY not configured');
+          const apiKey = Deno.env.get(provider.apiKeyEnv);
+          if (!apiKey) {
+            throw new Error(`${provider.apiKeyEnv} not configured`);
           }
 
-          const muabanviaForm = new FormData();
-          muabanviaForm.set('action', 'buyProduct');
-          muabanviaForm.set('ID', String(productGroup.muabanvia_product_id));
-          muabanviaForm.set('id', String(productGroup.muabanvia_product_id));
-          muabanviaForm.set('amount', String(shortfall));
-          muabanviaForm.set('api_key', muabanviaApiKey);
+          const baseUrl = Deno.env.get(provider.baseUrlEnv) || provider.defaultBaseUrl;
 
-          const fulfillResponse = await fetch(muabanviaBaseUrl, {
+          const form = new FormData();
+          form.set('action', 'buyProduct');
+          for (const fieldName of provider.idFieldNames) {
+            form.set(fieldName, String(provider.productId));
+          }
+          form.set('amount', String(remainingShortfall));
+          form.set('api_key', apiKey);
+
+          const fulfillResponse = await fetch(baseUrl, {
             method: 'POST',
-            body: muabanviaForm,
+            body: form,
           });
 
           const fulfillResult = await fulfillResponse.json().catch(() => null) as any;
 
           if (!fulfillResponse.ok || fulfillResult?.status !== 'success') {
-            throw new Error(fulfillResult?.msg || fulfillResult?.message || fulfillResult?.error || 'MuaBanVia could not fulfill the shortfall');
+            throw new Error(fulfillResult?.msg || fulfillResult?.message || fulfillResult?.error || `${provider.name} could not fulfill the shortfall`);
           }
 
-          const rawAccounts = fulfillResult?.data ?? [];
-          const fulfilledRaw: any[] = Array.isArray(rawAccounts) ? rawAccounts : [];
+          const fulfilledAccounts = parseFulfilledAccounts(fulfillResult?.data ?? [], remainingShortfall);
 
-          const fulfilledAccounts = fulfilledRaw.slice(0, shortfall).map((item: any) => {
-            if (typeof item === 'string') {
-              const parts = item.split('|').map((p: string) => p.trim());
-              return {
-                username: parts[0] || '',
-                password: parts[1] || '',
-                email: parts[2] || null,
-                email_password: parts[3] || null,
-                two_fa_code: parts[4] || null,
-              };
-            }
-            return {
-              username: item.username || item.user || item.login || '',
-              password: item.password || item.pass || '',
-              email: item.email || null,
-              email_password: item.email_password || item.emailPass || null,
-              two_fa_code: item.two_fa_code || item.twofa || item['2fa'] || null,
-              additional_info: item,
-            };
-          });
-
-          if (fulfilledAccounts.length < shortfall) {
-            throw new Error(`MuaBanVia only returned ${fulfilledAccounts.length} of ${shortfall} needed accounts`);
+          if (fulfilledAccounts.length === 0) {
+            throw new Error(`${provider.name} returned no accounts`);
           }
 
           // Insert the live-fulfilled accounts as available stock, tagged with their source,
@@ -191,7 +236,7 @@ serve(async (req) => {
                 two_fa_code: acc.two_fa_code,
                 additional_info: acc.additional_info || null,
                 status: 'available',
-                fulfillment_source: 'muabanvia',
+                fulfillment_source: provider.name,
               }))
             )
             .select('*');
@@ -200,11 +245,13 @@ serve(async (req) => {
             throw new Error(insertError?.message || 'Failed to record auto-fulfilled accounts');
           }
 
-          console.log(`✅ MuaBanVia auto-fulfillment succeeded: ${insertedAccounts.length} account(s)`);
+          console.log(`✅ ${provider.name} auto-fulfillment succeeded: ${insertedAccounts.length} account(s)`);
           workingAccounts = [...workingAccounts, ...insertedAccounts];
+          remainingShortfall -= insertedAccounts.length;
         } catch (fulfillErr) {
-          console.error('❌ MuaBanVia auto-fulfillment failed:', fulfillErr);
-          // Fall through to the standard out-of-stock error below.
+          console.error(`❌ ${provider.name} auto-fulfillment failed:`, fulfillErr);
+          // Fall through to the next provider in the chain, or to the standard
+          // out-of-stock error below if this was the last one.
         }
       }
 

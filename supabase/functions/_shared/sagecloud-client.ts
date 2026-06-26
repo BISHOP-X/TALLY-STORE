@@ -1,10 +1,13 @@
 /**
  * SageCloud API Client
  * Handles bank transfers, airtime, data, electricity, and TV bills
- * Documentation: https://sagecloud.ng/api/v2
+ * Documentation: https://docs.sagecloud.ng
+ *
+ * Migrated to the new platform (app.sagecloud.ng / api.sagecloud.ng) -
+ * old base URL was https://sagecloud.ng/api/v2.
  */
 
-const SAGECLOUD_API_URL = 'https://sagecloud.ng/api/v2';
+const SAGECLOUD_API_URL = 'https://api.sagecloud.ng/api';
 
 interface SageCloudConfig {
   publicKey: string;

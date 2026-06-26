@@ -135,6 +135,8 @@ export interface ProductGroup {
   categories?: { name: string }
   muabanvia_product_id?: string | null
   auto_fulfill_enabled?: boolean
+  shopclone_product_id?: string | null
+  shopviaclone_product_id?: string | null
 }
 
 export interface Product {

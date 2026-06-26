@@ -650,7 +650,9 @@ export default function AdminPage() {
         price: updatedTemplate.price,
         category_id: updatedTemplate.category_id,
         muabanvia_product_id: updatedTemplate.muabanvia_product_id || null,
-        auto_fulfill_enabled: !!updatedTemplate.auto_fulfill_enabled
+        auto_fulfill_enabled: !!updatedTemplate.auto_fulfill_enabled,
+        shopclone_product_id: updatedTemplate.shopclone_product_id || null,
+        shopviaclone_product_id: updatedTemplate.shopviaclone_product_id || null
       })
 
       if (result) {
@@ -1317,6 +1319,31 @@ export default function AdminPage() {
                         Enable auto-fulfillment for this product
                       </label>
                     </div>
+                  </div>
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium block mb-1">ShopClone Fallback</label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Tried next if MuaBanVia is disabled, not configured, or fails. Leave
+                      blank to skip ShopClone for this product.
+                    </p>
+                    <Input
+                      placeholder="ShopClone product ID (optional)"
+                      value={editingTemplate.shopclone_product_id || ''}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, shopclone_product_id: e.target.value})}
+                    />
+                  </div>
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium block mb-1">ShopViaClone22 Fallback</label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Tried last, if MuaBanVia and ShopClone are both unavailable or fail.
+                      Leave blank to skip ShopViaClone22 for this product. If every configured
+                      provider fails, the purchase simply fails as out of stock.
+                    </p>
+                    <Input
+                      placeholder="ShopViaClone22 product ID (optional)"
+                      value={editingTemplate.shopviaclone_product_id || ''}
+                      onChange={(e) => setEditingTemplate({...editingTemplate, shopviaclone_product_id: e.target.value})}
+                    />
                   </div>
                 </div>
                 <div className="flex gap-2 mt-6">
