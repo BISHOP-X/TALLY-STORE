@@ -2167,46 +2167,34 @@ export async function getReferralStats(userId: string): Promise<{
 
 // Move referral_balance into the user's main wallet_balance so it can be
 // spent or withdrawn through existing flows.
-export async function withdrawReferralBalance(userId: string): Promise<{ success: boolean; error?: string; amount?: number }> {
+//
+// This used to write directly to profiles.wallet_balance/referral_balance
+// from the browser. That update never errored but also never actually moved
+// anything - profiles RLS doesn't let authenticated users write their own
+// balance columns directly (same as every other balance change in this app),
+// so it silently touched 0 rows while still reporting success. Moved into
+// the withdraw-referral-balance edge function (service role) instead.
+export async function withdrawReferralBalance(_userId: string): Promise<{ success: boolean; error?: string; amount?: number }> {
   try {
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('referral_balance, wallet_balance')
-      .eq('id', userId)
-      .single()
+    const { data, error } = await supabase.functions.invoke('withdraw-referral-balance', {
+      body: {},
+    })
 
-    if (profileError || !profile) {
-      return { success: false, error: 'Could not load profile' }
+    if (error) {
+      let errorMessage = error.message || 'Failed to withdraw referral balance'
+      if (error.context && typeof error.context === 'object') {
+        const context = error.context as any
+        if (context.error) errorMessage = context.error
+        else if (context.message) errorMessage = context.message
+      }
+      return { success: false, error: errorMessage }
     }
 
-    const amount = profile.referral_balance || 0
-    if (amount <= 0) {
-      return { success: false, error: 'No referral balance to withdraw' }
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Failed to withdraw referral balance' }
     }
 
-    const newWalletBalance = (profile.wallet_balance || 0) + amount
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ referral_balance: 0, wallet_balance: newWalletBalance })
-      .eq('id', userId)
-
-    if (updateError) {
-      return { success: false, error: updateError.message }
-    }
-
-    await supabase
-      .from('transactions')
-      .insert([{
-        user_id: userId,
-        type: 'referral_withdrawal',
-        amount: amount,
-        balance_after: newWalletBalance,
-        description: 'Referral earnings moved to wallet balance',
-        reference: `REF-${Date.now()}`
-      }])
-
-    return { success: true, amount }
+    return { success: true, amount: data.amount }
   } catch (error) {
     console.error('Error withdrawing referral balance:', error)
     return { success: false, error: 'Failed to withdraw referral balance' }
