@@ -88,6 +88,69 @@ function extractStatus(payload: any): string {
   ).toLowerCase()
 }
 
+// Referral commission is earned on deposits/top-ups (not on purchases) - a
+// percentage of every successful top-up made by a referred user gets credited
+// to their referrer's referral_balance. Reads the live referral_commission_pct
+// from app_settings (admin-configurable), defaulting to 5% if unset.
+// Non-blocking: any failure here must never affect the top-up that already
+// completed successfully.
+async function creditReferrerForTopup(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  amount: number,
+) {
+  try {
+    const { data: buyerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('referred_by')
+      .eq('id', userId)
+      .single()
+
+    if (!buyerProfile?.referred_by) return
+
+    const referrerId = buyerProfile.referred_by
+
+    const { data: pctSetting } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'referral_commission_pct')
+      .maybeSingle()
+
+    const commissionPct = pctSetting?.value ? parseFloat(pctSetting.value) : 5
+    const commissionAmount = (amount * commissionPct) / 100
+    if (commissionAmount <= 0) return
+
+    const { data: referrerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('referral_balance')
+      .eq('id', referrerId)
+      .single()
+
+    if (!referrerProfile) return
+
+    const newReferralBalance = (referrerProfile.referral_balance || 0) + commissionAmount
+
+    await supabaseAdmin
+      .from('profiles')
+      .update({ referral_balance: newReferralBalance })
+      .eq('id', referrerId)
+
+    await supabaseAdmin
+      .from('referral_earnings')
+      .insert([{
+        referrer_id: referrerId,
+        referred_user_id: userId,
+        order_amount: amount,
+        commission_pct: commissionPct,
+        commission_amount: commissionAmount,
+      }])
+
+    console.log(`✅ Referral top-up reward: ₦${commissionAmount} credited to referrer ${referrerId}`)
+  } catch (referralError) {
+    console.error('⚠️ Referral top-up reward error (non-blocking):', referralError)
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -205,6 +268,8 @@ serve(async (req) => {
     }
 
     console.log('PocketFi webhook payment processed successfully for user:', userId)
+
+    await creditReferrerForTopup(supabase, userId, amount)
 
     return json({
       success: true,
