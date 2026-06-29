@@ -139,6 +139,37 @@ export interface ProductGroup {
   shopviaclone_product_id?: string | null
   auto_restock_enabled?: boolean
   restock_buffer_days?: number
+  quantity_discount_tiers?: QuantityDiscountTier[]
+}
+
+export interface QuantityDiscountTier {
+  min_qty: number
+  discount_pct: number
+}
+
+// Picks the best applicable tier for a given quantity (highest min_qty the
+// quantity meets or exceeds) and returns the discounted total. Mirrors the
+// exact same logic used server-side in process-purchase/index.ts - if you
+// change this, change that too, or displayed totals will stop matching what
+// actually gets charged.
+export function computeDiscountedTotal(
+  unitPrice: number,
+  quantity: number,
+  tiers: QuantityDiscountTier[] | undefined | null,
+): { total: number; discountPct: number; originalTotal: number } {
+  const originalTotal = unitPrice * quantity
+  if (!tiers || tiers.length === 0) {
+    return { total: originalTotal, discountPct: 0, originalTotal }
+  }
+  const applicable = tiers
+    .filter((t) => quantity >= t.min_qty)
+    .sort((a, b) => b.discount_pct - a.discount_pct)[0]
+  if (!applicable) {
+    return { total: originalTotal, discountPct: 0, originalTotal }
+  }
+  const discountPct = Math.min(Math.max(applicable.discount_pct, 0), 100)
+  const total = Math.round(originalTotal * (1 - discountPct / 100))
+  return { total, discountPct, originalTotal }
 }
 
 export interface Product {
@@ -1371,7 +1402,8 @@ function generateIdempotencyKey(userId: string, productGroupId: string, quantity
 // SECURE: Process purchase via Edge Function (server-side)
 export async function processPurchaseSecure(
   productGroupId: string,
-  quantity: number
+  quantity: number,
+  discountCode?: string,
 ): Promise<{ success: boolean; error?: string; order_id?: string; amount?: number; new_balance?: number }> {
   try {
     // Get current session for user ID
@@ -1381,7 +1413,7 @@ export async function processPurchaseSecure(
     }
 
     const idempotencyKey = generateIdempotencyKey(session.user.id, productGroupId, quantity);
-    
+
     console.log('🛒 Calling secure purchase Edge Function:', { productGroupId, quantity });
 
     const { data, error } = await supabase.functions.invoke('process-purchase', {
@@ -1389,6 +1421,7 @@ export async function processPurchaseSecure(
         product_group_id: productGroupId,
         quantity: quantity,
         idempotency_key: idempotencyKey,
+        discount_code: discountCode || undefined,
       },
     });
 
@@ -2563,5 +2596,112 @@ export async function checkTransactionByReference(reference: string): Promise<{
   } catch (error) {
     console.error('Error checking transaction by reference:', error)
     return { found: false }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Discount codes / flash sales
+// ---------------------------------------------------------------------------
+
+export interface DiscountCode {
+  id: string
+  code: string
+  percent_off: number
+  category_id: string | null
+  product_group_id: string | null
+  max_uses: number | null
+  used_count: number
+  expires_at: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export async function getDiscountCodes(): Promise<DiscountCode[]> {
+  try {
+    const { data, error } = await supabase
+      .from('discount_codes')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('❌ Error fetching discount codes:', error)
+      return []
+    }
+    return data || []
+  } catch (error) {
+    console.error('❌ Failed to fetch discount codes:', error)
+    return []
+  }
+}
+
+export async function createDiscountCode(input: {
+  code: string
+  percent_off: number
+  category_id?: string | null
+  product_group_id?: string | null
+  max_uses?: number | null
+  expires_at?: string | null
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('discount_codes').insert({
+      code: input.code.trim().toUpperCase(),
+      percent_off: input.percent_off,
+      category_id: input.category_id || null,
+      product_group_id: input.product_group_id || null,
+      max_uses: input.max_uses || null,
+      expires_at: input.expires_at || null,
+    })
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+  } catch (error) {
+    console.error('❌ Failed to create discount code:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to create code' }
+  }
+}
+
+export async function setDiscountCodeActive(id: string, isActive: boolean): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('discount_codes').update({ is_active: isActive }).eq('id', id)
+    return !error
+  } catch (error) {
+    console.error('❌ Failed to update discount code:', error)
+    return false
+  }
+}
+
+// Client-side preview only - this is NOT the source of truth for the actual
+// charge. The purchase edge function re-validates and re-applies the code
+// server-side before deducting wallet balance, so a tampered client value
+// here can never result in an incorrect charge.
+export async function previewDiscountCode(
+  code: string,
+  productGroupId: string,
+  categoryId: string | null,
+): Promise<{ valid: boolean; percentOff?: number; error?: string }> {
+  if (!code.trim()) return { valid: false, error: 'Enter a code' }
+  try {
+    const { data, error } = await supabase
+      .from('discount_codes')
+      .select('*')
+      .eq('code', code.trim().toUpperCase())
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (error || !data) return { valid: false, error: 'Invalid or expired code' }
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      return { valid: false, error: 'This code has expired' }
+    }
+    if (data.max_uses && data.used_count >= data.max_uses) {
+      return { valid: false, error: 'This code has reached its usage limit' }
+    }
+    if (data.product_group_id && data.product_group_id !== productGroupId) {
+      return { valid: false, error: 'This code is not valid for this product' }
+    }
+    if (data.category_id && !data.product_group_id && data.category_id !== categoryId) {
+      return { valid: false, error: 'This code is not valid for this category' }
+    }
+    return { valid: true, percentOff: data.percent_off }
+  } catch (error) {
+    console.error('❌ Failed to preview discount code:', error)
+    return { valid: false, error: 'Failed to validate code' }
   }
 }

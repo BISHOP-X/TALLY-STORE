@@ -382,7 +382,7 @@ serve(async (req) => {
     } catch (purchaseError: unknown) {
       console.error('SageCloud purchase failed:', purchaseError);
       const errorMessage = purchaseError instanceof Error ? purchaseError.message : 'Unknown purchase error';
-      
+
       // Update transaction as failed
       await supabaseClient
         .from('bills_transactions')

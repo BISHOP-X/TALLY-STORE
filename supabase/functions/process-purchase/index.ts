@@ -45,7 +45,7 @@ serve(async (req) => {
     );
 
     // Parse request body
-    const { product_group_id, quantity, idempotency_key } = await req.json();
+    const { product_group_id, quantity, idempotency_key, discount_code } = await req.json();
 
     // Validate inputs
     if (!product_group_id || !quantity || quantity < 1) {
@@ -268,7 +268,52 @@ serve(async (req) => {
     }
 
     // 3. Check wallet balance
-    const totalPrice = productGroup.price * quantity;
+    // Apply quantity discount tiers (same logic as computeDiscountedTotal in
+    // src/lib/supabase.ts - keep both in sync). Highest-min_qty tier the
+    // purchased quantity meets or exceeds wins.
+    const tiers: Array<{ min_qty: number; discount_pct: number }> = Array.isArray(productGroup.quantity_discount_tiers)
+      ? productGroup.quantity_discount_tiers
+      : [];
+    const originalTotal = productGroup.price * quantity;
+    const applicableTier = tiers
+      .filter((t) => quantity >= t.min_qty)
+      .sort((a, b) => b.discount_pct - a.discount_pct)[0];
+    const discountPct = applicableTier ? Math.min(Math.max(applicableTier.discount_pct, 0), 100) : 0;
+    let totalPrice = discountPct > 0 ? Math.round(originalTotal * (1 - discountPct / 100)) : originalTotal;
+
+    // Apply a discount code on top of the quantity-tier price, if one was
+    // supplied. Fully re-validated server-side - the client-side preview in
+    // src/lib/supabase.ts (previewDiscountCode) is just a UX convenience and
+    // is never trusted for the actual charge.
+    let appliedDiscountCode: { id: string; code: string } | null = null;
+    if (discount_code && typeof discount_code === 'string' && discount_code.trim()) {
+      const { data: codeRow } = await supabaseAdmin
+        .from('discount_codes')
+        .select('*')
+        .eq('code', discount_code.trim().toUpperCase())
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!codeRow) {
+        throw new Error('Invalid or expired discount code');
+      }
+      if (codeRow.expires_at && new Date(codeRow.expires_at) < new Date()) {
+        throw new Error('This discount code has expired');
+      }
+      if (codeRow.max_uses && codeRow.used_count >= codeRow.max_uses) {
+        throw new Error('This discount code has reached its usage limit');
+      }
+      if (codeRow.product_group_id && codeRow.product_group_id !== product_group_id) {
+        throw new Error('This discount code is not valid for this product');
+      }
+      if (codeRow.category_id && !codeRow.product_group_id && codeRow.category_id !== productGroup.category_id) {
+        throw new Error('This discount code is not valid for this category');
+      }
+
+      const codePct = Math.min(Math.max(codeRow.percent_off, 0), 100);
+      totalPrice = Math.round(totalPrice * (1 - codePct / 100));
+      appliedDiscountCode = { id: codeRow.id, code: codeRow.code };
+    }
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
@@ -332,6 +377,7 @@ serve(async (req) => {
       amount: totalPrice,
       status: 'completed',
       idempotency_key: idempotency_key,
+      discount_code_id: appliedDiscountCode?.id || null,
       account_details: {
         accounts: purchasedAccounts.map((acc: any) => ({
           username: acc.username,
@@ -371,6 +417,21 @@ serve(async (req) => {
         .in('id', accountIds);
 
       throw new Error(`Failed to create order: ${orderError.message}`);
+    }
+
+    // 6b. Bump the discount code's used_count now that the order is locked in.
+    // Done after order creation (not before) so a failed/rolled-back purchase
+    // never consumes a use.
+    if (appliedDiscountCode) {
+      const { data: codeNow } = await supabaseAdmin
+        .from('discount_codes')
+        .select('used_count')
+        .eq('id', appliedDiscountCode.id)
+        .single();
+      await supabaseAdmin
+        .from('discount_codes')
+        .update({ used_count: (codeNow?.used_count || 0) + 1 })
+        .eq('id', appliedDiscountCode.id);
     }
 
     // 7. Mark accounts as sold

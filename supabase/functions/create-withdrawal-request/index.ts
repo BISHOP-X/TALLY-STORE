@@ -337,7 +337,7 @@ serve(async (req) => {
     } catch (transferError: unknown) {
       console.error('SageCloud transfer failed:', transferError);
       const errorMessage = transferError instanceof Error ? transferError.message : 'Unknown transfer error';
-      
+
       // Update withdrawal as failed
       await supabaseClient
         .from('crypto_withdrawals')

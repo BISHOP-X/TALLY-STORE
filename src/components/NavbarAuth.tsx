@@ -132,13 +132,10 @@ export default function Navbar() {
             <Link to="/support" className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors">
               Support
             </Link>
-            <button 
-              onClick={() => scrollToSection('how-it-works')}
-              className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors"
-            >
+            <Link to="/how-it-works" className="text-gray-700 dark:text-gray-300 hover:text-primary transition-colors">
               How It Works
-            </button>
-            
+            </Link>
+
             {/* Auth Buttons */}
             {user ? (
               <div className="flex items-center space-x-4">
@@ -192,6 +189,9 @@ export default function Navbar() {
                       </Link>
                       <Link to="/bills" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
                         Bills Payment
+                      </Link>
+                      <Link to="/gift-cards" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                        Gift Cards & eSIMs
                       </Link>
                       <Link to="/social-boost" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-pink-600 dark:text-pink-400">
                         🚀 Social Boost
@@ -323,13 +323,14 @@ export default function Navbar() {
               >
                 Support
               </Link>
-              <button 
-                onClick={() => scrollToSection('how-it-works')}
+              <Link
+                to="/how-it-works"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="text-left text-gray-700 dark:text-gray-300 hover:text-primary transition-colors py-2"
               >
                 How It Works
-              </button>
-              
+              </Link>
+
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 {user ? (
                   <div className="space-y-4">
@@ -389,7 +390,13 @@ export default function Navbar() {
                         Bills Payment
                       </Button>
                     </Link>
-                    
+
+                    <Link to="/gift-cards" onClick={() => setIsMobileMenuOpen(false)}>
+                      <Button variant="ghost" className="w-full justify-start gap-2">
+                        Gift Cards & eSIMs
+                      </Button>
+                    </Link>
+
                     <Link to="/social-boost" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="ghost" className="w-full justify-start gap-2 text-pink-600 dark:text-pink-400">
                         🚀 Social Boost

@@ -27,7 +27,8 @@ import {
   RefreshCw,
   CheckCircle2,
   Clock,
-  X
+  X,
+  Tag
 } from 'lucide-react'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
@@ -66,11 +67,15 @@ import {
   dismissSuggestion,
   acceptSuggestion,
   manualRestock,
+  getDiscountCodes,
+  createDiscountCode,
+  setDiscountCodeActive,
   type Category,
   type ProductGroup,
   type IndividualAccount,
   type ProductTemplate,
   type ProductSuggestion,
+  type DiscountCode,
   supabase
 } from '@/lib/supabase'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -188,6 +193,83 @@ export default function AdminPage() {
   const [dryRunResult, setDryRunResult] = useState<any>(null)
   const [isLoadingJobs, setIsLoadingJobs] = useState(false)
   const broadcastPollRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Discount codes / flash sales state
+  const [discountCodes, setDiscountCodes] = useState<DiscountCode[]>([])
+  const [isLoadingCodes, setIsLoadingCodes] = useState(false)
+  const [newCode, setNewCode] = useState('')
+  const [newCodePercent, setNewCodePercent] = useState('10')
+  const [newCodeScope, setNewCodeScope] = useState<'store' | 'category' | 'product'>('store')
+  const [newCodeCategoryId, setNewCodeCategoryId] = useState('')
+  const [newCodeProductGroupId, setNewCodeProductGroupId] = useState('')
+  const [newCodeMaxUses, setNewCodeMaxUses] = useState('')
+  const [newCodeExpiresAt, setNewCodeExpiresAt] = useState('')
+  const [isCreatingCode, setIsCreatingCode] = useState(false)
+
+  const loadDiscountCodes = useCallback(async () => {
+    setIsLoadingCodes(true)
+    try {
+      const codes = await getDiscountCodes()
+      setDiscountCodes(codes)
+    } catch (err) {
+      console.error('Failed to load discount codes:', err)
+    } finally {
+      setIsLoadingCodes(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDiscountCodes()
+  }, [loadDiscountCodes])
+
+  const handleCreateDiscountCode = async () => {
+    if (!newCode.trim()) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Enter a code' })
+      return
+    }
+    const pct = parseInt(newCodePercent, 10)
+    if (!pct || pct < 1 || pct > 100) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Percent off must be between 1 and 100' })
+      return
+    }
+    setIsCreatingCode(true)
+    try {
+      const result = await createDiscountCode({
+        code: newCode.trim(),
+        percent_off: pct,
+        category_id: newCodeScope === 'category' ? (newCodeCategoryId || null) : null,
+        product_group_id: newCodeScope === 'product' ? (newCodeProductGroupId || null) : null,
+        max_uses: newCodeMaxUses ? parseInt(newCodeMaxUses, 10) : null,
+        expires_at: newCodeExpiresAt ? new Date(newCodeExpiresAt).toISOString() : null,
+      })
+      if (result.success) {
+        toast({ title: 'Discount code created', description: `${newCode.trim().toUpperCase()} is now active` })
+        setNewCode('')
+        setNewCodePercent('10')
+        setNewCodeScope('store')
+        setNewCodeCategoryId('')
+        setNewCodeProductGroupId('')
+        setNewCodeMaxUses('')
+        setNewCodeExpiresAt('')
+        await loadDiscountCodes()
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: result.error || 'Failed to create code' })
+      }
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to create code' })
+    } finally {
+      setIsCreatingCode(false)
+    }
+  }
+
+  const handleToggleCodeActive = async (id: string, isActive: boolean) => {
+    const ok = await setDiscountCodeActive(id, isActive)
+    if (ok) {
+      setDiscountCodes(prev => prev.map(c => c.id === id ? { ...c, is_active: isActive } : c))
+    } else {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to update code' })
+    }
+  }
 
   // ==================== EMAIL / BROADCAST HANDLERS ====================
 
@@ -748,7 +830,12 @@ export default function AdminPage() {
         shopclone_product_id: updatedTemplate.shopclone_product_id || null,
         shopviaclone_product_id: updatedTemplate.shopviaclone_product_id || null,
         auto_restock_enabled: !!updatedTemplate.auto_restock_enabled,
-        restock_buffer_days: updatedTemplate.restock_buffer_days || 3
+        restock_buffer_days: updatedTemplate.restock_buffer_days || 3,
+        quantity_discount_tiers: Array.isArray(updatedTemplate.quantity_discount_tiers)
+          ? updatedTemplate.quantity_discount_tiers.filter(
+              (t: any) => t && t.min_qty > 0 && t.discount_pct > 0
+            )
+          : []
       })
 
       if (result) {
@@ -1506,6 +1593,48 @@ export default function AdminPage() {
                       onChange={(e) => setEditingTemplate({...editingTemplate, restock_buffer_days: parseFloat(e.target.value) || 3})}
                     />
                   </div>
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium block mb-1">Buy More, Save More</label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Quantity discount tiers - customers buying at least this many units get
+                      this % off the total automatically, applied at checkout and shown on the
+                      product card. Leave a row's quantity at 0 to disable it.
+                    </p>
+                    <div className="space-y-2">
+                      {[0, 1, 2].map((i) => {
+                        const tiers = editingTemplate.quantity_discount_tiers || []
+                        const tier = tiers[i] || { min_qty: 0, discount_pct: 0 }
+                        const updateTier = (field: 'min_qty' | 'discount_pct', value: number) => {
+                          const next = [...(editingTemplate.quantity_discount_tiers || [])]
+                          next[i] = { ...tier, [field]: value }
+                          setEditingTemplate({ ...editingTemplate, quantity_discount_tiers: next })
+                        }
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="Min qty"
+                              className="w-28"
+                              value={tier.min_qty || ''}
+                              onChange={(e) => updateTier('min_qty', parseInt(e.target.value) || 0)}
+                            />
+                            <span className="text-xs text-muted-foreground">units gets</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              placeholder="% off"
+                              className="w-24"
+                              value={tier.discount_pct || ''}
+                              onChange={(e) => updateTier('discount_pct', parseInt(e.target.value) || 0)}
+                            />
+                            <span className="text-xs text-muted-foreground">% off</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                   {editingTemplate.id && (
                     <div className="border-t pt-4">
                       <label className="text-sm font-medium block mb-1">Test Stock (manual one-off buy)</label>
@@ -1879,11 +2008,12 @@ export default function AdminPage() {
           {/* Main Content */}
           <Tabs defaultValue="templates" className="space-y-6">
             <div className="w-full overflow-x-auto pb-2">
-              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-7">
+              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-8">
                 <TabsTrigger value="templates" className="flex-shrink-0">Templates</TabsTrigger>
                 <TabsTrigger value="products" className="flex-shrink-0">Products</TabsTrigger>
                 <TabsTrigger value="add-product" className="flex-shrink-0">Add Product</TabsTrigger>
                 <TabsTrigger value="bulk-upload" className="flex-shrink-0">Bulk Upload</TabsTrigger>
+                <TabsTrigger value="discount-codes" className="flex-shrink-0">Discount Codes</TabsTrigger>
                 <TabsTrigger value="categories" className="flex-shrink-0">Categories</TabsTrigger>
                 <TabsTrigger value="users" className="flex-shrink-0">Users</TabsTrigger>
                 <TabsTrigger value="email" className="flex-shrink-0">Email</TabsTrigger>
@@ -2336,6 +2466,192 @@ export default function AdminPage() {
                     <Upload className="h-4 w-4 mr-2" />
                     Upload Accounts to Template
                   </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Discount Codes / Flash Sales */}
+            <TabsContent value="discount-codes" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Create Discount Code</CardTitle>
+                  <p className="text-muted-foreground">
+                    Store-wide, category, or single-product codes. Validated and applied server-side at checkout.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Code</label>
+                      <Input
+                        value={newCode}
+                        onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+                        placeholder="e.g. SAVE20"
+                        className="uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Percent Off (1-100)</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={newCodePercent}
+                        onChange={(e) => setNewCodePercent(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Applies To</label>
+                    <Select value={newCodeScope} onValueChange={(v: any) => setNewCodeScope(v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="store">Entire Store</SelectItem>
+                        <SelectItem value="category">One Category</SelectItem>
+                        <SelectItem value="product">One Product</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {newCodeScope === 'category' && (
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Category</label>
+                      <Select value={newCodeCategoryId} onValueChange={setNewCodeCategoryId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {newCodeScope === 'product' && (
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Product</label>
+                      <Select value={newCodeProductGroupId} onValueChange={setNewCodeProductGroupId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a product" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {productGroups.map((pg) => (
+                            <SelectItem key={pg.id} value={pg.id}>{pg.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Max Uses (optional)</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={newCodeMaxUses}
+                        onChange={(e) => setNewCodeMaxUses(e.target.value)}
+                        placeholder="Unlimited"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Expires At (optional)</label>
+                      <Input
+                        type="datetime-local"
+                        value={newCodeExpiresAt}
+                        onChange={(e) => setNewCodeExpiresAt(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <Button onClick={handleCreateDiscountCode} disabled={isCreatingCode} className="w-full">
+                    {isCreatingCode ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                    Create Discount Code
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Existing Codes</CardTitle>
+                    <Button variant="outline" size="sm" onClick={loadDiscountCodes} disabled={isLoadingCodes}>
+                      <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingCodes ? 'animate-spin' : ''}`} /> Refresh
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {discountCodes.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Tag className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                      <p>No discount codes yet</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Code</TableHead>
+                            <TableHead>Off</TableHead>
+                            <TableHead>Scope</TableHead>
+                            <TableHead>Uses</TableHead>
+                            <TableHead>Expires</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {discountCodes.map((c) => {
+                            const scopeLabel = c.product_group_id
+                              ? productGroups.find(p => p.id === c.product_group_id)?.name || 'Product'
+                              : c.category_id
+                              ? categories.find(cat => cat.id === c.category_id)?.name || 'Category'
+                              : 'Entire Store'
+                            const expired = c.expires_at ? new Date(c.expires_at) < new Date() : false
+                            const usedUp = c.max_uses ? c.used_count >= c.max_uses : false
+                            return (
+                              <TableRow key={c.id}>
+                                <TableCell className="font-mono font-medium">{c.code}</TableCell>
+                                <TableCell>{c.percent_off}%</TableCell>
+                                <TableCell className="text-sm">{scopeLabel}</TableCell>
+                                <TableCell className="text-sm">
+                                  {c.used_count}{c.max_uses ? ` / ${c.max_uses}` : ''}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {c.expires_at ? format(new Date(c.expires_at), 'MMM d, yyyy') : 'Never'}
+                                </TableCell>
+                                <TableCell>
+                                  {!c.is_active ? (
+                                    <Badge variant="secondary">Disabled</Badge>
+                                  ) : expired ? (
+                                    <Badge variant="destructive">Expired</Badge>
+                                  ) : usedUp ? (
+                                    <Badge variant="destructive">Used Up</Badge>
+                                  ) : (
+                                    <Badge className="bg-green-600">Active</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleToggleCodeActive(c.id, !c.is_active)}
+                                  >
+                                    {c.is_active ? 'Disable' : 'Enable'}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

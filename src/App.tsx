@@ -12,6 +12,7 @@ import AnnouncementBanner from '@/components/AnnouncementBanner'
 import MaintenancePage from '@/components/MaintenancePage'
 import GlobalPaymentChecker from '@/components/GlobalPaymentChecker'
 import WhatsAppSupportUpdateDialog from '@/components/WhatsAppSupportUpdateDialog'
+import ChatWidget from '@/components/ChatWidget'
 
 // ⚠️ MAINTENANCE MODE - Set to false to restore normal site
 const MAINTENANCE_MODE = false;
@@ -62,6 +63,7 @@ import PaymentCallbackPage from '@/pages/PaymentCallbackPage'
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage'
 import WalletPage from '@/pages/WalletPage'
 import ReferralsPage from '@/pages/ReferralsPage'
+import HowItWorksPage from '@/pages/HowItWorksPage'
 import SupportPage from '@/pages/SupportPage'
 import TermsPage from '@/pages/TermsPage'
 import PrivacyPage from '@/pages/PrivacyPage'
@@ -75,6 +77,7 @@ import CryptoWithdrawal from '@/pages/CryptoWithdrawal'
 import ReferralWithdrawal from '@/pages/ReferralWithdrawal'
 import CryptoHistory from '@/pages/CryptoHistory'
 import BillsPayment from "./pages/BillsPayment";
+import GiftCardsEsims from "./pages/GiftCardsEsims";
 import SocialBoostPage from "./pages/SocialBoostPage";
 import GetIP from "./pages/GetIP";
 import SmsNumbersPage from "./pages/SmsNumbersPage";
@@ -102,6 +105,7 @@ const App = () => {
           <AnnouncementBanner />
           <WhatsAppSupportUpdateDialog />
           <InstallPromptBanner />
+          <ChatWidget />
           <AuthProvider>
           <CurrencyProvider>
             <GlobalPaymentChecker />
@@ -111,6 +115,7 @@ const App = () => {
               <Route path="/products" element={<ProductsPage />} />
               <Route path="/category/:categoryId" element={<CategoryPage />} />
               <Route path="/product/:productId" element={<ProductDetailPage />} />
+              <Route path="/how-it-works" element={<HowItWorksPage />} />
               <Route path="/support" element={<SupportPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
@@ -217,6 +222,14 @@ const App = () => {
                 element={
                   <ProtectedRoute requireRole="user">
                     <BillsPayment />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/gift-cards"
+                element={
+                  <ProtectedRoute requireRole="user">
+                    <GiftCardsEsims />
                   </ProtectedRoute>
                 }
               />

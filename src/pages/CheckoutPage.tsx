@@ -11,14 +11,18 @@ import Footer from '@/components/Footer'
 import { BackButton, BackToProducts } from '@/components/ui/back-button'
 import WalletBalanceWidget from '@/components/WalletBalanceWidget'
 import { useAuth } from '@/contexts/SimpleAuth'
-import { 
+import {
   processPurchaseSecure,
   getIndividualAccountById,
+  computeDiscountedTotal,
+  previewDiscountCode,
   type IndividualAccount,
   type ProductGroup,
-  type Category 
+  type Category
 } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Input } from '@/components/ui/input'
+import { Tag, X } from 'lucide-react'
 
 export default function CheckoutPage() {
   const location = useLocation()
@@ -34,9 +38,53 @@ export default function CheckoutPage() {
   const [purchasing, setPurchasing] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('wallet')
 
-  // Calculate total based on quantity
-  const totalAmount = productGroup ? productGroup.price * quantity : 0
+  // Discount code state - applied on top of any quantity discount tier.
+  // The percentOff here is preview-only; the edge function re-validates and
+  // re-applies the code server-side before any wallet deduction.
+  const [codeInput, setCodeInput] = useState('')
+  const [checkingCode, setCheckingCode] = useState(false)
+  const [codeError, setCodeError] = useState('')
+  const [appliedCode, setAppliedCode] = useState<{ code: string; percentOff: number } | null>(null)
+
+  // Calculate total based on quantity, applying any quantity discount tier
+  const { total: tierTotal, discountPct, originalTotal } = productGroup
+    ? computeDiscountedTotal(productGroup.price, quantity, productGroup.quantity_discount_tiers)
+    : { total: 0, discountPct: 0, originalTotal: 0 }
+
+  // Then apply the discount code (if any) on top of the tier price
+  const totalAmount = appliedCode
+    ? Math.round(tierTotal * (1 - appliedCode.percentOff / 100))
+    : tierTotal
+  const codeDiscountAmount = appliedCode ? tierTotal - totalAmount : 0
+
   const isBulk = quantity > 1 || isBulkPurchase
+
+  const handleApplyCode = async () => {
+    if (!codeInput.trim() || !productGroup) return
+    setCheckingCode(true)
+    setCodeError('')
+    try {
+      const result = await previewDiscountCode(codeInput.trim(), productGroup.id, category?.id || null)
+      if (result.valid && result.percentOff) {
+        setAppliedCode({ code: codeInput.trim().toUpperCase(), percentOff: result.percentOff })
+        setCodeError('')
+      } else {
+        setAppliedCode(null)
+        setCodeError(result.error || 'Invalid discount code')
+      }
+    } catch (error) {
+      setAppliedCode(null)
+      setCodeError('Could not verify code, please try again')
+    } finally {
+      setCheckingCode(false)
+    }
+  }
+
+  const handleRemoveCode = () => {
+    setAppliedCode(null)
+    setCodeInput('')
+    setCodeError('')
+  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -103,7 +151,7 @@ export default function CheckoutPage() {
       // SECURE: Use Edge Function for purchase (server-side processing)
       console.log('🔄 Processing secure purchase for', quantity, 'accounts from product group:', productGroup.id)
       
-      const result = await processPurchaseSecure(productGroup.id, quantity)
+      const result = await processPurchaseSecure(productGroup.id, quantity, appliedCode?.code)
       
       if (result.success) {
         const purchaseType = quantity > 1 ? 'Bulk Purchase' : 'Purchase'
@@ -329,6 +377,18 @@ export default function CheckoutPage() {
                     <span>{quantity} accounts</span>
                   </div>
                 )}
+                {discountPct > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Bulk discount ({discountPct}% off):</span>
+                    <span>-₦{(originalTotal - tierTotal).toLocaleString()}</span>
+                  </div>
+                )}
+                {appliedCode && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Code "{appliedCode.code}" ({appliedCode.percentOff}% off):</span>
+                    <span>-₦{codeDiscountAmount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Processing Fee:</span>
                   <span>₦0</span>
@@ -338,6 +398,46 @@ export default function CheckoutPage() {
                   <span>Total:</span>
                   <span className="text-primary">₦{totalAmount.toLocaleString()}</span>
                 </div>
+              </div>
+
+              {/* Discount Code */}
+              <div className="space-y-2">
+                <span className="text-sm font-medium flex items-center gap-1">
+                  <Tag className="h-3.5 w-3.5" />
+                  Discount Code
+                </span>
+                {appliedCode ? (
+                  <div className="flex items-center justify-between p-2 px-3 bg-green-50 border border-green-200 rounded-md">
+                    <span className="text-sm text-green-800 font-medium">{appliedCode.code} applied</span>
+                    <button
+                      type="button"
+                      onClick={handleRemoveCode}
+                      className="text-green-700 hover:text-green-900"
+                      aria-label="Remove discount code"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      value={codeInput}
+                      onChange={(e) => setCodeInput(e.target.value)}
+                      placeholder="Enter code"
+                      className="uppercase"
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleApplyCode}
+                      disabled={checkingCode || !codeInput.trim()}
+                    >
+                      {checkingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
+                    </Button>
+                  </div>
+                )}
+                {codeError && <p className="text-sm text-red-600">{codeError}</p>}
               </div>
 
               {/* Wallet Balance */}

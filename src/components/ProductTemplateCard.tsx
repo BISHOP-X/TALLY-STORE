@@ -3,8 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Plus, Minus, ShoppingCart, Package, Star } from 'lucide-react'
-import { type ProductGroup, type Category } from '@/lib/supabase'
+import { Plus, Minus, ShoppingCart, Package, Star, Flame } from 'lucide-react'
+import { type ProductGroup, type Category, computeDiscountedTotal } from '@/lib/supabase'
 import { useCurrency } from '@/contexts/CurrencyContext'
 
 interface ProductTemplateCardProps {
@@ -34,6 +34,14 @@ export default function ProductTemplateCard({
   // Quantity controls need an upper bound; use the pre-stocked count if any,
   // otherwise allow a small default range since MuaBanVia fulfills on demand.
   const maxQuantity = productGroup.stock_count > 0 ? productGroup.stock_count : 10
+  const { total: discountedTotal, discountPct } = computeDiscountedTotal(
+    productGroup.price,
+    quantity,
+    productGroup.quantity_discount_tiers,
+  )
+  const bestTier = (productGroup.quantity_discount_tiers || [])
+    .slice()
+    .sort((a, b) => a.min_qty - b.min_qty)[0]
 
   const handleQuantityChange = (newQuantity: number) => {
     if (newQuantity >= 1 && newQuantity <= maxQuantity) {
@@ -62,6 +70,11 @@ export default function ProductTemplateCard({
         <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
           {productGroup.description}
         </p>
+        {bestTier && (
+          <p className="text-[10px] text-green-600 font-medium mt-1">
+            Buy {bestTier.min_qty}+, save {bestTier.discount_pct}%
+          </p>
+        )}
       </CardHeader>
 
       <CardContent className="pt-0 px-3.5 pb-3.5 space-y-2.5">
@@ -70,8 +83,13 @@ export default function ProductTemplateCard({
           <span className="text-xs">
             {isOutOfStock ? (
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Out of Stock</Badge>
+            ) : isLowStock ? (
+              <span className="inline-flex items-center gap-1 text-orange-600 font-semibold animate-pulse">
+                <Flame className="h-3 w-3" />
+                Only {productGroup.stock_count} left!
+              </span>
             ) : productGroup.stock_count > 0 ? (
-              <span className={isLowStock ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
+              <span className="text-muted-foreground">
                 {productGroup.stock_count} available
               </span>
             ) : (
@@ -118,8 +136,14 @@ export default function ProductTemplateCard({
                 <Plus className="h-3 w-3" />
               </Button>
             </div>
-            <span className="text-xs font-semibold text-primary">
-              {formatPrice(productGroup.price * quantity)}
+            <span className="text-xs font-semibold text-primary text-right">
+              {discountPct > 0 && (
+                <span className="block text-[10px] text-muted-foreground line-through font-normal">
+                  {formatPrice(productGroup.price * quantity)}
+                </span>
+              )}
+              {formatPrice(discountedTotal)}
+              {discountPct > 0 && <span className="ml-1 text-green-600">(-{discountPct}%)</span>}
             </span>
           </div>
         )}
