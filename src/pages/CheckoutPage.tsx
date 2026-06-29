@@ -16,6 +16,7 @@ import {
   getIndividualAccountById,
   computeDiscountedTotal,
   previewDiscountCode,
+  DISCOUNTS_ENABLED,
   type IndividualAccount,
   type ProductGroup,
   type Category
@@ -61,6 +62,10 @@ export default function CheckoutPage() {
 
   const handleApplyCode = async () => {
     if (!codeInput.trim() || !productGroup) return
+    if (discountPct > 0) {
+      setCodeError('Discount codes can\'t be combined with the bulk quantity discount already applied to this order.')
+      return
+    }
     setCheckingCode(true)
     setCodeError('')
     try {
@@ -400,13 +405,18 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Discount Code */}
+              {/* Discount Code - paused store-wide alongside bulk quantity discounts (DISCOUNTS_ENABLED in src/lib/supabase.ts) while a better bundle/promo solution is worked out */}
+              {DISCOUNTS_ENABLED && (
               <div className="space-y-2">
                 <span className="text-sm font-medium flex items-center gap-1">
                   <Tag className="h-3.5 w-3.5" />
                   Discount Code
                 </span>
-                {appliedCode ? (
+                {discountPct > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Not available — this order already has a {discountPct}% bulk quantity discount applied.
+                  </p>
+                ) : appliedCode ? (
                   <div className="flex items-center justify-between p-2 px-3 bg-green-50 border border-green-200 rounded-md">
                     <span className="text-sm text-green-800 font-medium">{appliedCode.code} applied</span>
                     <button
@@ -439,6 +449,7 @@ export default function CheckoutPage() {
                 )}
                 {codeError && <p className="text-sm text-red-600">{codeError}</p>}
               </div>
+              )}
 
               {/* Wallet Balance */}
               <div className="p-4 bg-muted rounded-lg">

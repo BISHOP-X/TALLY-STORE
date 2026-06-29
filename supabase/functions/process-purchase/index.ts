@@ -268,10 +268,16 @@ serve(async (req) => {
     }
 
     // 3. Check wallet balance
+    // Kill switch: both quantity discount tiers and discount codes are paused
+    // store-wide while a better bundle/promo solution is worked out. Mirrors
+    // DISCOUNTS_ENABLED in src/lib/supabase.ts - keep both in sync. (Can't
+    // import that file directly - Deno edge functions can't import from src/.)
+    const DISCOUNTS_ENABLED = false;
+
     // Apply quantity discount tiers (same logic as computeDiscountedTotal in
     // src/lib/supabase.ts - keep both in sync). Highest-min_qty tier the
     // purchased quantity meets or exceeds wins.
-    const tiers: Array<{ min_qty: number; discount_pct: number }> = Array.isArray(productGroup.quantity_discount_tiers)
+    const tiers: Array<{ min_qty: number; discount_pct: number }> = DISCOUNTS_ENABLED && Array.isArray(productGroup.quantity_discount_tiers)
       ? productGroup.quantity_discount_tiers
       : [];
     const originalTotal = productGroup.price * quantity;
@@ -286,7 +292,10 @@ serve(async (req) => {
     // src/lib/supabase.ts (previewDiscountCode) is just a UX convenience and
     // is never trusted for the actual charge.
     let appliedDiscountCode: { id: string; code: string } | null = null;
-    if (discount_code && typeof discount_code === 'string' && discount_code.trim()) {
+    if (DISCOUNTS_ENABLED && discount_code && typeof discount_code === 'string' && discount_code.trim()) {
+      if (discountPct > 0) {
+        throw new Error('Discount codes can\'t be combined with the bulk quantity discount already applied to this order.');
+      }
       const { data: codeRow } = await supabaseAdmin
         .from('discount_codes')
         .select('*')

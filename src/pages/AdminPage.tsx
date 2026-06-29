@@ -2472,6 +2472,10 @@ export default function AdminPage() {
 
             {/* Discount Codes / Flash Sales */}
             <TabsContent value="discount-codes" className="space-y-6">
+              <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-800 rounded-md p-3 text-sm text-amber-800 dark:text-amber-300">
+                Paused store-wide (alongside bulk quantity discounts) while a better bundle/promo solution is worked out.
+                Codes created here still save to the database, but checkout won't apply them until DISCOUNTS_ENABLED is flipped back on.
+              </div>
               <Card>
                 <CardHeader>
                   <CardTitle>Create Discount Code</CardTitle>

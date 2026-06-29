@@ -18,11 +18,19 @@ import {
   Bitcoin,
   Search,
   Copy,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
+import { useAuth } from "@/contexts/SimpleAuth";
+
+// Flip this to false once Bitrefill is fully wired up (migration run, secrets
+// set, functions deployed) and you're ready for customers to use this page.
+// While true, regular users see a "Coming Soon" blur — admins still see and
+// can use the real page so you can test the flow before going live.
+const COMING_SOON = true;
 
 interface BitrefillPackage {
   package_id: string;
@@ -59,6 +67,9 @@ interface BitrefillOrder {
 }
 
 export default function GiftCardsEsims() {
+  const { isAdmin } = useAuth();
+  const showComingSoon = COMING_SOON && !isAdmin;
+
   const [activeTab, setActiveTab] = useState<'giftcard' | 'esim'>('giftcard');
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [cryptoBalance, setCryptoBalance] = useState<number>(0);
@@ -299,7 +310,39 @@ export default function GiftCardsEsims() {
         </div>
       </nav>
 
-      <div className="container mx-auto p-4 sm:p-6 max-w-6xl">
+      {COMING_SOON && isAdmin && (
+        <div className="bg-amber-100 dark:bg-amber-900/30 border-b border-amber-300 dark:border-amber-800 text-center py-2 px-4">
+          <p className="text-xs sm:text-sm font-medium text-amber-800 dark:text-amber-300">
+            Admin preview — this page is hidden behind "Coming Soon" for regular users until you flip COMING_SOON off.
+          </p>
+        </div>
+      )}
+
+      <div className="relative">
+        {showComingSoon && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center p-4">
+            <Card className="max-w-md w-full shadow-2xl border-2 border-primary/30">
+              <CardContent className="pt-8 pb-8 text-center space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-primary" />
+                </div>
+                <h2 className="text-2xl font-bold text-foreground">Coming Soon</h2>
+                <p className="text-sm text-muted-foreground">
+                  Gift Cards & eSIMs are almost ready. We're putting the finishing touches on this feature —
+                  check back shortly!
+                </p>
+                <Button onClick={() => navigate('/dashboard')} className="mt-2">
+                  Back to Dashboard
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div
+          className={showComingSoon ? "container mx-auto p-4 sm:p-6 max-w-6xl pointer-events-none select-none blur-sm" : "container mx-auto p-4 sm:p-6 max-w-6xl"}
+          aria-hidden={showComingSoon || undefined}
+        >
         <div className="text-center mb-6 sm:mb-8 pt-2 sm:pt-4">
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-2">
             Gift Cards & Travel eSIMs
@@ -633,6 +676,7 @@ export default function GiftCardsEsims() {
               </CardContent>
             </Card>
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -147,6 +147,13 @@ export interface QuantityDiscountTier {
   discount_pct: number
 }
 
+// Kill switch: both quantity discount tiers and discount codes are paused
+// store-wide while a better bundle/promo solution is worked out. Flip this
+// back to true to re-enable both (no data was deleted - tiers and codes are
+// still sitting in the DB, just not applied at checkout). Mirrors the same
+// flag in supabase/functions/process-purchase/index.ts - keep both in sync.
+export const DISCOUNTS_ENABLED = false
+
 // Picks the best applicable tier for a given quantity (highest min_qty the
 // quantity meets or exceeds) and returns the discounted total. Mirrors the
 // exact same logic used server-side in process-purchase/index.ts - if you
@@ -158,7 +165,7 @@ export function computeDiscountedTotal(
   tiers: QuantityDiscountTier[] | undefined | null,
 ): { total: number; discountPct: number; originalTotal: number } {
   const originalTotal = unitPrice * quantity
-  if (!tiers || tiers.length === 0) {
+  if (!DISCOUNTS_ENABLED || !tiers || tiers.length === 0) {
     return { total: originalTotal, discountPct: 0, originalTotal }
   }
   const applicable = tiers
@@ -2677,6 +2684,7 @@ export async function previewDiscountCode(
   productGroupId: string,
   categoryId: string | null,
 ): Promise<{ valid: boolean; percentOff?: number; error?: string }> {
+  if (!DISCOUNTS_ENABLED) return { valid: false, error: 'Discount codes are temporarily unavailable' }
   if (!code.trim()) return { valid: false, error: 'Enter a code' }
   try {
     const { data, error } = await supabase
