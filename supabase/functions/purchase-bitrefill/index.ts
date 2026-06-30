@@ -97,6 +97,26 @@ serve(async (req) => {
       );
     }
 
+    // Reject any product an admin has blocked via the catalog curation list
+    // in AdminPage, even if the client has a stale/cached product_id from
+    // before it was blocked.
+    try {
+      const { data: blockSetting } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'bitrefill_blocked_products')
+        .single();
+      if (blockSetting?.value) {
+        const parsed = JSON.parse(blockSetting.value);
+        if (Array.isArray(parsed) && parsed.some((p: { product_id: string }) => p.product_id === product_id)) {
+          throw new Error('This product is no longer available.');
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === 'This product is no longer available.') throw err;
+      // no blocklist configured — nothing to check
+    }
+
     const bitrefill = createBitrefillClient({ apiKey: Deno.env.get('BITREFILL_API_KEY') ?? '' });
 
     // Re-fetch the product to confirm the denomination/price server-side

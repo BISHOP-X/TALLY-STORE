@@ -3,11 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
   Gift,
-  Smartphone,
   Loader2,
   AlertCircle,
   CheckCircle2,
@@ -21,10 +19,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/lib/supabase";
+import { supabase, getAppSetting } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/contexts/SimpleAuth";
+import { useExchangeRate } from "@/hooks/useExchangeRate";
 
 // Flip this to false once Bitrefill is fully wired up (migration run, secrets
 // set, functions deployed) and you're ready for customers to use this page.
@@ -70,7 +69,6 @@ export default function GiftCardsEsims() {
   const { isAdmin } = useAuth();
   const showComingSoon = COMING_SOON && !isAdmin;
 
-  const [activeTab, setActiveTab] = useState<'giftcard' | 'esim'>('giftcard');
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [cryptoBalance, setCryptoBalance] = useState<number>(0);
   const [paymentSource, setPaymentSource] = useState<'wallet' | 'crypto'>('wallet');
@@ -84,11 +82,16 @@ export default function GiftCardsEsims() {
   const [selectedPackageId, setSelectedPackageId] = useState<string>('');
   const [customValue, setCustomValue] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('1');
-  const [recipientPhone, setRecipientPhone] = useState<string>('');
   const [purchasing, setPurchasing] = useState(false);
 
   const [orders, setOrders] = useState<BitrefillOrder[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Markup % (app_settings.bitrefill_markup_pct, admin-adjustable) applied on
+  // top of the live NGN-converted price, mirroring the server-side charge in
+  // purchase-bitrefill so customers see the real price before they buy.
+  const [markupPct, setMarkupPct] = useState<number>(0);
+  const { rate: exchangeRate } = useExchangeRate();
 
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -96,14 +99,22 @@ export default function GiftCardsEsims() {
   useEffect(() => {
     fetchBalance();
     fetchOrderHistory();
+    getAppSetting('bitrefill_markup_pct').then((value) => {
+      const parsed = value ? parseFloat(value) : 0;
+      if (!isNaN(parsed) && parsed >= 0) setMarkupPct(parsed);
+    });
   }, []);
 
-  useEffect(() => {
-    setSelectedProduct(null);
-    setSelectedPackageId('');
-    setCustomValue('');
-    setProducts([]);
-  }, [activeTab]);
+  // Converts a Bitrefill USD (or other listed currency) price to the NGN
+  // amount the customer will actually be charged: live rate + admin markup,
+  // same formula as convertToNgn()/chargeNgn in purchase-bitrefill/index.ts.
+  const toNgn = (value: number, currency?: string) => {
+    if (!value || !exchangeRate) return 0;
+    // Bitrefill product currencies are USD-denominated in practice for this
+    // catalog; treat anything else as already-USD-equivalent for display.
+    const usdEquivalent = !currency || currency === 'USD' ? value : value;
+    return Math.ceil(usdEquivalent * exchangeRate * (1 + markupPct / 100));
+  };
 
   const fetchBalance = async () => {
     try {
@@ -157,7 +168,7 @@ export default function GiftCardsEsims() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      toast({ title: "Enter a search term", description: "Try a brand name like \"Amazon\" or \"Airalo\"", variant: "destructive" });
+      toast({ title: "Enter a search term", description: "Try a brand name like \"Amazon\" or \"Steam\"", variant: "destructive" });
       return;
     }
 
@@ -168,7 +179,7 @@ export default function GiftCardsEsims() {
         body: {
           action: 'search',
           query: searchQuery,
-          category: activeTab === 'esim' ? 'esim' : 'gift card',
+          category: 'gift card',
           limit: 24,
         },
       });
@@ -204,18 +215,13 @@ export default function GiftCardsEsims() {
 
   const handlePurchase = async () => {
     if (!selectedProduct) {
-      toast({ title: "Select a product", description: "Choose a gift card or eSIM first", variant: "destructive" });
+      toast({ title: "Select a product", description: "Choose a gift card first", variant: "destructive" });
       return;
     }
 
     const unitPrice = getUnitPrice();
     if (!unitPrice || unitPrice <= 0) {
       toast({ title: "Select an amount", description: "Choose a denomination or enter an amount", variant: "destructive" });
-      return;
-    }
-
-    if (activeTab === 'esim' && selectedProduct.recipient_type === 'phone_number' && !recipientPhone) {
-      toast({ title: "Phone number required", description: "This eSIM needs a recipient phone number", variant: "destructive" });
       return;
     }
 
@@ -229,7 +235,6 @@ export default function GiftCardsEsims() {
         package_id: selectedPackageId || undefined,
         value: selectedPackageId ? undefined : unitPrice,
         quantity: parseInt(quantity, 10) || 1,
-        recipient_phone: recipientPhone || undefined,
         payment_source: paymentSource,
         idempotency_key: idempotencyKey,
       };
@@ -255,7 +260,6 @@ export default function GiftCardsEsims() {
       setSelectedProduct(null);
       setSelectedPackageId('');
       setCustomValue('');
-      setRecipientPhone('');
       setQuantity('1');
 
       fetchBalance();
@@ -304,7 +308,7 @@ export default function GiftCardsEsims() {
           </Button>
           <div className="flex items-center gap-2 sm:gap-3">
             <Gift className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white">Gift Cards & eSIMs</h1>
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white">Gift Cards</h1>
           </div>
           <div className="w-40" />
         </div>
@@ -328,7 +332,7 @@ export default function GiftCardsEsims() {
                 </div>
                 <h2 className="text-2xl font-bold text-foreground">Coming Soon</h2>
                 <p className="text-sm text-muted-foreground">
-                  Gift Cards & eSIMs are almost ready. We're putting the finishing touches on this feature —
+                  Gift Cards are almost ready. We're putting the finishing touches on this feature —
                   check back shortly!
                 </p>
                 <Button onClick={() => navigate('/dashboard')} className="mt-2">
@@ -345,10 +349,10 @@ export default function GiftCardsEsims() {
         >
         <div className="text-center mb-6 sm:mb-8 pt-2 sm:pt-4">
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-2">
-            Gift Cards & Travel eSIMs
+            Gift Cards
           </h2>
           <p className="text-sm sm:text-base text-muted-foreground px-4">
-            Powered by Bitrefill • Thousands of brands worldwide
+            Powered by Bitrefill • Thousands of brands worldwide • Priced in Naira
           </p>
         </div>
 
@@ -453,26 +457,13 @@ export default function GiftCardsEsims() {
                   <Gift className="w-7 h-7 text-primary" />
                   Browse
                 </CardTitle>
-                <CardDescription>Search gift cards or travel eSIMs</CardDescription>
+                <CardDescription>Search gift cards by brand</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'giftcard' | 'esim')}>
-                  <TabsList className="grid w-full grid-cols-2 h-12 mb-6">
-                    <TabsTrigger value="giftcard" className="text-base gap-2">
-                      <Gift className="w-4 h-4" />
-                      Gift Cards
-                    </TabsTrigger>
-                    <TabsTrigger value="esim" className="text-base gap-2">
-                      <Smartphone className="w-4 h-4" />
-                      eSIMs
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
                 {/* Search bar */}
                 <div className="flex gap-2">
                   <Input
-                    placeholder={activeTab === 'esim' ? 'Search by country, e.g. "Japan"' : 'Search by brand, e.g. "Amazon"'}
+                    placeholder='Search by brand, e.g. "Amazon"'
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -529,9 +520,10 @@ export default function GiftCardsEsims() {
                               type="button"
                               variant={selectedPackageId === pkg.package_id ? "default" : "outline"}
                               onClick={() => setSelectedPackageId(pkg.package_id)}
-                              className="h-12"
+                              className="h-auto py-2 flex-col gap-0.5"
                             >
-                              {pkg.value} {selectedProduct.currency || 'USD'}
+                              <span className="font-semibold">₦{toNgn(pkg.value, selectedProduct.currency).toLocaleString('en-NG')}</span>
+                              <span className="text-xs opacity-70">{pkg.value} {selectedProduct.currency || 'USD'}</span>
                             </Button>
                           ))}
                         </div>
@@ -554,6 +546,9 @@ export default function GiftCardsEsims() {
                         />
                         <p className="text-xs text-muted-foreground">
                           Min: {selectedProduct.range.min} | Max: {selectedProduct.range.max}
+                          {customValue && parseFloat(customValue) > 0 && (
+                            <> • ≈ ₦{toNgn(parseFloat(customValue), selectedProduct.currency).toLocaleString('en-NG')}</>
+                          )}
                         </p>
                       </div>
                     ) : null}
@@ -571,26 +566,16 @@ export default function GiftCardsEsims() {
                       />
                     </div>
 
-                    {activeTab === 'esim' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="recipient-phone" className="text-base font-medium">
-                          Recipient Phone Number (if required)
-                        </Label>
-                        <Input
-                          id="recipient-phone"
-                          type="tel"
-                          placeholder="+2348012345678"
-                          value={recipientPhone}
-                          onChange={(e) => setRecipientPhone(e.target.value)}
-                          className="h-12"
-                        />
-                      </div>
-                    )}
-
                     {totalPrice > 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        Total: {totalPrice.toFixed(2)} {selectedProduct.currency || 'USD'} (converted to NGN at checkout)
-                      </p>
+                      <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                        <p className="text-sm text-muted-foreground">Total</p>
+                        <p className="text-2xl font-bold text-foreground">
+                          ₦{toNgn(totalPrice, selectedProduct.currency).toLocaleString('en-NG')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {totalPrice.toFixed(2)} {selectedProduct.currency || 'USD'} at today's rate
+                        </p>
+                      </div>
                     )}
 
                     <Button

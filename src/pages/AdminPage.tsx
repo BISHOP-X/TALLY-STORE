@@ -148,6 +148,19 @@ export default function AdminPage() {
   const [savingNgnUsdRate, setSavingNgnUsdRate] = useState(false)
   const [loadingNgnUsdRate, setLoadingNgnUsdRate] = useState(true)
 
+  // Bitrefill gift card markup setting
+  const [bitrefillMarkupPct, setBitrefillMarkupPct] = useState('0')
+  const [savingBitrefillMarkup, setSavingBitrefillMarkup] = useState(false)
+  const [loadingBitrefillMarkup, setLoadingBitrefillMarkup] = useState(true)
+
+  // Bitrefill catalog curation (blocked products)
+  const [bitrefillBlocklist, setBitrefillBlocklist] = useState<{ product_id: string; name: string }[]>([])
+  const [loadingBitrefillBlocklist, setLoadingBitrefillBlocklist] = useState(true)
+  const [savingBitrefillBlocklist, setSavingBitrefillBlocklist] = useState(false)
+  const [bitrefillCurationQuery, setBitrefillCurationQuery] = useState('')
+  const [bitrefillCurationResults, setBitrefillCurationResults] = useState<{ product_id: string; name: string }[]>([])
+  const [bitrefillCurationSearching, setBitrefillCurationSearching] = useState(false)
+
   // UI state
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [newProduct, setNewProduct] = useState({
@@ -468,6 +481,99 @@ export default function AdminPage() {
     } finally {
       setSavingNgnUsdRate(false)
     }
+  }
+
+  // ==================== BITREFILL GIFT CARD SETTINGS ====================
+
+  useEffect(() => {
+    const loadBitrefillMarkup = async () => {
+      setLoadingBitrefillMarkup(true)
+      try {
+        const value = await getAppSetting('bitrefill_markup_pct')
+        if (value) setBitrefillMarkupPct(value)
+      } catch (err) {
+        console.error('Failed to load Bitrefill markup %:', err)
+      } finally {
+        setLoadingBitrefillMarkup(false)
+      }
+    }
+    const loadBitrefillBlocklist = async () => {
+      setLoadingBitrefillBlocklist(true)
+      try {
+        const value = await getAppSetting('bitrefill_blocked_products')
+        if (value) {
+          const parsed = JSON.parse(value)
+          if (Array.isArray(parsed)) setBitrefillBlocklist(parsed)
+        }
+      } catch (err) {
+        console.error('Failed to load Bitrefill blocklist:', err)
+      } finally {
+        setLoadingBitrefillBlocklist(false)
+      }
+    }
+    loadBitrefillMarkup()
+    loadBitrefillBlocklist()
+  }, [])
+
+  const handleSaveBitrefillMarkup = async () => {
+    const pct = parseFloat(bitrefillMarkupPct)
+    if (isNaN(pct) || pct < 0) {
+      toast({ title: 'Invalid value', description: 'Enter a percentage of 0 or more', variant: 'destructive' })
+      return
+    }
+    setSavingBitrefillMarkup(true)
+    try {
+      const ok = await upsertAppSetting('bitrefill_markup_pct', pct.toString())
+      if (ok) {
+        toast({ title: 'Saved', description: `Gift card markup set to ${pct}%` })
+      } else {
+        toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' })
+      }
+    } finally {
+      setSavingBitrefillMarkup(false)
+    }
+  }
+
+  const handleBitrefillCurationSearch = async () => {
+    if (!bitrefillCurationQuery.trim()) return
+    setBitrefillCurationSearching(true)
+    setBitrefillCurationResults([])
+    try {
+      const { data, error } = await supabase.functions.invoke('bitrefill-catalog', {
+        body: { action: 'search', query: bitrefillCurationQuery, limit: 24 },
+      })
+      if (error) throw error
+      if (!data?.success) throw new Error(data?.error || 'Search failed')
+      const products = (data.data?.data || []) as { product_id: string; name: string }[]
+      setBitrefillCurationResults(products)
+    } catch (err: any) {
+      toast({ title: 'Search failed', description: err.message || 'Please try again', variant: 'destructive' })
+    } finally {
+      setBitrefillCurationSearching(false)
+    }
+  }
+
+  const saveBitrefillBlocklist = async (next: { product_id: string; name: string }[]) => {
+    setSavingBitrefillBlocklist(true)
+    try {
+      const ok = await upsertAppSetting('bitrefill_blocked_products', JSON.stringify(next))
+      if (ok) {
+        setBitrefillBlocklist(next)
+      } else {
+        toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' })
+      }
+    } finally {
+      setSavingBitrefillBlocklist(false)
+    }
+  }
+
+  const handleBlockBitrefillProduct = (product: { product_id: string; name: string }) => {
+    if (bitrefillBlocklist.some(p => p.product_id === product.product_id)) return
+    saveBitrefillBlocklist([...bitrefillBlocklist, product])
+  }
+
+  const handleUnblockBitrefillProduct = (productId: string) => {
+    saveBitrefillBlocklist(bitrefillBlocklist.filter(p => p.product_id !== productId))
   }
 
   const buildEmailHtml = (message: string) =>
@@ -1278,6 +1384,101 @@ export default function AdminPage() {
                 <p className="text-xs text-muted-foreground mt-2">
                   When set, this overrides the live rate everywhere USD prices are shown to customers.
                 </p>
+              </CardContent>
+            </Card>
+
+            {/* Bitrefill Gift Card Markup */}
+            <Card className="mb-6 sm:mb-8">
+              <CardHeader>
+                <CardTitle className="text-lg">Gift Card Markup (Bitrefill)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="flex-1">
+                    <Label htmlFor="bitrefillMarkup">Markup % added on top of Bitrefill's price</Label>
+                    <Input
+                      id="bitrefillMarkup"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder="e.g. 5"
+                      value={bitrefillMarkupPct}
+                      onChange={(e) => setBitrefillMarkupPct(e.target.value)}
+                      disabled={loadingBitrefillMarkup}
+                    />
+                  </div>
+                  <Button onClick={handleSaveBitrefillMarkup} disabled={savingBitrefillMarkup || loadingBitrefillMarkup}>
+                    {savingBitrefillMarkup ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Currently 0% — customers are charged Bitrefill's raw NGN-converted price with no margin.
+                  Set this above 0 to add your profit margin to every gift card purchase. Applied server-side
+                  in purchase-bitrefill, and shown to customers on the Gift Cards page before they buy.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Bitrefill Catalog Curation */}
+            <Card className="mb-6 sm:mb-8">
+              <CardHeader>
+                <CardTitle className="text-lg">Gift Card Catalog Curation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Search Bitrefill's catalog and block specific brands you don't want customers to see.
+                  Blocked products are filtered out everywhere the catalog is shown — nothing is deleted,
+                  you can unblock anytime.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder='Search a brand, e.g. "Amazon"'
+                    value={bitrefillCurationQuery}
+                    onChange={(e) => setBitrefillCurationQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleBitrefillCurationSearch()}
+                  />
+                  <Button onClick={handleBitrefillCurationSearch} disabled={bitrefillCurationSearching}>
+                    {bitrefillCurationSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {bitrefillCurationResults.length > 0 && (
+                  <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
+                    {bitrefillCurationResults.map((p) => {
+                      const blocked = bitrefillBlocklist.some(b => b.product_id === p.product_id)
+                      return (
+                        <div key={p.product_id} className="flex items-center justify-between px-3 py-2">
+                          <span className="text-sm truncate">{p.name}</span>
+                          {blocked ? (
+                            <Badge variant="outline" className="text-xs">Blocked</Badge>
+                          ) : (
+                            <Button size="sm" variant="outline" disabled={savingBitrefillBlocklist} onClick={() => handleBlockBitrefillProduct(p)}>
+                              Block
+                            </Button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-medium mb-2">
+                    Currently blocked ({loadingBitrefillBlocklist ? '...' : bitrefillBlocklist.length})
+                  </p>
+                  {bitrefillBlocklist.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No products blocked — the full Bitrefill catalog is visible to customers.</p>
+                  ) : (
+                    <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
+                      {bitrefillBlocklist.map((p) => (
+                        <div key={p.product_id} className="flex items-center justify-between px-3 py-2">
+                          <span className="text-sm truncate">{p.name}</span>
+                          <Button size="sm" variant="ghost" disabled={savingBitrefillBlocklist} onClick={() => handleUnblockBitrefillProduct(p.product_id)}>
+                            Unblock
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
 

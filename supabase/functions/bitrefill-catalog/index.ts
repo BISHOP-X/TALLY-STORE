@@ -45,9 +45,36 @@ serve(async (req) => {
       throw new Error('action is required (list, search, or details)');
     }
 
+    // eSIM is not offered on this storefront — only gift cards are sold via
+    // Bitrefill. Reject the category server-side so it can't be reached even
+    // if a client is crafted to request it directly.
+    if (category === 'esim') {
+      throw new Error('eSIM is not currently available.');
+    }
+
     const bitrefill = createBitrefillClient({
       apiKey: Deno.env.get('BITREFILL_API_KEY') ?? '',
     });
+
+    // Load the admin-curated blocklist (app_settings.bitrefill_blocked_products,
+    // a JSON array of { product_id, name }) so blocked brands never reach
+    // customers via list/search, regardless of which client calls this.
+    let blockedIds = new Set<string>();
+    try {
+      const { data: blockSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'bitrefill_blocked_products')
+        .single();
+      if (blockSetting?.value) {
+        const parsed = JSON.parse(blockSetting.value);
+        if (Array.isArray(parsed)) {
+          blockedIds = new Set(parsed.map((p: { product_id: string }) => p.product_id));
+        }
+      }
+    } catch (_err) {
+      // no blocklist configured — nothing to filter
+    }
 
     let result;
 
@@ -67,10 +94,23 @@ serve(async (req) => {
       case 'details': {
         if (!product_id) throw new Error('product_id is required for details');
         result = await bitrefill.getProductDetails(product_id);
+        if (blockedIds.has(result.product_id)) {
+          throw new Error('This product is no longer available.');
+        }
         break;
       }
       default:
         throw new Error('Invalid action. Must be one of: list, search, details');
+    }
+
+    // Filter blocked products out of list/search result sets. Bitrefill's
+    // list/search responses nest the array under `data.data` (see
+    // BitrefillProductsResponse) per the GiftCardsEsims.tsx client usage.
+    if ((action === 'list' || action === 'search') && blockedIds.size > 0 && result?.data) {
+      result = {
+        ...result,
+        data: result.data.filter((p: { product_id: string }) => !blockedIds.has(p.product_id)),
+      };
     }
 
     return new Response(
