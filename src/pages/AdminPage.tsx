@@ -1601,6 +1601,63 @@ export default function AdminPage() {
               </CardContent>
             </Card>
 
+            {/* Social Boost Service Visibility */}
+            <Card className="mb-6 sm:mb-8">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-lg">Social Boost Service Visibility</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Search services and hide the ones you don't want customers to see.
+                      Hidden services stay hidden even after syncing the panel.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={handleSmmSync} disabled={smmSyncing} variant="outline">
+                    {smmSyncing ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Syncing...</> : <><RefreshCw className="h-3 w-3 mr-1" />Sync Panel</>}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder='Search by service name, e.g. "instagram followers"'
+                    value={smmServicesQuery}
+                    onChange={(e) => setSmmServicesQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && loadSmmServices(smmServicesQuery)}
+                  />
+                  <Button onClick={() => loadSmmServices(smmServicesQuery)} disabled={smmServicesLoading}>
+                    {smmServicesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+
+                {smmServices.length === 0 && !smmServicesLoading && (
+                  <p className="text-xs text-muted-foreground">Search above to find and manage services.</p>
+                )}
+
+                {smmServices.length > 0 && (
+                  <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
+                    {smmServices.map((svc) => (
+                      <div key={svc.id} className="flex items-center justify-between px-3 py-2 gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{svc.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{svc.platform} · ₦{Number(svc.price_ngn).toLocaleString()}/unit</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={svc.is_active ? 'outline' : 'default'}
+                          onClick={() => handleToggleSmmService(svc.id, svc.is_active)}
+                          disabled={smmTogglingId === svc.id}
+                          className="shrink-0"
+                        >
+                          {smmTogglingId === svc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : svc.is_active ? 'Hide' : 'Show'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Product Suggestions ("trending category" panel) */}
             <Card className="mb-6 sm:mb-8">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -2328,7 +2385,7 @@ export default function AdminPage() {
           {/* Main Content */}
           <Tabs defaultValue="templates" className="space-y-6">
             <div className="w-full overflow-x-auto pb-2">
-              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-9">
+              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-8">
                 <TabsTrigger value="templates" className="flex-shrink-0">Templates</TabsTrigger>
                 <TabsTrigger value="products" className="flex-shrink-0">Products</TabsTrigger>
                 <TabsTrigger value="add-product" className="flex-shrink-0">Add Product</TabsTrigger>
@@ -2336,7 +2393,6 @@ export default function AdminPage() {
                 <TabsTrigger value="discount-codes" className="flex-shrink-0">Discount Codes</TabsTrigger>
                 <TabsTrigger value="categories" className="flex-shrink-0">Categories</TabsTrigger>
                 <TabsTrigger value="users" className="flex-shrink-0">Users</TabsTrigger>
-                <TabsTrigger value="smm" className="flex-shrink-0">Social Boost</TabsTrigger>
                 <TabsTrigger value="email" className="flex-shrink-0">Email</TabsTrigger>
               </TabsList>
             </div>
@@ -3186,67 +3242,6 @@ export default function AdminPage() {
                       <p className="text-sm text-muted-foreground">Admins</p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Social Boost Services */}
-            <TabsContent value="smm" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-lg">Social Boost Services</CardTitle>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Toggle which services are visible to customers. Hidden services won't appear in search even if active on the panel. Syncing preserves your visibility settings.
-                      </p>
-                    </div>
-                    <Button size="sm" onClick={handleSmmSync} disabled={smmSyncing} variant="outline">
-                      {smmSyncing ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Syncing...</> : <><RefreshCw className="h-3 w-3 mr-1" />Sync Panel</>}
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Search by service name..."
-                      value={smmServicesQuery}
-                      onChange={(e) => setSmmServicesQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && loadSmmServices(smmServicesQuery)}
-                      className="h-9"
-                    />
-                    <Button size="sm" onClick={() => loadSmmServices(smmServicesQuery)} disabled={smmServicesLoading} className="h-9">
-                      {smmServicesLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                    </Button>
-                  </div>
-
-                  {smmServices.length === 0 && !smmServicesLoading && (
-                    <p className="text-sm text-muted-foreground text-center py-6">
-                      Search for services above to manage visibility.
-                    </p>
-                  )}
-
-                  {smmServices.length > 0 && (
-                    <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                      {smmServices.map((svc) => (
-                        <div key={svc.id} className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg hover:bg-muted/50">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{svc.name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{svc.platform} · ₦{Number(svc.price_ngn).toLocaleString()}/unit</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant={svc.is_active ? 'default' : 'outline'}
-                            onClick={() => handleToggleSmmService(svc.id, svc.is_active)}
-                            disabled={smmTogglingId === svc.id}
-                            className="min-w-[80px] h-7 text-xs"
-                          >
-                            {smmTogglingId === svc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : svc.is_active ? 'Visible' : 'Hidden'}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </TabsContent>
