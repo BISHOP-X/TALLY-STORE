@@ -148,6 +148,11 @@ export default function AdminPage() {
   const [savingNgnUsdRate, setSavingNgnUsdRate] = useState(false)
   const [loadingNgnUsdRate, setLoadingNgnUsdRate] = useState(true)
 
+  // Ercas Pay gateway toggle
+  const [ercasEnabled, setErcasEnabled] = useState(false)
+  const [savingErcasEnabled, setSavingErcasEnabled] = useState(false)
+  const [loadingErcasEnabled, setLoadingErcasEnabled] = useState(true)
+
   // Bitrefill gift card markup setting
   const [bitrefillMarkupPct, setBitrefillMarkupPct] = useState('0')
   const [savingBitrefillMarkup, setSavingBitrefillMarkup] = useState(false)
@@ -480,6 +485,41 @@ export default function AdminPage() {
       }
     } finally {
       setSavingNgnUsdRate(false)
+    }
+  }
+
+  // ==================== ERCAS PAY TOGGLE ====================
+
+  useEffect(() => {
+    const loadErcasEnabled = async () => {
+      setLoadingErcasEnabled(true)
+      try {
+        const value = await getAppSetting('ercas_enabled')
+        setErcasEnabled(value === 'true')
+      } catch (err) {
+        console.error('Failed to load ercas_enabled:', err)
+      } finally {
+        setLoadingErcasEnabled(false)
+      }
+    }
+    loadErcasEnabled()
+  }, [])
+
+  const handleToggleErcas = async () => {
+    setSavingErcasEnabled(true)
+    const next = !ercasEnabled
+    try {
+      const ok = await upsertAppSetting('ercas_enabled', next ? 'true' : 'false')
+      if (ok) {
+        setErcasEnabled(next)
+        toast({ title: next ? 'Ercas Pay enabled' : 'Ercas Pay disabled', description: next ? 'Customers can now top up via Ercas Pay.' : 'Only PocketFi is shown to customers.' })
+      } else {
+        toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' })
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Could not save setting', variant: 'destructive' })
+    } finally {
+      setSavingErcasEnabled(false)
     }
   }
 
@@ -1384,6 +1424,34 @@ export default function AdminPage() {
                 <p className="text-xs text-muted-foreground mt-2">
                   When set, this overrides the live rate everywhere USD prices are shown to customers.
                 </p>
+              </CardContent>
+            </Card>
+
+            {/* Ercas Pay Gateway Toggle */}
+            <Card className="mb-6 sm:mb-8">
+              <CardHeader>
+                <CardTitle className="text-lg">Payment Gateways</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">Ercas Pay</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {ercasEnabled
+                        ? 'Enabled — customers can choose Ercas Pay or PocketFi when topping up.'
+                        : 'Disabled — customers see PocketFi (bank transfer) only.'}
+                    </p>
+                  </div>
+                  <Button
+                    variant={ercasEnabled ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={handleToggleErcas}
+                    disabled={loadingErcasEnabled || savingErcasEnabled}
+                    className="min-w-[90px]"
+                  >
+                    {savingErcasEnabled ? 'Saving...' : ercasEnabled ? 'Enabled' : 'Disabled'}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 

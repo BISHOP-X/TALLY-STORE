@@ -8,6 +8,7 @@ import { CreditCard, Loader2, Plus, Copy, Check, Landmark } from 'lucide-react';
 import { useAuth } from '@/contexts/SimpleAuth';
 import { initiatePayment, type PaymentData } from '@/services/ercaspay';
 import { getOrCreatePocketFiAccount, type PocketFiAccount } from '@/services/pocketfi';
+import { getAppSetting } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { useExchangeRate } from '@/hooks/useExchangeRate';
 
@@ -23,7 +24,8 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [gateway, setGateway] = useState<Gateway>('ercaspay');
+  const [gateway, setGateway] = useState<Gateway>('pocketfi');
+  const [ercasEnabled, setErcasEnabled] = useState(false);
 
   // PocketFi is a permanent-virtual-account flow, not a checkout redirect — the user gets
   // a bank account number once and transfers into it directly from their banking app, so
@@ -76,6 +78,11 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
       setLoadingAccount(false);
     }
   };
+
+  // Load whether Ercas Pay is enabled (admin-controlled via app_settings.ercas_enabled).
+  useEffect(() => {
+    getAppSetting('ercas_enabled').then((val) => setErcasEnabled(val === 'true'));
+  }, []);
 
   // Auto-fetch (or load the cached) PocketFi account as soon as the user picks that gateway.
   useEffect(() => {
@@ -352,28 +359,30 @@ export function TopUpWallet({ onSuccess }: TopUpWalletProps) {
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Payment Gateway Selection */}
-          <div className="space-y-3">
-            <Label>Payment Gateway</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant={gateway === 'ercaspay' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setGateway('ercaspay')}
-              >
-                Ercas Pay
-              </Button>
-              <Button
-                type="button"
-                variant={gateway === 'pocketfi' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setGateway('pocketfi')}
-              >
-                PocketFi
-              </Button>
+          {/* Payment Gateway Selection — only shown when Ercas is admin-enabled */}
+          {ercasEnabled && (
+            <div className="space-y-3">
+              <Label>Payment Gateway</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={gateway === 'ercaspay' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setGateway('ercaspay')}
+                >
+                  Ercas Pay
+                </Button>
+                <Button
+                  type="button"
+                  variant={gateway === 'pocketfi' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setGateway('pocketfi')}
+                >
+                  PocketFi
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
           {gateway === 'ercaspay' && (
             <>
