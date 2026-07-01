@@ -199,6 +199,13 @@ export default function AdminPage() {
   const [restockingId, setRestockingId] = useState<string | null>(null)
   const [restockQty, setRestockQty] = useState<Record<string, number>>({})
 
+  // SMM Services management
+  const [smmServices, setSmmServices] = useState<any[]>([])
+  const [smmServicesLoading, setSmmServicesLoading] = useState(false)
+  const [smmServicesQuery, setSmmServicesQuery] = useState('')
+  const [smmTogglingId, setSmmTogglingId] = useState<number | null>(null)
+  const [smmSyncing, setSmmSyncing] = useState(false)
+
   // Email / Broadcast state
   const [emailSubject, setEmailSubject] = useState('TallyStore Notification')
   const [emailMessage, setEmailMessage] = useState('')
@@ -520,6 +527,50 @@ export default function AdminPage() {
       toast({ title: 'Error', description: 'Could not save setting', variant: 'destructive' })
     } finally {
       setSavingErcasEnabled(false)
+    }
+  }
+
+  // ==================== SMM SERVICES MANAGEMENT ====================
+
+  const loadSmmServices = useCallback(async (query: string) => {
+    setSmmServicesLoading(true)
+    try {
+      let q = supabase.from('smm_services').select('id, external_id, name, platform, category, price_ngn, is_active').order('platform').order('name').limit(100)
+      if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
+      const { data, error } = await q
+      if (error) throw error
+      setSmmServices(data || [])
+    } catch (err) {
+      toast({ title: 'Failed to load services', variant: 'destructive' })
+    } finally {
+      setSmmServicesLoading(false)
+    }
+  }, [])
+
+  const handleToggleSmmService = async (id: number, currentlyActive: boolean) => {
+    setSmmTogglingId(id)
+    try {
+      const { error } = await supabase.from('smm_services').update({ is_active: !currentlyActive }).eq('id', id)
+      if (error) throw error
+      setSmmServices(prev => prev.map(s => s.id === id ? { ...s, is_active: !currentlyActive } : s))
+    } catch (err) {
+      toast({ title: 'Failed to update service', variant: 'destructive' })
+    } finally {
+      setSmmTogglingId(null)
+    }
+  }
+
+  const handleSmmSync = async () => {
+    setSmmSyncing(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('smm-sync-services')
+      if (error) throw error
+      toast({ title: 'Sync complete', description: `${data?.stats?.processed || 0} services updated` })
+      loadSmmServices(smmServicesQuery)
+    } catch (err: any) {
+      toast({ title: 'Sync failed', description: err.message, variant: 'destructive' })
+    } finally {
+      setSmmSyncing(false)
     }
   }
 
@@ -2277,7 +2328,7 @@ export default function AdminPage() {
           {/* Main Content */}
           <Tabs defaultValue="templates" className="space-y-6">
             <div className="w-full overflow-x-auto pb-2">
-              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-8">
+              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-9">
                 <TabsTrigger value="templates" className="flex-shrink-0">Templates</TabsTrigger>
                 <TabsTrigger value="products" className="flex-shrink-0">Products</TabsTrigger>
                 <TabsTrigger value="add-product" className="flex-shrink-0">Add Product</TabsTrigger>
@@ -2285,6 +2336,7 @@ export default function AdminPage() {
                 <TabsTrigger value="discount-codes" className="flex-shrink-0">Discount Codes</TabsTrigger>
                 <TabsTrigger value="categories" className="flex-shrink-0">Categories</TabsTrigger>
                 <TabsTrigger value="users" className="flex-shrink-0">Users</TabsTrigger>
+                <TabsTrigger value="smm" className="flex-shrink-0">Social Boost</TabsTrigger>
                 <TabsTrigger value="email" className="flex-shrink-0">Email</TabsTrigger>
               </TabsList>
             </div>
@@ -3134,6 +3186,67 @@ export default function AdminPage() {
                       <p className="text-sm text-muted-foreground">Admins</p>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Social Boost Services */}
+            <TabsContent value="smm" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-lg">Social Boost Services</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Toggle which services are visible to customers. Hidden services won't appear in search even if active on the panel. Syncing preserves your visibility settings.
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={handleSmmSync} disabled={smmSyncing} variant="outline">
+                      {smmSyncing ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Syncing...</> : <><RefreshCw className="h-3 w-3 mr-1" />Sync Panel</>}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Search by service name..."
+                      value={smmServicesQuery}
+                      onChange={(e) => setSmmServicesQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && loadSmmServices(smmServicesQuery)}
+                      className="h-9"
+                    />
+                    <Button size="sm" onClick={() => loadSmmServices(smmServicesQuery)} disabled={smmServicesLoading} className="h-9">
+                      {smmServicesLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                    </Button>
+                  </div>
+
+                  {smmServices.length === 0 && !smmServicesLoading && (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      Search for services above to manage visibility.
+                    </p>
+                  )}
+
+                  {smmServices.length > 0 && (
+                    <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+                      {smmServices.map((svc) => (
+                        <div key={svc.id} className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg hover:bg-muted/50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{svc.name}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{svc.platform} · ₦{Number(svc.price_ngn).toLocaleString()}/unit</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={svc.is_active ? 'default' : 'outline'}
+                            onClick={() => handleToggleSmmService(svc.id, svc.is_active)}
+                            disabled={smmTogglingId === svc.id}
+                            className="min-w-[80px] h-7 text-xs"
+                          >
+                            {smmTogglingId === svc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : svc.is_active ? 'Visible' : 'Hidden'}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

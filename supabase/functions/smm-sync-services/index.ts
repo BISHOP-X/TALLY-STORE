@@ -105,7 +105,10 @@ serve(async (req) => {
         max_quantity: parseInt(service.max),
         has_refill: service.refill === true,
         has_cancel: service.cancel === true,
-        is_active: true,
+        // NOTE: is_active is intentionally omitted here. On INSERT the DB column
+        // default (true) applies, so new services start visible. On UPDATE
+        // (conflict on external_id) the existing value is preserved, meaning
+        // services an admin has hidden via the dashboard stay hidden after a sync.
         last_synced_at: new Date().toISOString(),
       };
     });

@@ -22,17 +22,20 @@ export default function ProductTemplateCard({
   const { formatPrice } = useCurrency()
 
   // A product is purchasable if it has pre-stocked accounts, OR it's configured
-  // to auto-fulfill live from MuaBanVia once stock runs out. In the auto-fulfill
-  // case stock_count can legitimately read 0 while still being buyable -
-  // process-purchase attempts a live MuaBanVia fulfillment server-side and only
-  // fails the request if that genuinely can't deliver. Gating purely on
-  // stock_count was blocking the buy button (and therefore the auto-fulfill
-  // call itself) from ever firing for these products.
-  const canAutoFulfill = !!(productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id)
+  // to auto-fulfill live from any provider (MuaBanVia, ShopClone, ShopViaClone).
+  // When any live provider is active, stock_count can legitimately be 0 and the
+  // product is still buyable — process-purchase handles the live fulfillment
+  // server-side. Gating purely on stock_count was blocking the buy button for
+  // these products.
+  const canAutoFulfill = !!(
+    (productGroup.auto_fulfill_enabled && productGroup.muabanvia_product_id) ||
+    productGroup.shopclone_product_id ||
+    productGroup.shopviaclone_product_id
+  )
   const isOutOfStock = productGroup.stock_count === 0 && !canAutoFulfill
   const isLowStock = productGroup.stock_count > 0 && productGroup.stock_count < 5
   // Quantity controls need an upper bound; use the pre-stocked count if any,
-  // otherwise allow a small default range since MuaBanVia fulfills on demand.
+  // otherwise allow a small default range since a live provider fulfills on demand.
   const maxQuantity = productGroup.stock_count > 0 ? productGroup.stock_count : 10
   const { total: discountedTotal, discountPct } = computeDiscountedTotal(
     productGroup.price,
