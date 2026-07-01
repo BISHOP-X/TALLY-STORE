@@ -205,6 +205,7 @@ export default function AdminPage() {
   const [smmServicesQuery, setSmmServicesQuery] = useState('')
   const [smmTogglingId, setSmmTogglingId] = useState<number | null>(null)
   const [smmSyncing, setSmmSyncing] = useState(false)
+  const [smmExpandedPlatforms, setSmmExpandedPlatforms] = useState<Set<string>>(new Set())
 
   // Email / Broadcast state
   const [emailSubject, setEmailSubject] = useState('TallyStore Notification')
@@ -532,10 +533,15 @@ export default function AdminPage() {
 
   // ==================== SMM SERVICES MANAGEMENT ====================
 
+  // Load ALL services (no limit) grouped by platform so admin can bulk-manage
   const loadSmmServices = useCallback(async (query: string) => {
     setSmmServicesLoading(true)
     try {
-      let q = supabase.from('smm_services').select('id, external_id, name, platform, category, price_ngn, is_active').order('platform').order('name').limit(100)
+      let q = supabase
+        .from('smm_services')
+        .select('id, external_id, name, platform, price_ngn, is_active')
+        .order('platform')
+        .order('name')
       if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
       const { data, error } = await q
       if (error) throw error
@@ -557,6 +563,25 @@ export default function AdminPage() {
       toast({ title: 'Failed to update service', variant: 'destructive' })
     } finally {
       setSmmTogglingId(null)
+    }
+  }
+
+  // Bulk toggle all services for a platform (or all platforms when platform='')
+  const handleBulkTogglePlatform = async (platform: string, makeActive: boolean) => {
+    setSmmServicesLoading(true)
+    try {
+      let q = supabase.from('smm_services').update({ is_active: makeActive })
+      if (platform) q = (q as any).eq('platform', platform)
+      const { error } = await q
+      if (error) throw error
+      setSmmServices(prev =>
+        prev.map(s => (!platform || s.platform === platform) ? { ...s, is_active: makeActive } : s)
+      )
+      toast({ title: makeActive ? 'All shown' : 'All hidden', description: platform ? `${platform} services updated` : 'All services updated' })
+    } catch (err) {
+      toast({ title: 'Bulk update failed', variant: 'destructive' })
+    } finally {
+      setSmmServicesLoading(false)
     }
   }
 
@@ -1604,23 +1629,31 @@ export default function AdminPage() {
             {/* Social Boost Service Visibility */}
             <Card className="mb-6 sm:mb-8">
               <CardHeader>
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div>
                     <CardTitle className="text-lg">Social Boost Service Visibility</CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Search services and hide the ones you don't want customers to see.
-                      Hidden services stay hidden even after syncing the panel.
+                      Hide entire platforms or individual services. Changes survive syncs.
                     </p>
                   </div>
-                  <Button size="sm" onClick={handleSmmSync} disabled={smmSyncing} variant="outline">
-                    {smmSyncing ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Syncing...</> : <><RefreshCw className="h-3 w-3 mr-1" />Sync Panel</>}
-                  </Button>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" variant="outline" onClick={handleSmmSync} disabled={smmSyncing}>
+                      {smmSyncing ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Syncing...</> : <><RefreshCw className="h-3 w-3 mr-1" />Sync Panel</>}
+                    </Button>
+                    {smmServices.length > 0 && (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => handleBulkTogglePlatform('', true)} disabled={smmServicesLoading}>Show All</Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleBulkTogglePlatform('', false)} disabled={smmServicesLoading}>Hide All</Button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3">
+                {/* Load / search */}
                 <div className="flex gap-2">
                   <Input
-                    placeholder='Search by service name, e.g. "instagram followers"'
+                    placeholder='Filter by name, e.g. "followers" — leave blank to load all'
                     value={smmServicesQuery}
                     onChange={(e) => setSmmServicesQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && loadSmmServices(smmServicesQuery)}
@@ -1631,30 +1664,68 @@ export default function AdminPage() {
                 </div>
 
                 {smmServices.length === 0 && !smmServicesLoading && (
-                  <p className="text-xs text-muted-foreground">Search above to find and manage services.</p>
+                  <p className="text-xs text-muted-foreground">Click the search button (leave blank) to load all services.</p>
                 )}
 
-                {smmServices.length > 0 && (
-                  <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
-                    {smmServices.map((svc) => (
-                      <div key={svc.id} className="flex items-center justify-between px-3 py-2 gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm truncate">{svc.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{svc.platform} · ₦{Number(svc.price_ngn).toLocaleString()}/unit</p>
+                {/* Grouped by platform */}
+                {smmServices.length > 0 && (() => {
+                  const grouped: Record<string, any[]> = {}
+                  smmServices.forEach(s => {
+                    const p = s.platform || 'other'
+                    if (!grouped[p]) grouped[p] = []
+                    grouped[p].push(s)
+                  })
+                  return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([platform, services]) => {
+                    const allVisible = services.every(s => s.is_active)
+                    const allHidden = services.every(s => !s.is_active)
+                    const isExpanded = smmExpandedPlatforms.has(platform)
+                    return (
+                      <div key={platform} className="border rounded-lg overflow-hidden">
+                        {/* Platform header row */}
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted/40 gap-3">
+                          <button
+                            className="flex items-center gap-2 flex-1 text-left"
+                            onClick={() => setSmmExpandedPlatforms(prev => {
+                              const next = new Set(prev)
+                              next.has(platform) ? next.delete(platform) : next.add(platform)
+                              return next
+                            })}
+                          >
+                            <span className="font-medium capitalize text-sm">{platform}</span>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{services.length}</Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {allVisible ? '● all visible' : allHidden ? '○ all hidden' : `${services.filter(s => s.is_active).length} visible`}
+                            </span>
+                            <span className="text-xs text-muted-foreground ml-auto">{isExpanded ? '▲' : '▼'}</span>
+                          </button>
+                          <div className="flex gap-1.5 shrink-0">
+                            <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleBulkTogglePlatform(platform, true)} disabled={smmServicesLoading || allVisible}>Show all</Button>
+                            <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => handleBulkTogglePlatform(platform, false)} disabled={smmServicesLoading || allHidden}>Hide all</Button>
+                          </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant={svc.is_active ? 'outline' : 'default'}
-                          onClick={() => handleToggleSmmService(svc.id, svc.is_active)}
-                          disabled={smmTogglingId === svc.id}
-                          className="shrink-0"
-                        >
-                          {smmTogglingId === svc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : svc.is_active ? 'Hide' : 'Show'}
-                        </Button>
+                        {/* Individual services (collapsed by default) */}
+                        {isExpanded && (
+                          <div className="divide-y">
+                            {services.map(svc => (
+                              <div key={svc.id} className="flex items-center justify-between px-3 py-1.5 gap-3">
+                                <p className="text-xs flex-1 truncate text-muted-foreground">{svc.name}</p>
+                                <Button
+                                  size="sm"
+                                  variant={svc.is_active ? 'ghost' : 'outline'}
+                                  onClick={() => handleToggleSmmService(svc.id, svc.is_active)}
+                                  disabled={smmTogglingId === svc.id}
+                                  className="h-6 text-xs px-2 shrink-0"
+                                >
+                                  {smmTogglingId === svc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : svc.is_active ? 'Hide' : 'Show'}
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )
+                  })
+                })()}
               </CardContent>
             </Card>
 
