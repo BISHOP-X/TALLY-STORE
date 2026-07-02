@@ -268,11 +268,9 @@ serve(async (req) => {
     }
 
     // 3. Check wallet balance
-    // Kill switch: both quantity discount tiers and discount codes are paused
-    // store-wide while a better bundle/promo solution is worked out. Mirrors
-    // DISCOUNTS_ENABLED in src/lib/supabase.ts - keep both in sync. (Can't
-    // import that file directly - Deno edge functions can't import from src/.)
-    const DISCOUNTS_ENABLED = false;
+    // Discount codes are enabled. Quantity-tier bulk discounts remain off for now.
+    // Mirrors DISCOUNTS_ENABLED in src/lib/supabase.ts — keep both in sync.
+    const DISCOUNTS_ENABLED = true;
 
     // Apply quantity discount tiers (same logic as computeDiscountedTotal in
     // src/lib/supabase.ts - keep both in sync). Highest-min_qty tier the
@@ -317,6 +315,14 @@ serve(async (req) => {
       }
       if (codeRow.category_id && !codeRow.product_group_id && codeRow.category_id !== productGroup.category_id) {
         throw new Error('This discount code is not valid for this category');
+      }
+      // Reward codes are user-specific — reject if presented by a different user
+      if (codeRow.user_id && codeRow.user_id !== user.id) {
+        throw new Error('This discount code is not valid for your account');
+      }
+      // Reward codes have a max order amount — reject if this order exceeds it
+      if (codeRow.max_order_amount && totalPrice > codeRow.max_order_amount) {
+        throw new Error(`This code is only valid for orders up to ₦${codeRow.max_order_amount.toLocaleString()}`);
       }
 
       const codePct = Math.min(Math.max(codeRow.percent_off, 0), 100);
@@ -443,6 +449,43 @@ serve(async (req) => {
         .eq('id', appliedDiscountCode.id);
     }
 
+    // 6c. Auto-reward: purchases with an original value of ₦100,000+ earn a
+    //     personalised 20%-off code valid on any next order up to ₦12,000.
+    //     Generated AFTER the order is committed so a rollback never issues one.
+    //     Failures are non-fatal — the purchase is already complete.
+    const REWARD_THRESHOLD = 100_000;
+    const REWARD_PERCENT_OFF = 20;
+    const REWARD_MAX_ORDER = 12_000;
+    let rewardCode: string | null = null;
+    if (originalTotal >= REWARD_THRESHOLD) {
+      try {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no O/0 or I/1 confusion
+        const rand = Array.from({ length: 8 }, () =>
+          chars[Math.floor(Math.random() * chars.length)]
+        ).join('');
+        const code = `REWARD-${rand}`;
+        const { error: rewardError } = await supabaseAdmin
+          .from('discount_codes')
+          .insert({
+            code,
+            percent_off: REWARD_PERCENT_OFF,
+            max_uses: 1,
+            user_id: user.id,
+            max_order_amount: REWARD_MAX_ORDER,
+            is_reward: true,
+            is_active: true,
+          });
+        if (!rewardError) {
+          rewardCode = code;
+          console.log(`🎁 Reward code ${code} issued to user ${user.id} for ₦${originalTotal} purchase`);
+        } else {
+          console.error('⚠️ Failed to issue reward code:', rewardError);
+        }
+      } catch (rewardErr) {
+        console.error('⚠️ Reward code generation error:', rewardErr);
+      }
+    }
+
     // 7. Mark accounts as sold
     await supabaseAdmin
       .from('individual_accounts')
@@ -489,6 +532,7 @@ serve(async (req) => {
         product_name: productGroup.name,
         new_balance: newBalance,
         message: `Successfully purchased ${quantity} account(s)`,
+        ...(rewardCode ? { reward_code: rewardCode } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

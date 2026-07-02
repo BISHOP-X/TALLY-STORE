@@ -29,7 +29,10 @@ export default function UpdatePromptBanner() {
         className="h-7 px-3 text-xs"
         onClick={() => {
           setShow(false);
+          // Activate the new service worker, then hard-reload to guarantee
+          // the browser fetches fresh assets rather than serving from cache.
           doUpdate?.();
+          setTimeout(() => window.location.reload(), 300);
         }}
       >
         Update

@@ -214,16 +214,44 @@ export default function ProductsPage() {
   }
 
   // Filter product groups for direct product template display
-  const filteredProductGroups = productGroups.filter(productGroup => {
-    const category = categories.find(cat => cat.id === productGroup.category_id)
-    const matchesSearch = productGroup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         productGroup.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         category?.name.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesCategory = selectedCategory === 'all' || productGroup.category_id === selectedCategory
-    
-    return matchesSearch && matchesCategory && productGroup.is_active
-  })
+  const filteredProductGroups = productGroups
+    .filter(productGroup => {
+      const category = categories.find(cat => cat.id === productGroup.category_id)
+      const matchesSearch =
+        productGroup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        productGroup.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        category?.name.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesCategory = selectedCategory === 'all' || productGroup.category_id === selectedCategory
+      return matchesSearch && matchesCategory && productGroup.is_active
+    })
+    .sort((a, b) => {
+      // Relevance sort so customers always see purchasable products first.
+      // Tier 1 → top seller AND in stock
+      // Tier 2 → in stock (not a top seller)
+      // Tier 3 → auto-fulfill only (stock = 0 but provider configured)
+      // Tier 4 → out of stock, no provider
+      const autoFulfill = (pg: ProductGroup) => !!(
+        (pg.auto_fulfill_enabled && pg.muabanvia_product_id) ||
+        pg.shopclone_product_id ||
+        pg.shopviaclone_product_id
+      )
+      const tierOf = (pg: ProductGroup): number => {
+        const inStock = pg.stock_count > 0
+        const topSeller = topSellingIds.includes(pg.id)
+        if (inStock && topSeller) return 0
+        if (inStock) return 1
+        if (autoFulfill(pg)) return 2
+        return 3
+      }
+      const tierA = tierOf(a)
+      const tierB = tierOf(b)
+      if (tierA !== tierB) return tierA - tierB
+      // Within same tier: top sellers in sales-rank order, others alphabetical
+      if (tierA === 0) {
+        return topSellingIds.indexOf(a.id) - topSellingIds.indexOf(b.id)
+      }
+      return a.name.localeCompare(b.name)
+    })
 
   // Popular Products: real "most bought" ranking computed from completed
   // orders (topSellingIds), in rank order. If there isn't enough real sales

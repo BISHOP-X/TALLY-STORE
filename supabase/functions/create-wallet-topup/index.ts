@@ -95,6 +95,19 @@ serve(async (req) => {
       { auth: { persistSession: false } },
     )
 
+    // ── Kill-switch: admin can disable Ercas Pay via app_settings ──
+    const { data: ercasSetting } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'ercas_enabled')
+      .single()
+    if (ercasSetting?.value === 'false') {
+      return json(
+        { success: false, message: 'Card payments are temporarily unavailable. Please use bank transfer instead.', error: 'ercas_disabled' },
+        400,
+      )
+    }
+
     const transactionData = {
       amount,
       paymentReference: generatePaymentReference(),

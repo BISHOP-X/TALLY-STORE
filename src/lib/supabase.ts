@@ -152,7 +152,7 @@ export interface QuantityDiscountTier {
 // back to true to re-enable both (no data was deleted - tiers and codes are
 // still sitting in the DB, just not applied at checkout). Mirrors the same
 // flag in supabase/functions/process-purchase/index.ts - keep both in sync.
-export const DISCOUNTS_ENABLED = false
+export const DISCOUNTS_ENABLED = true
 
 // Picks the best applicable tier for a given quantity (highest min_qty the
 // quantity meets or exceeds) and returns the discounted total. Mirrors the
@@ -1411,7 +1411,7 @@ export async function processPurchaseSecure(
   productGroupId: string,
   quantity: number,
   discountCode?: string,
-): Promise<{ success: boolean; error?: string; order_id?: string; amount?: number; new_balance?: number }> {
+): Promise<{ success: boolean; error?: string; order_id?: string; amount?: number; new_balance?: number; reward_code?: string }> {
   try {
     // Get current session for user ID
     const { data: { session } } = await supabase.auth.getSession();
@@ -1461,6 +1461,7 @@ export async function processPurchaseSecure(
       order_id: data.order_id,
       amount: data.amount,
       new_balance: data.new_balance,
+      reward_code: data.reward_code,
     };
   } catch (error: any) {
     console.error('❌ processPurchaseSecure error:', error);
@@ -2621,6 +2622,9 @@ export interface DiscountCode {
   expires_at: string | null
   is_active: boolean
   created_at: string
+  max_order_amount?: number | null  // code only valid for orders ≤ this amount (NGN)
+  user_id?: string | null           // null = store-wide; set = single-user reward code
+  is_reward?: boolean               // true = auto-generated loyalty reward
 }
 
 export async function getDiscountCodes(): Promise<DiscountCode[]> {
@@ -2683,6 +2687,7 @@ export async function previewDiscountCode(
   code: string,
   productGroupId: string,
   categoryId: string | null,
+  orderTotal?: number,
 ): Promise<{ valid: boolean; percentOff?: number; error?: string }> {
   if (!DISCOUNTS_ENABLED) return { valid: false, error: 'Discount codes are temporarily unavailable' }
   if (!code.trim()) return { valid: false, error: 'Enter a code' }
@@ -2706,6 +2711,17 @@ export async function previewDiscountCode(
     }
     if (data.category_id && !data.product_group_id && data.category_id !== categoryId) {
       return { valid: false, error: 'This code is not valid for this category' }
+    }
+    // Reward codes are user-specific — verify the current user owns this code
+    if (data.user_id) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || user.id !== data.user_id) {
+        return { valid: false, error: 'This code is not valid for your account' }
+      }
+    }
+    // Reward codes have a maximum order amount
+    if (data.max_order_amount && orderTotal !== undefined && orderTotal > data.max_order_amount) {
+      return { valid: false, error: `This code is only valid for orders up to ₦${data.max_order_amount.toLocaleString('en-NG')}` }
     }
     return { valid: true, percentOff: data.percent_off }
   } catch (error) {

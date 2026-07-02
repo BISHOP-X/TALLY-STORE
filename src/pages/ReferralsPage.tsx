@@ -87,7 +87,7 @@ export default function ReferralsPage() {
             Referrals
           </h1>
           <p className="text-muted-foreground mt-1">
-            Share your code, earn a commission every time someone you referred makes a purchase.
+            Share your code and earn a commission on your friend's first 10 deposits. After that, the reward window closes.
           </p>
         </div>
 

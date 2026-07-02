@@ -69,7 +69,7 @@ export default function CheckoutPage() {
     setCheckingCode(true)
     setCodeError('')
     try {
-      const result = await previewDiscountCode(codeInput.trim(), productGroup.id, category?.id || null)
+      const result = await previewDiscountCode(codeInput.trim(), productGroup.id, category?.id || null, tierTotal)
       if (result.valid && result.percentOff) {
         setAppliedCode({ code: codeInput.trim().toUpperCase(), percentOff: result.percentOff })
         setCodeError('')
@@ -161,23 +161,35 @@ export default function CheckoutPage() {
       if (result.success) {
         const purchaseType = quantity > 1 ? 'Bulk Purchase' : 'Purchase'
         const accountText = quantity > 1 ? `${quantity} accounts` : '1 account'
-        
+
         // Refresh wallet balance after successful purchase
         await refreshWalletBalance()
-        
+
         toast({
           title: `${purchaseType} Successful! 🎉`,
           description: `You've successfully purchased ${accountText} from ${productGroup.name}`,
         })
-        
+
+        // If the purchase earned a reward code, surface it prominently
+        if (result.reward_code) {
+          setTimeout(() => {
+            toast({
+              title: '🎁 You earned a reward code!',
+              description: `You spent ₦100,000+! Use code ${result.reward_code} for 20% off your next purchase under ₦12,000. Valid for one use.`,
+              duration: 12000,
+            })
+          }, 1500)
+        }
+
         // Redirect to orders with success message
-        navigate('/orders', { 
-          state: { 
-            purchaseSuccess: true, 
+        navigate('/orders', {
+          state: {
+            purchaseSuccess: true,
             bulkPurchase: quantity > 1,
             accountCount: quantity,
-            productGroupName: productGroup.name
-          } 
+            productGroupName: productGroup.name,
+            rewardCode: result.reward_code || null,
+          }
         })
       } else {
         // Parse error message for better user experience

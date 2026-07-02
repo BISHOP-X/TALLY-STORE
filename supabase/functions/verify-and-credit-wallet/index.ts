@@ -8,12 +8,11 @@ const corsHeaders = {
 
 const ERCASPAY_BASE_URL = 'https://api.ercaspay.com/api/v1';
 
-// Referral commission is earned on deposits/top-ups (not on purchases) - a
-// percentage of every successful top-up made by a referred user gets credited
-// to their referrer's referral_balance. Reads the live referral_commission_pct
-// from app_settings (admin-configurable), defaulting to 5% if unset.
-// Non-blocking: any failure here must never affect the top-up that already
-// completed successfully.
+// Milestone referral reward: the referrer earns a commission only on every
+// 10th deposit made by their referred user (deposit #10, #20, #30, …).
+// On those milestones the referrer gets referral_commission_pct % of that
+// deposit amount (admin-configurable in app_settings, default 5%).
+// Non-blocking: any failure must never affect the top-up that already completed.
 async function creditReferrerForTopup(
   supabaseAdmin: ReturnType<typeof createClient>,
   userId: string,
@@ -27,6 +26,24 @@ async function creditReferrerForTopup(
       .single();
 
     if (!buyerProfile?.referred_by) return;
+
+    // Count total completed deposits by this user (current one already inserted)
+    const { count: depositCount } = await supabaseAdmin
+      .from('transactions')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('type', 'topup')
+      .eq('status', 'completed');
+
+    // Referral rewards only apply to the first 10 deposits (deposits 1–10).
+    // After that, no more commission — the referrer has had their full reward.
+    const REFERRAL_DEPOSIT_LIMIT = 10;
+    if (!depositCount || depositCount > REFERRAL_DEPOSIT_LIMIT) {
+      console.log(`ℹ️ Deposit #${depositCount} for user ${userId} — outside referral window (1–${REFERRAL_DEPOSIT_LIMIT}), no reward`);
+      return;
+    }
+
+    console.log(`🎯 Deposit #${depositCount}/${REFERRAL_DEPOSIT_LIMIT} for user ${userId} — within referral window, crediting referrer`);
 
     const referrerId = buyerProfile.referred_by;
 
@@ -65,7 +82,7 @@ async function creditReferrerForTopup(
         commission_amount: commissionAmount,
       }]);
 
-    console.log(`✅ Referral top-up reward: ₦${commissionAmount} credited to referrer ${referrerId}`);
+    console.log(`✅ Milestone referral reward (deposit #${depositCount}): ₦${commissionAmount} credited to referrer ${referrerId}`);
   } catch (referralError) {
     console.error('⚠️ Referral top-up reward error (non-blocking):', referralError);
   }
