@@ -10,6 +10,7 @@ interface AuthContextType {
   signOut: () => Promise<void>
   resendConfirmation: (email: string) => Promise<{ success: boolean; error?: string }>
   isAdmin: boolean
+  isStaff: boolean
   walletBalance: number
   walletLoading: boolean
   refreshWalletBalance: () => Promise<void>
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isStaff, setIsStaff] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
   const [walletLoading, setWalletLoading] = useState(true)
   const lastProfileLoadKey = useRef<string | null>(null)
@@ -33,21 +35,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('is_admin, wallet_balance')
+        .select('is_admin, is_staff, wallet_balance')
         .eq('id', userId)
         .single()
 
       if (error) {
         setIsAdmin(isWisdomAdmin)
+        setIsStaff(false)
         setWalletBalance(0)
         return
       }
 
       setIsAdmin(isWisdomAdmin)
+      setIsStaff(!isWisdomAdmin && !!data?.is_staff)
       setWalletBalance(data?.wallet_balance || 0)
     } catch (error) {
       console.error('Error checking admin status:', error)
       setIsAdmin(isWisdomAdmin)
+      setIsStaff(false)
       setWalletBalance(0)
     } finally {
       setWalletLoading(false)
@@ -68,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         lastProfileLoadKey.current = null
         setIsAdmin(false)
+        setIsStaff(false)
         setWalletBalance(0)
         setWalletLoading(false)
       }
@@ -178,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut()
     setIsAdmin(false)
+    setIsStaff(false)
   }
 
   const resendConfirmation = async (email: string) => {
@@ -208,6 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     resendConfirmation,
     isAdmin,
+    isStaff,
     walletBalance,
     walletLoading,
     refreshWalletBalance

@@ -5,13 +5,12 @@ import { useAuth } from '@/contexts/SimpleAuth'
 interface ProtectedRouteProps {
   children: ReactNode
   redirectTo?: string
-  requireRole?: 'user' | 'admin'
+  requireRole?: 'user' | 'admin' | 'staff'
 }
 
 export function ProtectedRoute({ children, redirectTo = '/login', requireRole }: ProtectedRouteProps) {
-  const { user, loading, isAdmin } = useAuth()
+  const { user, loading, isAdmin, isStaff } = useAuth()
 
-  // Show loading spinner while checking auth
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -20,13 +19,15 @@ export function ProtectedRoute({ children, redirectTo = '/login', requireRole }:
     )
   }
 
-  // Not authenticated - redirect to login
-  if (!user) {
-    return <Navigate to={redirectTo} replace />
+  if (!user) return <Navigate to={redirectTo} replace />
+
+  if (requireRole === 'admin' && !isAdmin) {
+    // Staff members trying to hit /admin get sent to their own page
+    if (isStaff) return <Navigate to="/staff-admin" replace />
+    return <Navigate to="/dashboard" replace />
   }
 
-  // Check role requirement
-  if (requireRole === 'admin' && !isAdmin) {
+  if (requireRole === 'staff' && !isStaff && !isAdmin) {
     return <Navigate to="/dashboard" replace />
   }
 

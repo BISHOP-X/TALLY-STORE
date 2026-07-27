@@ -6,14 +6,14 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
-  Settings, 
-  Plus, 
-  Upload, 
-  Users, 
-  ShoppingBag, 
-  TrendingUp, 
-  Edit, 
+import {
+  Settings,
+  Plus,
+  Upload,
+  Users,
+  ShoppingBag,
+  TrendingUp,
+  Edit,
   Trash2,
   Eye,
   DollarSign,
@@ -28,8 +28,14 @@ import {
   CheckCircle2,
   Clock,
   X,
-  Tag
+  Tag,
+  Shield,
+  UserCheck,
+  UserX,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react'
+import { PERMISSIONS, type PermissionKey } from '@/lib/staffPermissions'
 import Navbar from '@/components/NavbarAuth'
 import Footer from '@/components/Footer'
 import AdminAlerts from '@/components/AdminAlerts'
@@ -231,6 +237,18 @@ export default function AdminPage() {
   const [newCodeMaxUses, setNewCodeMaxUses] = useState('')
   const [newCodeExpiresAt, setNewCodeExpiresAt] = useState('')
   const [isCreatingCode, setIsCreatingCode] = useState(false)
+
+  // ── Staff roles state ──────────────────────────────────────────────────
+  const [staffUsers, setStaffUsers] = useState<any[]>([])
+  const [staffSearchQuery, setStaffSearchQuery] = useState('')
+  const [staffSearchResults, setStaffSearchResults] = useState<any[]>([])
+  const [staffSearching, setStaffSearching] = useState(false)
+  const [staffPermissionsMap, setStaffPermissionsMap] = useState<Record<string, Record<string, { is_enabled: boolean; auto_approve: boolean }>>>({})
+  const [savingStaffPerm, setSavingStaffPerm] = useState<string | null>(null)
+  const [pendingActions, setPendingActions] = useState<any[]>([])
+  const [loadingPendingActions, setLoadingPendingActions] = useState(false)
+  const [approvingAction, setApprovingAction] = useState<string | null>(null)
+  const [expandedStaffUser, setExpandedStaffUser] = useState<string | null>(null)
 
   const loadDiscountCodes = useCallback(async () => {
     setIsLoadingCodes(true)
@@ -529,6 +547,115 @@ export default function AdminPage() {
     } finally {
       setSavingErcasEnabled(false)
     }
+  }
+
+  // ==================== STAFF ROLES MANAGEMENT ====================
+
+  const loadStaffUsers = useCallback(async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, email, is_staff, wallet_balance')
+      .eq('is_staff', true)
+    setStaffUsers(data || [])
+  }, [])
+
+  useEffect(() => { loadStaffUsers() }, [loadStaffUsers])
+
+  const loadPendingActions = useCallback(async () => {
+    setLoadingPendingActions(true)
+    const { data } = await supabase
+      .from('staff_pending_actions')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    setPendingActions(data || [])
+    setLoadingPendingActions(false)
+  }, [])
+
+  useEffect(() => { loadPendingActions() }, [loadPendingActions])
+
+  const loadStaffPermsForUser = useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from('staff_permissions')
+      .select('permission_key, is_enabled, auto_approve')
+      .eq('user_id', userId)
+    const map: Record<string, { is_enabled: boolean; auto_approve: boolean }> = {}
+    for (const row of data || []) map[row.permission_key] = { is_enabled: row.is_enabled, auto_approve: row.auto_approve }
+    setStaffPermissionsMap(prev => ({ ...prev, [userId]: map }))
+  }, [])
+
+  const handleGrantStaff = async (userId: string) => {
+    await supabase.from('profiles').update({ is_staff: true }).eq('id', userId)
+    loadStaffUsers()
+    setStaffSearchResults(prev => prev.map(u => u.id === userId ? { ...u, is_staff: true } : u))
+    toast({ title: 'Staff role granted' })
+  }
+
+  const handleRevokeStaff = async (userId: string) => {
+    await supabase.from('profiles').update({ is_staff: false }).eq('id', userId)
+    loadStaffUsers()
+    toast({ title: 'Staff role revoked' })
+  }
+
+  const handleToggleStaffPerm = async (
+    userId: string,
+    permKey: string,
+    field: 'is_enabled' | 'auto_approve',
+    value: boolean,
+  ) => {
+    setSavingStaffPerm(`${userId}-${permKey}-${field}`)
+    const current = staffPermissionsMap[userId]?.[permKey] || { is_enabled: false, auto_approve: true }
+    const updated = { ...current, [field]: value }
+    await supabase
+      .from('staff_permissions')
+      .upsert({ user_id: userId, permission_key: permKey, ...updated }, { onConflict: 'user_id,permission_key' })
+    setStaffPermissionsMap(prev => ({
+      ...prev,
+      [userId]: { ...prev[userId], [permKey]: updated },
+    }))
+    setSavingStaffPerm(null)
+  }
+
+  const handleSearchForStaff = async () => {
+    if (!staffSearchQuery.trim()) return
+    setStaffSearching(true)
+    const results = await searchUsers(staffSearchQuery)
+    setStaffSearchResults(results)
+    setStaffSearching(false)
+  }
+
+  const handleApproveAction = async (action: any) => {
+    setApprovingAction(action.id)
+    try {
+      // Apply the action based on its type
+      if (action.action_type === 'upsert_setting') {
+        const { setting_key, value } = action.action_data
+        await upsertAppSetting(setting_key, value)
+      } else if (action.action_type === 'adjust_balance') {
+        const { user_id, amount, reason } = action.action_data
+        await adminAdjustBalance(user_id, amount, reason || 'Approved staff action')
+      }
+      // Mark as approved
+      await supabase
+        .from('staff_pending_actions')
+        .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user?.id })
+        .eq('id', action.id)
+      toast({ title: 'Action approved and applied' })
+      loadPendingActions()
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Failed to apply action' })
+    } finally {
+      setApprovingAction(null)
+    }
+  }
+
+  const handleRejectAction = async (actionId: string) => {
+    await supabase
+      .from('staff_pending_actions')
+      .update({ status: 'rejected', reviewed_at: new Date().toISOString(), reviewed_by: user?.id })
+      .eq('id', actionId)
+    toast({ title: 'Action rejected' })
+    loadPendingActions()
   }
 
   // ==================== SMM SERVICES MANAGEMENT ====================
@@ -1644,6 +1771,23 @@ export default function AdminPage() {
                       <>
                         <Button size="sm" variant="outline" onClick={() => handleBulkTogglePlatform('', true)} disabled={smmServicesLoading}>Show All</Button>
                         <Button size="sm" variant="destructive" onClick={() => handleBulkTogglePlatform('', false)} disabled={smmServicesLoading}>Hide All</Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                          disabled={smmServicesLoading}
+                          onClick={async () => {
+                            const followerServices = smmServices.filter(s =>
+                              s.name?.toLowerCase().includes('follow') || s.name?.toLowerCase().includes('follower')
+                            )
+                            for (const s of followerServices) {
+                              if (s.is_active) await handleToggleSmmService(s.id, true)
+                            }
+                            toast({ title: `Blocked ${followerServices.length} followers services` })
+                          }}
+                        >
+                          Block Followers
+                        </Button>
                       </>
                     )}
                   </div>
@@ -2456,7 +2600,7 @@ export default function AdminPage() {
           {/* Main Content */}
           <Tabs defaultValue="templates" className="space-y-6">
             <div className="w-full overflow-x-auto pb-2">
-              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-8">
+              <TabsList className="inline-flex w-full min-w-max md:grid md:w-full md:grid-cols-9">
                 <TabsTrigger value="templates" className="flex-shrink-0">Templates</TabsTrigger>
                 <TabsTrigger value="products" className="flex-shrink-0">Products</TabsTrigger>
                 <TabsTrigger value="add-product" className="flex-shrink-0">Add Product</TabsTrigger>
@@ -2465,6 +2609,7 @@ export default function AdminPage() {
                 <TabsTrigger value="categories" className="flex-shrink-0">Categories</TabsTrigger>
                 <TabsTrigger value="users" className="flex-shrink-0">Users</TabsTrigger>
                 <TabsTrigger value="email" className="flex-shrink-0">Email</TabsTrigger>
+                <TabsTrigger value="staff" className="flex-shrink-0">Staff Roles</TabsTrigger>
               </TabsList>
             </div>
 
@@ -3506,6 +3651,203 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* ── Staff Roles Tab ──────────────────────────────────────────── */}
+            <TabsContent value="staff" className="space-y-6">
+
+              {/* Pending Approvals */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> Pending Approvals</CardTitle>
+                      <p className="text-muted-foreground text-sm mt-1">Staff actions waiting for your review</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={loadPendingActions} disabled={loadingPendingActions}>
+                      <RefreshCw className={`h-4 w-4 mr-1 ${loadingPendingActions ? 'animate-spin' : ''}`} /> Refresh
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loadingPendingActions ? (
+                    <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
+                  ) : pendingActions.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No pending actions — you're all caught up.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {pendingActions.map(action => (
+                        <div key={action.id} className="flex items-center justify-between p-3 rounded-lg border">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm">{action.action_label}</p>
+                            <p className="text-xs text-muted-foreground">By {action.staff_email} · {format(new Date(action.created_at), 'dd MMM HH:mm')}</p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-3 shrink-0">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApproveAction(action)}
+                              disabled={approvingAction === action.id}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {approvingAction === action.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRejectAction(action.id)}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                              <XCircle className="h-3 w-3 mr-1" /> Reject
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Grant staff role */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><UserCheck className="h-5 w-5" /> Grant Staff Access</CardTitle>
+                  <p className="text-muted-foreground text-sm">Search a user by email and give them the staff role</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Search by email..."
+                      value={staffSearchQuery}
+                      onChange={e => setStaffSearchQuery(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSearchForStaff()}
+                    />
+                    <Button onClick={handleSearchForStaff} disabled={staffSearching}>
+                      {staffSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {staffSearchResults.length > 0 && (
+                    <div className="space-y-2">
+                      {staffSearchResults.map((u: any) => (
+                        <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border text-sm">
+                          <div>
+                            <p className="font-medium">{u.email}</p>
+                            <p className="text-muted-foreground text-xs">Balance: ₦{(u.wallet_balance || 0).toLocaleString()}</p>
+                          </div>
+                          {u.is_staff ? (
+                            <Button size="sm" variant="outline" className="border-red-300 text-red-600" onClick={() => handleRevokeStaff(u.id)}>
+                              <UserX className="h-3.5 w-3.5 mr-1" /> Revoke Staff
+                            </Button>
+                          ) : (
+                            <Button size="sm" onClick={() => handleGrantStaff(u.id)}>
+                              <UserCheck className="h-3.5 w-3.5 mr-1" /> Grant Staff
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Permission matrix for each staff user */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" /> Staff Permissions</CardTitle>
+                  <p className="text-muted-foreground text-sm">Toggle what each staff member can see and do. "Auto-approve" means changes apply instantly; off means they go into the pending queue above.</p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {staffUsers.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No staff members yet. Grant someone the staff role above.</p>
+                  ) : (
+                    staffUsers.map((su: any) => {
+                      const isExpanded = expandedStaffUser === su.id
+                      const userPerms = staffPermissionsMap[su.id] || {}
+                      return (
+                        <div key={su.id} className="border rounded-lg overflow-hidden">
+                          <button
+                            className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+                            onClick={() => {
+                              if (!isExpanded) loadStaffPermsForUser(su.id)
+                              setExpandedStaffUser(isExpanded ? null : su.id)
+                            }}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Shield className="h-4 w-4 text-primary" />
+                              {su.email}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-300 text-red-600 h-7 text-xs"
+                                onClick={e => { e.stopPropagation(); handleRevokeStaff(su.id) }}
+                              >
+                                <UserX className="h-3 w-3 mr-1" /> Revoke
+                              </Button>
+                              <span className="text-muted-foreground">{isExpanded ? '▲' : '▼'}</span>
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="border-t divide-y">
+                              {/* Group by permission group */}
+                              {(['Overview', 'Tabs', 'Settings', 'Actions'] as const).map(group => {
+                                const groupPerms = PERMISSIONS.filter(p => p.group === group)
+                                return (
+                                  <div key={group} className="p-3 space-y-2">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group}</p>
+                                    {groupPerms.map(p => {
+                                      const perm = userPerms[p.key] || { is_enabled: false, auto_approve: true }
+                                      const savingKey = `${su.id}-${p.key}`
+                                      return (
+                                        <div key={p.key} className="flex items-center justify-between py-1">
+                                          <div className="min-w-0 flex-1 mr-4">
+                                            <p className="text-sm font-medium">{p.label}</p>
+                                            <p className="text-xs text-muted-foreground">{p.description}</p>
+                                          </div>
+                                          <div className="flex items-center gap-3 shrink-0">
+                                            {/* Enable/Disable */}
+                                            <button
+                                              className="flex items-center gap-1 text-xs"
+                                              onClick={() => handleToggleStaffPerm(su.id, p.key, 'is_enabled', !perm.is_enabled)}
+                                              disabled={savingStaffPerm === `${savingKey}-is_enabled`}
+                                            >
+                                              {perm.is_enabled
+                                                ? <ToggleRight className="h-5 w-5 text-green-600" />
+                                                : <ToggleLeft className="h-5 w-5 text-muted-foreground" />}
+                                              <span className={perm.is_enabled ? 'text-green-700 font-medium' : 'text-muted-foreground'}>
+                                                {perm.is_enabled ? 'On' : 'Off'}
+                                              </span>
+                                            </button>
+                                            {/* Auto-approve (only when enabled) */}
+                                            {perm.is_enabled && (
+                                              <button
+                                                className="flex items-center gap-1 text-xs border rounded px-2 py-0.5"
+                                                onClick={() => handleToggleStaffPerm(su.id, p.key, 'auto_approve', !perm.auto_approve)}
+                                                disabled={savingStaffPerm === `${savingKey}-auto_approve`}
+                                                title={perm.auto_approve ? 'Click to require approval' : 'Click to auto-approve'}
+                                              >
+                                                {perm.auto_approve
+                                                  ? <><CheckCircle2 className="h-3 w-3 text-blue-500" /> Auto</>
+                                                  : <><Clock className="h-3 w-3 text-orange-500" /> Approve</>}
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
           </Tabs>
           </div>
         </div>

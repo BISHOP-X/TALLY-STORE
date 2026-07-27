@@ -72,6 +72,7 @@ import AboutPage from '@/pages/AboutPage'
 import ContactPage from '@/pages/ContactPage'
 import WebServicesPage from '@/pages/WebServicesPage'
 import AdminPage from '@/pages/AdminPage'
+import StaffAdminPage from '@/pages/StaffAdminPage'
 import EmailConfirmation from '@/pages/EmailConfirmation'
 import CryptoExchange from '@/pages/CryptoExchange'
 import CryptoWithdrawal from '@/pages/CryptoWithdrawal'
@@ -288,6 +289,14 @@ const App = () => {
                 element={
                   <ProtectedRoute requireRole="admin">
                     <AdminPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/staff-admin"
+                element={
+                  <ProtectedRoute requireRole="staff">
+                    <StaffAdminPage />
                   </ProtectedRoute>
                 }
               />
