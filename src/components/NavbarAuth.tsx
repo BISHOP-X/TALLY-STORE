@@ -16,7 +16,7 @@ export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showInstallDialog, setShowInstallDialog] = useState(false)
   const [announcementVisible, setAnnouncementVisible] = useState(true)
-  const { user, signOut, isAdmin, walletBalance, walletLoading } = useAuth()
+  const { user, signOut, isAdmin, isStaff, walletBalance, walletLoading } = useAuth()
   const { currency, toggleCurrency, formatPrice } = useCurrency()
   const { canInstall, isInstalled, isAndroid, isIOS, installApp } = usePWAInstall()
   const { toast } = useToast()
@@ -159,6 +159,15 @@ export default function Navbar() {
                           </Link>
                           <Link to="/dashboard" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
                             My Dashboard
+                          </Link>
+                        </>
+                      ) : isStaff ? (
+                        <>
+                          <Link to="/staff-admin" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 font-medium text-primary">
+                            Staff Panel
+                          </Link>
+                          <Link to="/dashboard" className="block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                            Dashboard
                           </Link>
                         </>
                       ) : (
@@ -346,6 +355,21 @@ export default function Navbar() {
                           <Button variant="ghost" className="w-full justify-start gap-2">
                             <User className="h-4 w-4" />
                             My Dashboard
+                          </Button>
+                        </Link>
+                      </>
+                    ) : isStaff ? (
+                      <>
+                        <Link to="/staff-admin" onClick={() => setIsMobileMenuOpen(false)}>
+                          <Button variant="ghost" className="w-full justify-start gap-2 text-primary">
+                            <User className="h-4 w-4" />
+                            Staff Panel
+                          </Button>
+                        </Link>
+                        <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                          <Button variant="ghost" className="w-full justify-start gap-2">
+                            <User className="h-4 w-4" />
+                            Dashboard
                           </Button>
                         </Link>
                       </>
