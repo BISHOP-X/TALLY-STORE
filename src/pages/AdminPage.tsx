@@ -627,7 +627,6 @@ export default function AdminPage() {
   const handleApproveAction = async (action: any) => {
     setApprovingAction(action.id)
     try {
-      // Apply the action based on its type
       if (action.action_type === 'upsert_setting') {
         const { setting_key, value } = action.action_data
         await upsertAppSetting(setting_key, value)
@@ -635,14 +634,13 @@ export default function AdminPage() {
         const { user_id, amount, reason } = action.action_data
         await adminAdjustBalance(user_id, amount, reason || 'Approved staff action')
       }
-      // Mark as approved
       await supabase
         .from('staff_pending_actions')
         .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user?.id })
         .eq('id', action.id)
       toast({ title: 'Action approved and applied' })
       loadPendingActions()
-    } catch (err) {
+    } catch {
       toast({ variant: 'destructive', title: 'Failed to apply action' })
     } finally {
       setApprovingAction(null)
