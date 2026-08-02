@@ -30,6 +30,7 @@ import {
   setDiscountCodeActive,
   createCategory,
   createIndividualAccount,
+  updateProductGroup,
   parseCSV,
   processBulkAccountUpload,
   getUserCount,
@@ -107,6 +108,15 @@ export default function StaffAdminPage() {
   const [adjustType, setAdjustType] = useState<'add' | 'subtract'>('add')
   const [adjustReason, setAdjustReason] = useState('')
   const [adjusting, setAdjusting] = useState(false)
+
+  // Product editing
+  const [editingPg, setEditingPg] = useState<ProductGroup | null>(null)
+  const [editPrice, setEditPrice] = useState('')
+  const [editMua, setEditMua] = useState('')
+  const [editShopclone, setEditShopclone] = useState('')
+  const [editShopviaclone, setEditShopviaclone] = useState('')
+  const [editAutoFulfill, setEditAutoFulfill] = useState(false)
+  const [savingPg, setSavingPg] = useState(false)
 
   // My pending history
   const [myPending, setMyPending] = useState<any[]>([])
@@ -247,6 +257,38 @@ export default function StaffAdminPage() {
     finally { setCreatingCode(false) }
   }
 
+  // ── Open product for editing ──────────────────────────────────────────────
+  function openEditPg(pg: ProductGroup) {
+    setEditingPg(pg)
+    setEditPrice(String(pg.price))
+    setEditMua(pg.muabanvia_product_id || '')
+    setEditShopclone(pg.shopclone_product_id || '')
+    setEditShopviaclone(pg.shopviaclone_product_id || '')
+    setEditAutoFulfill(pg.auto_fulfill_enabled ?? false)
+  }
+
+  async function handleSavePg() {
+    if (!editingPg) return
+    setSavingPg(true)
+    try {
+      await updateProductGroup(editingPg.id, {
+        price: parseFloat(editPrice) || editingPg.price,
+        muabanvia_product_id: editMua || null,
+        shopclone_product_id: editShopclone || null,
+        shopviaclone_product_id: editShopviaclone || null,
+        auto_fulfill_enabled: editAutoFulfill,
+      })
+      toast({ title: 'Product updated' })
+      const pg = await getAllProductGroups()
+      setProductGroups(pg)
+      setEditingPg(null)
+    } catch {
+      toast({ variant: 'destructive', title: 'Failed to save' })
+    } finally {
+      setSavingPg(false)
+    }
+  }
+
   // ── Users ─────────────────────────────────────────────────────────────────
   async function handleSearchUsers() {
     if (!userQuery.trim()) return
@@ -381,6 +423,50 @@ export default function StaffAdminPage() {
           {/* ── Products ──────────────────────────────────────── */}
           {can(perms, 'tab_products') && (
             <TabsContent value="products" className="space-y-4">
+              {/* Edit panel */}
+              {editingPg && (
+                <Card className="border-primary">
+                  <CardHeader>
+                    <CardTitle className="text-base">Editing: {editingPg.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Price (₦)</label>
+                      <Input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="Price" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">MUA / BanVia Product ID</label>
+                      <Input value={editMua} onChange={e => setEditMua(e.target.value)} placeholder="MUA product ID" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">ShopClone Product ID</label>
+                      <Input value={editShopclone} onChange={e => setEditShopclone(e.target.value)} placeholder="ShopClone product ID" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">ShopViaClone Product ID</label>
+                      <Input value={editShopviaclone} onChange={e => setEditShopviaclone(e.target.value)} placeholder="ShopViaClone product ID" />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs font-medium text-muted-foreground">Auto-Fulfill</label>
+                      <button
+                        type="button"
+                        onClick={() => setEditAutoFulfill(v => !v)}
+                        className={`w-10 h-5 rounded-full transition-colors ${editAutoFulfill ? 'bg-primary' : 'bg-gray-300'}`}
+                      >
+                        <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ${editAutoFulfill ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button onClick={handleSavePg} disabled={savingPg}>
+                        {savingPg ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Save Changes
+                      </Button>
+                      <Button variant="outline" onClick={() => setEditingPg(null)}>Cancel</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader><CardTitle>Products & Stock</CardTitle></CardHeader>
                 <CardContent>
@@ -393,12 +479,17 @@ export default function StaffAdminPage() {
                             <div>
                               <p className="font-medium">{pg.name}</p>
                               <p className="text-muted-foreground text-xs">{cat?.name} · ₦{pg.price.toLocaleString()}</p>
+                              <div className="flex gap-2 mt-1 flex-wrap">
+                                {pg.muabanvia_product_id && <span className="text-xs text-blue-500">MUA: {pg.muabanvia_product_id}</span>}
+                                {pg.shopclone_product_id && <span className="text-xs text-purple-500">SC: {pg.shopclone_product_id}</span>}
+                                {pg.shopviaclone_product_id && <span className="text-xs text-green-500">SVC: {pg.shopviaclone_product_id}</span>}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <Badge variant={(pg.stock_count ?? 0) > 0 ? 'default' : 'destructive'}>
                                 {pg.stock_count ?? 0} in stock
                               </Badge>
-                              <Badge variant={pg.is_active ? 'outline' : 'secondary'}>{pg.is_active ? 'Active' : 'Inactive'}</Badge>
+                              <Button size="sm" variant="outline" onClick={() => openEditPg(pg)}>Edit</Button>
                             </div>
                           </div>
                         )
